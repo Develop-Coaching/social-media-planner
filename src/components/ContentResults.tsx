@@ -1,0 +1,842 @@
+"use client";
+
+import { useState } from "react";
+import { Document, Packer, Paragraph, TextRun, HeadingLevel } from "docx";
+import { saveAs } from "file-saver";
+import { GeneratedContent, Theme, ToneStyle } from "@/types";
+import CopyButton from "@/components/ui/CopyButton";
+import EditButton from "@/components/ui/EditButton";
+
+type ContentType = "post" | "reel" | "linkedinArticle" | "carousel" | "quoteForX" | "youtube";
+
+function CharCount({ text, limit, label }: { text: string; limit?: number; label?: string }) {
+  const count = text.length;
+  const overLimit = limit ? count > limit : false;
+  const nearLimit = limit ? count > limit * 0.9 : false;
+  const color = overLimit
+    ? "text-red-500"
+    : nearLimit
+    ? "text-amber-500"
+    : "text-slate-400 dark:text-slate-500";
+  return (
+    <span className={`text-xs ${color} tabular-nums`}>
+      {label ? `${label}: ` : ""}{count.toLocaleString()}{limit ? ` / ${limit.toLocaleString()}` : ""} chars
+    </span>
+  );
+}
+
+function WordCount({ text, label, wpm }: { text: string; label?: string; wpm?: number }) {
+  const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+  const speakingWpm = wpm || 150;
+  const minutes = words / speakingWpm;
+  const timeStr = minutes < 1
+    ? `~${Math.round(minutes * 60)}s`
+    : `~${Math.floor(minutes)}m ${Math.round((minutes % 1) * 60)}s`;
+  return (
+    <span className="text-xs text-slate-400 dark:text-slate-500 tabular-nums">
+      {label ? `${label}: ` : ""}{words.toLocaleString()} words ({timeStr} read time)
+    </span>
+  );
+}
+
+function RegenerateButton({ loading, onClick }: { loading: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={loading}
+      className="inline-flex items-center gap-1.5 text-sm text-slate-600 dark:text-slate-400 hover:text-orange-600 dark:hover:text-orange-400 font-medium transition-colors disabled:opacity-50"
+    >
+      <svg className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+      </svg>
+      {loading ? "Regenerating..." : "Regenerate"}
+    </button>
+  );
+}
+
+interface Props {
+  content: GeneratedContent;
+  onChange: (content: GeneratedContent) => void;
+  companyId: string;
+  theme: Theme;
+  tone: ToneStyle;
+  images: Record<string, string>;
+  imageLoading: Set<string>;
+  onGenerateImage: (key: string, prompt: string, aspectRatio?: string) => void;
+  onGenerateAllImages: () => void;
+  currentSavedId: string | null;
+  savingContent: boolean;
+  onSave: () => void;
+  onUpdate: () => void;
+  showSaveDialog: boolean;
+  onShowSaveDialog: (show: boolean) => void;
+  saveContentName: string;
+  onSaveContentNameChange: (name: string) => void;
+  onSaveContent: () => void;
+}
+
+export default function ContentResults({
+  content,
+  onChange,
+  companyId,
+  theme,
+  tone,
+  images,
+  imageLoading,
+  onGenerateImage,
+  onGenerateAllImages,
+  currentSavedId,
+  savingContent,
+  onSave,
+  onUpdate,
+  showSaveDialog,
+  onShowSaveDialog,
+  saveContentName,
+  onSaveContentNameChange,
+  onSaveContent,
+}: Props) {
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [regeneratingKey, setRegeneratingKey] = useState<string | null>(null);
+
+  const pendingImageCount = (() => {
+    let count = 0;
+    content.posts.forEach((_, i) => { if (!images[`post-${i}`]) count++; });
+    content.reels.forEach((r, i) => { if (r.imagePrompt && !images[`reel-${i}`]) count++; });
+    content.linkedinArticles.forEach((_, i) => { if (!images[`article-${i}`]) count++; });
+    content.carousels.forEach((_, i) => { if (!images[`carousel-${i}`]) count++; });
+    content.quotesForX.forEach((_, i) => { if (!images[`quote-${i}`]) count++; });
+    content.youtube.forEach((y, i) => { if (y.thumbnailPrompt && !images[`yt-${i}`]) count++; });
+    return count;
+  })();
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async function handleRegenerate(key: string, contentType: ContentType, currentItem: unknown, onReplace: (item: any) => void) {
+    setRegeneratingKey(key);
+    try {
+      const res = await fetch("/api/regenerate-item", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId, theme, contentType, currentItem, tone }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        alert(data.error || "Failed to regenerate");
+        return;
+      }
+
+      const reader = res.body?.getReader();
+      if (!reader) { alert("Streaming not supported"); return; }
+
+      const decoder = new TextDecoder();
+      let fullText = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        fullText += decoder.decode(value, { stream: true });
+      }
+
+      try {
+        const cleaned = fullText.replace(/^```json?\s*|\s*```$/g, "").trim();
+        const item = JSON.parse(cleaned);
+        onReplace(item);
+      } catch {
+        alert("Failed to parse regenerated content");
+      }
+    } finally {
+      setRegeneratingKey(null);
+    }
+  }
+
+  function updatePost(index: number, field: "title" | "caption" | "imagePrompt", value: string) {
+    const newPosts = [...content.posts];
+    newPosts[index] = { ...newPosts[index], [field]: value };
+    onChange({ ...content, posts: newPosts });
+  }
+
+  function updateReel(index: number, field: "script" | "imagePrompt", value: string) {
+    const newReels = [...content.reels];
+    newReels[index] = { ...newReels[index], [field]: value };
+    onChange({ ...content, reels: newReels });
+  }
+
+  function updateArticle(index: number, field: "title" | "caption" | "body" | "imagePrompt", value: string) {
+    const newArticles = [...content.linkedinArticles];
+    newArticles[index] = { ...newArticles[index], [field]: value };
+    onChange({ ...content, linkedinArticles: newArticles });
+  }
+
+  function updateCarousel(index: number, field: "imagePrompt", value: string) {
+    const newCarousels = [...content.carousels];
+    newCarousels[index] = { ...newCarousels[index], [field]: value };
+    onChange({ ...content, carousels: newCarousels });
+  }
+
+  function updateCarouselSlide(carouselIndex: number, slideIndex: number, field: "title" | "body", value: string) {
+    const newCarousels = [...content.carousels];
+    const newSlides = [...newCarousels[carouselIndex].slides];
+    newSlides[slideIndex] = { ...newSlides[slideIndex], [field]: value };
+    newCarousels[carouselIndex] = { ...newCarousels[carouselIndex], slides: newSlides };
+    onChange({ ...content, carousels: newCarousels });
+  }
+
+  function updateQuote(index: number, field: "quote" | "imagePrompt", value: string) {
+    const newQuotes = [...content.quotesForX];
+    newQuotes[index] = { ...newQuotes[index], [field]: value };
+    onChange({ ...content, quotesForX: newQuotes });
+  }
+
+  function updateYoutube(index: number, field: "title" | "script" | "thumbnailPrompt", value: string) {
+    const newYoutube = [...content.youtube];
+    newYoutube[index] = { ...newYoutube[index], [field]: value };
+    onChange({ ...content, youtube: newYoutube });
+  }
+
+  function buildPostsParagraphs(): Paragraph[] {
+    if (!content.posts.length) return [];
+    const children: Paragraph[] = [
+      new Paragraph({ text: "Posts", heading: HeadingLevel.HEADING_1 }),
+      new Paragraph({ text: "" }),
+    ];
+    content.posts.forEach((p, index) => {
+      children.push(
+        new Paragraph({ text: `Post ${index + 1}: ${p.title}`, heading: HeadingLevel.HEADING_2 }),
+        new Paragraph({ text: "" }),
+        new Paragraph({ children: [new TextRun({ text: p.caption })] }),
+        new Paragraph({ text: "" }),
+        new Paragraph({ children: [new TextRun({ text: "Image prompt: ", bold: true }), new TextRun({ text: p.imagePrompt, italics: true })] }),
+        new Paragraph({ text: "" }),
+        new Paragraph({ text: "---" }),
+        new Paragraph({ text: "" }),
+      );
+    });
+    return children;
+  }
+
+  function buildReelsParagraphs(): Paragraph[] {
+    if (!content.reels.length) return [];
+    const children: Paragraph[] = [
+      new Paragraph({ text: "Reel Scripts", heading: HeadingLevel.HEADING_1 }),
+      new Paragraph({ text: "" }),
+    ];
+    content.reels.forEach((reel, index) => {
+      children.push(
+        new Paragraph({ text: `Reel ${index + 1}`, heading: HeadingLevel.HEADING_2 }),
+        new Paragraph({ text: "" }),
+      );
+      reel.script.split("\n").forEach((para) => {
+        children.push(new Paragraph({ children: [new TextRun({ text: para })] }));
+      });
+      children.push(
+        new Paragraph({ text: "" }),
+        new Paragraph({ text: "---" }),
+        new Paragraph({ text: "" }),
+      );
+    });
+    return children;
+  }
+
+  function buildArticlesParagraphs(): Paragraph[] {
+    if (!content.linkedinArticles.length) return [];
+    const children: Paragraph[] = [
+      new Paragraph({ text: "LinkedIn Articles", heading: HeadingLevel.HEADING_1 }),
+      new Paragraph({ text: "" }),
+    ];
+    content.linkedinArticles.forEach((article, index) => {
+      children.push(
+        new Paragraph({ text: `Article ${index + 1}: ${article.title}`, heading: HeadingLevel.HEADING_2 }),
+        new Paragraph({ text: "" }),
+      );
+      if (article.caption) {
+        children.push(
+          new Paragraph({ children: [new TextRun({ text: "LinkedIn Post Caption: ", bold: true }), new TextRun({ text: article.caption })] }),
+          new Paragraph({ text: "" }),
+        );
+      }
+      article.body.split("\n").forEach((para) => {
+        children.push(new Paragraph({ children: [new TextRun({ text: para })] }));
+      });
+      children.push(
+        new Paragraph({ text: "" }),
+        new Paragraph({ text: "---" }),
+        new Paragraph({ text: "" }),
+      );
+    });
+    return children;
+  }
+
+  function buildCarouselsParagraphs(): Paragraph[] {
+    if (!content.carousels.length) return [];
+    const children: Paragraph[] = [
+      new Paragraph({ text: "Carousels", heading: HeadingLevel.HEADING_1 }),
+      new Paragraph({ text: "" }),
+    ];
+    content.carousels.forEach((c, index) => {
+      children.push(
+        new Paragraph({ text: `Carousel ${index + 1}`, heading: HeadingLevel.HEADING_2 }),
+        new Paragraph({ text: "" }),
+      );
+      c.slides.forEach((s, j) => {
+        children.push(
+          new Paragraph({ children: [new TextRun({ text: `Slide ${j + 1}: ${s.title}`, bold: true })] }),
+          new Paragraph({ children: [new TextRun({ text: s.body })] }),
+          new Paragraph({ text: "" }),
+        );
+      });
+      children.push(
+        new Paragraph({ text: "---" }),
+        new Paragraph({ text: "" }),
+      );
+    });
+    return children;
+  }
+
+  function buildQuotesParagraphs(): Paragraph[] {
+    if (!content.quotesForX.length) return [];
+    const children: Paragraph[] = [
+      new Paragraph({ text: "Quotes for X", heading: HeadingLevel.HEADING_1 }),
+      new Paragraph({ text: "" }),
+    ];
+    content.quotesForX.forEach((q, index) => {
+      children.push(
+        new Paragraph({ text: `Quote ${index + 1}`, heading: HeadingLevel.HEADING_2 }),
+        new Paragraph({ text: "" }),
+        new Paragraph({ children: [new TextRun({ text: `"${q.quote}"`, italics: true })] }),
+        new Paragraph({ text: "" }),
+        new Paragraph({ text: "---" }),
+        new Paragraph({ text: "" }),
+      );
+    });
+    return children;
+  }
+
+  function buildYoutubeParagraphs(): Paragraph[] {
+    if (!content.youtube.length) return [];
+    const children: Paragraph[] = [
+      new Paragraph({ text: "YouTube Scripts", heading: HeadingLevel.HEADING_1 }),
+      new Paragraph({ text: "" }),
+    ];
+    content.youtube.forEach((y, index) => {
+      children.push(
+        new Paragraph({ text: `Video ${index + 1}: ${y.title}`, heading: HeadingLevel.HEADING_2 }),
+        new Paragraph({ text: "" }),
+      );
+      y.script.split("\n").forEach((para) => {
+        children.push(new Paragraph({ children: [new TextRun({ text: para })] }));
+      });
+      children.push(
+        new Paragraph({ text: "" }),
+        new Paragraph({ text: "---" }),
+        new Paragraph({ text: "" }),
+      );
+    });
+    return children;
+  }
+
+  async function downloadSectionAsWord(builder: () => Paragraph[], filename: string) {
+    const children = builder();
+    if (!children.length) return;
+    const doc = new Document({ sections: [{ properties: {}, children }] });
+    const blob = await Packer.toBlob(doc);
+    saveAs(blob, filename);
+  }
+
+  async function downloadAllAsWord() {
+    const children: Paragraph[] = [
+      new Paragraph({ text: `Content: ${theme.title}`, heading: HeadingLevel.TITLE }),
+      new Paragraph({ text: "" }),
+      ...buildPostsParagraphs(),
+      ...buildReelsParagraphs(),
+      ...buildArticlesParagraphs(),
+      ...buildCarouselsParagraphs(),
+      ...buildQuotesParagraphs(),
+      ...buildYoutubeParagraphs(),
+    ];
+    const doc = new Document({ sections: [{ properties: {}, children }] });
+    const blob = await Packer.toBlob(doc);
+    saveAs(blob, `all-content-${theme.title.toLowerCase().replace(/\s+/g, "-")}.docx`);
+  }
+
+  function downloadCSV() {
+    const rows: string[][] = [["Type", "Title", "Content", "Image Prompt"]];
+    content.posts.forEach((p) => rows.push(["Post", p.title, p.caption, p.imagePrompt]));
+    content.reels.forEach((r, i) => rows.push(["Reel", `Reel ${i + 1}`, r.script, r.imagePrompt || ""]));
+    content.linkedinArticles.forEach((a) => rows.push(["LinkedIn Article", a.title, `${a.caption ? `Caption: ${a.caption}\n\n` : ""}${a.body}`, a.imagePrompt]));
+    content.carousels.forEach((c, i) => {
+      const slideText = c.slides.map((s, j) => `Slide ${j + 1}: ${s.title}\n${s.body}`).join("\n\n");
+      rows.push(["Carousel", `Carousel ${i + 1}`, slideText, c.imagePrompt]);
+    });
+    content.quotesForX.forEach((q) => rows.push(["Quote (X)", q.quote, q.quote, q.imagePrompt]));
+    content.youtube.forEach((y) => rows.push(["YouTube", y.title, y.script, y.thumbnailPrompt || ""]));
+
+    const escape = (s: string) => `"${s.replace(/"/g, '""')}"`;
+    const csv = rows.map((row) => row.map(escape).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    saveAs(blob, `content-${theme.title.toLowerCase().replace(/\s+/g, "-")}.csv`);
+  }
+
+  function downloadImage(dataUrl: string, filename: string) {
+    const link = document.createElement("a");
+    link.href = dataUrl;
+    link.download = filename;
+    link.click();
+  }
+
+  return (
+    <section className="rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-lg border border-slate-200 dark:border-slate-700">
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-3">
+          <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-green-100 dark:bg-green-900/50 text-green-600 dark:text-green-400 text-sm font-bold">4</span>
+          Your content
+          {currentSavedId && (
+            <span className="text-sm font-normal text-slate-500 dark:text-slate-400">(saved)</span>
+          )}
+        </h2>
+        <div className="flex items-center gap-2 flex-wrap">
+          {pendingImageCount > 0 && (
+            <button
+              onClick={onGenerateAllImages}
+              disabled={imageLoading.size > 0}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-600 text-white font-medium hover:bg-purple-700 disabled:opacity-50 transition-colors text-sm"
+            >
+              <svg className={`w-4 h-4 ${imageLoading.size > 0 ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              {imageLoading.size > 0 ? `Generating ${imageLoading.size} image${imageLoading.size > 1 ? "s" : ""}...` : `Generate all images (${pendingImageCount})`}
+            </button>
+          )}
+          <button
+            onClick={downloadAllAsWord}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors text-sm"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            Word
+          </button>
+          <button
+            onClick={downloadCSV}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 text-white font-medium hover:bg-emerald-700 transition-colors text-sm"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+            CSV
+          </button>
+          {currentSavedId ? (
+            <button
+              onClick={onUpdate}
+              disabled={savingContent}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-green-600 text-white font-medium hover:bg-green-700 disabled:opacity-50 transition-colors text-sm"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              {savingContent ? "Saving..." : "Update Saved"}
+            </button>
+          ) : (
+            <button
+              onClick={() => onShowSaveDialog(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-green-600 text-white font-medium hover:bg-green-700 transition-colors text-sm"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+              </svg>
+              Save
+            </button>
+          )}
+        </div>
+      </div>
+
+      {showSaveDialog && (
+        <div className="mb-6 p-4 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800">
+          <h3 className="font-medium text-slate-800 dark:text-slate-200 mb-3">Save this content</h3>
+          <div className="flex gap-3">
+            <input
+              type="text"
+              placeholder="Name (e.g. Week 1 Content)"
+              value={saveContentName}
+              onChange={(e) => onSaveContentNameChange(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && onSaveContent()}
+              className="flex-1 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500"
+            />
+            <button
+              onClick={onSaveContent}
+              disabled={savingContent || !saveContentName.trim()}
+              className="px-4 py-2 rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+            >
+              {savingContent ? "Saving..." : "Save"}
+            </button>
+            <button
+              onClick={() => onShowSaveDialog(false)}
+              className="px-4 py-2 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Posts */}
+      {content.posts.length > 0 && (
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-slate-700 dark:text-slate-300 text-lg">Posts</h3>
+            <button onClick={() => downloadSectionAsWord(buildPostsParagraphs, "posts.docx")} className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium">
+              Download as Word
+            </button>
+          </div>
+          {content.posts.map((p, i) => {
+            const key = `post-${i}`;
+            const isEditing = editingKey === key;
+            return (
+              <div key={i} className="mb-4 p-5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700">
+                <div className="flex items-center justify-end gap-3 mb-3">
+                  <RegenerateButton loading={regeneratingKey === key} onClick={() => handleRegenerate(key, "post", p, (item) => { const newPosts = [...content.posts]; newPosts[i] = item; onChange({ ...content, posts: newPosts }); })} />
+                  <CopyButton text={p.caption} label="Copy caption" />
+                  <EditButton isEditing={isEditing} onToggle={() => setEditingKey(isEditing ? null : key)} />
+                </div>
+                {isEditing ? (
+                  <>
+                    <label className="block text-xs text-slate-500 mb-1">Title:</label>
+                    <input type="text" value={p.title} onChange={(e) => updatePost(i, "title", e.target.value)} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-3 font-semibold focus:ring-2 focus:ring-indigo-500" />
+                    <label className="block text-xs text-slate-500 mb-1">Caption:</label>
+                    <textarea value={p.caption} onChange={(e) => updatePost(i, "caption", e.target.value)} rows={6} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-1 focus:ring-2 focus:ring-indigo-500" />
+                    <div className="flex gap-3 mb-3"><CharCount text={p.caption} limit={2200} label="IG" /> <CharCount text={p.caption} limit={3000} label="LinkedIn" /></div>
+                    <label className="block text-xs text-slate-500 mb-1">Image prompt:</label>
+                    <textarea value={p.imagePrompt} onChange={(e) => updatePost(i, "imagePrompt", e.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-indigo-500" />
+                  </>
+                ) : (
+                  <>
+                    <h4 className="font-semibold text-indigo-600 dark:text-indigo-400 mb-2">{p.title}</h4>
+                    <p className="text-slate-800 dark:text-slate-200 whitespace-pre-wrap">{p.caption}</p>
+                    <div className="flex gap-3 mt-1"><CharCount text={p.caption} limit={2200} label="IG" /> <CharCount text={p.caption} limit={3000} label="LinkedIn" /></div>
+                    <p className="text-xs text-slate-500 mt-3 bg-slate-100 dark:bg-slate-800 p-2 rounded-lg">Image prompt: {p.imagePrompt}</p>
+                  </>
+                )}
+                {images[key] ? (
+                  <div className="mt-3">
+                    <img src={images[key]} alt="" className="rounded-xl max-h-64 object-cover shadow-md" />
+                    <button onClick={() => downloadImage(images[key], `post-${i + 1}.png`)} className="mt-2 text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium inline-flex items-center gap-1">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                      Download image
+                    </button>
+                  </div>
+                ) : (
+                  <button onClick={() => onGenerateImage(key, p.imagePrompt)} disabled={imageLoading.has(key)} className="mt-3 text-sm text-indigo-600 dark:text-indigo-400 font-medium hover:text-indigo-800 dark:hover:text-indigo-300">
+                    {imageLoading.has(key) ? "Generating..." : "Generate image (Gemini)"}
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Reels */}
+      {content.reels.length > 0 && (
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-slate-700 dark:text-slate-300 text-lg">Reels</h3>
+            <button onClick={() => downloadSectionAsWord(buildReelsParagraphs, "reel-scripts.docx")} className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium">
+              Download as Word
+            </button>
+          </div>
+          {content.reels.map((r, i) => {
+            const key = `reel-${i}`;
+            const isEditing = editingKey === key;
+            return (
+              <div key={i} className="mb-4 p-5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700">
+                <div className="flex items-center justify-end gap-3 mb-3">
+                  <RegenerateButton loading={regeneratingKey === key} onClick={() => handleRegenerate(key, "reel", r, (item) => { const newReels = [...content.reels]; newReels[i] = item; onChange({ ...content, reels: newReels }); })} />
+                  <CopyButton text={r.script} label="Copy script" />
+                  <EditButton isEditing={isEditing} onToggle={() => setEditingKey(isEditing ? null : key)} />
+                </div>
+                {isEditing ? (
+                  <>
+                    <textarea value={r.script} onChange={(e) => updateReel(i, "script", e.target.value)} rows={8} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-1 focus:ring-2 focus:ring-indigo-500" />
+                    <div className="mb-3"><WordCount text={r.script} label="Script" /></div>
+                    {r.imagePrompt !== undefined && (
+                      <>
+                        <label className="block text-xs text-slate-500 mb-1">Thumbnail prompt:</label>
+                        <textarea value={r.imagePrompt || ""} onChange={(e) => updateReel(i, "imagePrompt", e.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-indigo-500" />
+                      </>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <p className="text-slate-800 dark:text-slate-200 whitespace-pre-wrap">{r.script}</p>
+                    <div className="mt-1"><WordCount text={r.script} label="Script" /></div>
+                    {r.imagePrompt && <p className="text-xs text-slate-500 mt-3 bg-slate-100 dark:bg-slate-800 p-2 rounded-lg">Thumbnail: {r.imagePrompt}</p>}
+                  </>
+                )}
+                {r.imagePrompt && (
+                  <>
+                    {!images[key] && (
+                      <button onClick={() => onGenerateImage(key, r.imagePrompt!, "9:16")} disabled={imageLoading.has(key)} className="mt-3 text-sm text-indigo-600 dark:text-indigo-400 font-medium hover:text-indigo-800 dark:hover:text-indigo-300">
+                        {imageLoading.has(key) ? "Generating..." : "Generate thumbnail"}
+                      </button>
+                    )}
+                    {images[key] && (
+                      <div className="mt-3">
+                        <img src={images[key]} alt="" className="rounded-xl max-h-64 object-cover shadow-md" />
+                        <button onClick={() => downloadImage(images[key], `reel-${i + 1}-thumbnail.png`)} className="mt-2 text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium inline-flex items-center gap-1">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                          Download image
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* LinkedIn Articles */}
+      {content.linkedinArticles.length > 0 && (
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-slate-700 dark:text-slate-300 text-lg">LinkedIn articles</h3>
+            <button onClick={() => downloadSectionAsWord(buildArticlesParagraphs, "linkedin-articles.docx")} className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium">
+              Download as Word
+            </button>
+          </div>
+          {content.linkedinArticles.map((a, i) => {
+            const key = `article-${i}`;
+            const isEditing = editingKey === key;
+            return (
+              <div key={i} className="mb-4 p-5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700">
+                <div className="flex items-center justify-end gap-3 mb-3">
+                  <RegenerateButton loading={regeneratingKey === key} onClick={() => handleRegenerate(key, "linkedinArticle", a, (item) => { const newArticles = [...content.linkedinArticles]; newArticles[i] = item; onChange({ ...content, linkedinArticles: newArticles }); })} />
+                  <CopyButton text={`${a.title}\n\n${a.caption ? `Caption: ${a.caption}\n\n` : ""}${a.body}`} label="Copy article" />
+                  <EditButton isEditing={isEditing} onToggle={() => setEditingKey(isEditing ? null : key)} />
+                </div>
+                {isEditing ? (
+                  <>
+                    <label className="block text-xs text-slate-500 mb-1">Title:</label>
+                    <input type="text" value={a.title} onChange={(e) => updateArticle(i, "title", e.target.value)} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-3 font-semibold focus:ring-2 focus:ring-indigo-500" />
+                    <label className="block text-xs text-slate-500 mb-1">LinkedIn post caption (teaser):</label>
+                    <textarea value={a.caption} onChange={(e) => updateArticle(i, "caption", e.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-1 text-sm focus:ring-2 focus:ring-indigo-500" />
+                    <div className="mb-3"><CharCount text={a.caption} limit={3000} label="LinkedIn" /></div>
+                    <label className="block text-xs text-slate-500 mb-1">Article body:</label>
+                    <textarea value={a.body} onChange={(e) => updateArticle(i, "body", e.target.value)} rows={12} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-1 text-sm focus:ring-2 focus:ring-indigo-500" />
+                    <div className="mb-3"><WordCount text={a.body} label="Article" /></div>
+                    <label className="block text-xs text-slate-500 mb-1">Hero image prompt:</label>
+                    <textarea value={a.imagePrompt} onChange={(e) => updateArticle(i, "imagePrompt", e.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-indigo-500" />
+                  </>
+                ) : (
+                  <>
+                    <h4 className="font-semibold text-slate-900 dark:text-white text-lg">{a.title}</h4>
+                    {a.caption && (
+                      <div className="mt-2 p-3 rounded-lg bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800">
+                        <p className="text-xs text-indigo-600 dark:text-indigo-400 font-medium mb-1">LinkedIn post caption:</p>
+                        <p className="text-sm text-slate-700 dark:text-slate-300">{a.caption}</p>
+                      </div>
+                    )}
+                    <p className="text-slate-700 dark:text-slate-300 mt-3 whitespace-pre-wrap text-sm">{a.body}</p>
+                    <div className="mt-1"><WordCount text={a.body} label="Article" /></div>
+                    <p className="text-xs text-slate-500 mt-3 bg-slate-100 dark:bg-slate-800 p-2 rounded-lg">Hero image: {a.imagePrompt}</p>
+                  </>
+                )}
+                {images[key] ? (
+                  <div className="mt-3">
+                    <img src={images[key]} alt="" className="rounded-xl max-h-48 object-cover shadow-md" />
+                    <button onClick={() => downloadImage(images[key], `article-${i + 1}-hero.png`)} className="mt-2 text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium inline-flex items-center gap-1">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                      Download image
+                    </button>
+                  </div>
+                ) : (
+                  <button onClick={() => onGenerateImage(key, a.imagePrompt, "16:9")} disabled={imageLoading.has(key)} className="mt-3 text-sm text-indigo-600 dark:text-indigo-400 font-medium hover:text-indigo-800 dark:hover:text-indigo-300">
+                    {imageLoading.has(key) ? "Generating..." : "Generate hero image"}
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Carousels */}
+      {content.carousels.length > 0 && (
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-slate-700 dark:text-slate-300 text-lg">Carousels</h3>
+            <button onClick={() => downloadSectionAsWord(buildCarouselsParagraphs, "carousels.docx")} className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium">
+              Download as Word
+            </button>
+          </div>
+          {content.carousels.map((c, i) => {
+            const key = `carousel-${i}`;
+            const isEditing = editingKey === key;
+            const carouselText = c.slides.map((s, j) => `Slide ${j + 1}: ${s.title}\n${s.body}`).join("\n\n");
+            return (
+              <div key={i} className="mb-4 p-5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700">
+                <div className="flex items-center justify-end gap-3 mb-3">
+                  <RegenerateButton loading={regeneratingKey === key} onClick={() => handleRegenerate(key, "carousel", c, (item) => { const newCarousels = [...content.carousels]; newCarousels[i] = item; onChange({ ...content, carousels: newCarousels }); })} />
+                  <CopyButton text={carouselText} label="Copy slides" />
+                  <EditButton isEditing={isEditing} onToggle={() => setEditingKey(isEditing ? null : key)} />
+                </div>
+                {isEditing ? (
+                  <>
+                    {c.slides.map((s, j) => (
+                      <div key={j} className="mb-4 pb-4 border-b border-slate-200 dark:border-slate-700 last:border-0">
+                        <label className="block text-xs text-slate-500 mb-1">Slide {j + 1} title:</label>
+                        <input type="text" value={s.title} onChange={(e) => updateCarouselSlide(i, j, "title", e.target.value)} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-2 font-semibold focus:ring-2 focus:ring-indigo-500" />
+                        <label className="block text-xs text-slate-500 mb-1">Slide {j + 1} body:</label>
+                        <textarea value={s.body} onChange={(e) => updateCarouselSlide(i, j, "body", e.target.value)} rows={3} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-indigo-500" />
+                      </div>
+                    ))}
+                    <label className="block text-xs text-slate-500 mb-1">Image style prompt:</label>
+                    <textarea value={c.imagePrompt} onChange={(e) => updateCarousel(i, "imagePrompt", e.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-indigo-500" />
+                  </>
+                ) : (
+                  <>
+                    {c.slides.map((s, j) => (
+                      <div key={j} className="mb-3 pb-3 border-b border-slate-200 dark:border-slate-700 last:border-0 last:pb-0 last:mb-0">
+                        <span className="font-semibold text-slate-800 dark:text-slate-200">{s.title}</span>
+                        <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{s.body}</p>
+                      </div>
+                    ))}
+                    <p className="text-xs text-slate-500 mt-3 bg-slate-100 dark:bg-slate-800 p-2 rounded-lg">Style: {c.imagePrompt}</p>
+                  </>
+                )}
+                {images[key] ? (
+                  <div className="mt-3">
+                    <img src={images[key]} alt="" className="rounded-xl max-h-48 object-cover shadow-md" />
+                    <button onClick={() => downloadImage(images[key], `carousel-${i + 1}.png`)} className="mt-2 text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium inline-flex items-center gap-1">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                      Download image
+                    </button>
+                  </div>
+                ) : (
+                  <button onClick={() => onGenerateImage(key, c.imagePrompt, "1:1")} disabled={imageLoading.has(key)} className="mt-3 text-sm text-indigo-600 dark:text-indigo-400 font-medium hover:text-indigo-800 dark:hover:text-indigo-300">
+                    {imageLoading.has(key) ? "Generating..." : "Generate carousel image"}
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Quotes for X */}
+      {content.quotesForX.length > 0 && (
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-slate-700 dark:text-slate-300 text-lg">Quotes for X</h3>
+            <button onClick={() => downloadSectionAsWord(buildQuotesParagraphs, "quotes-for-x.docx")} className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium">
+              Download as Word
+            </button>
+          </div>
+          {content.quotesForX.map((q, i) => {
+            const key = `quote-${i}`;
+            const isEditing = editingKey === key;
+            return (
+              <div key={i} className="mb-4 p-5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700">
+                <div className="flex items-center justify-end gap-3 mb-3">
+                  <RegenerateButton loading={regeneratingKey === key} onClick={() => handleRegenerate(key, "quoteForX", q, (item) => { const newQuotes = [...content.quotesForX]; newQuotes[i] = item; onChange({ ...content, quotesForX: newQuotes }); })} />
+                  <CopyButton text={q.quote} label="Copy quote" />
+                  <EditButton isEditing={isEditing} onToggle={() => setEditingKey(isEditing ? null : key)} />
+                </div>
+                {isEditing ? (
+                  <>
+                    <textarea value={q.quote} onChange={(e) => updateQuote(i, "quote", e.target.value)} rows={3} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-1 focus:ring-2 focus:ring-indigo-500" />
+                    <div className="mb-3"><CharCount text={q.quote} limit={280} label="X" /></div>
+                    <label className="block text-xs text-slate-500 mb-1">Quote card prompt:</label>
+                    <textarea value={q.imagePrompt} onChange={(e) => updateQuote(i, "imagePrompt", e.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-indigo-500" />
+                  </>
+                ) : (
+                  <>
+                    <blockquote className="text-slate-800 dark:text-slate-200 text-lg italic">&ldquo;{q.quote}&rdquo;</blockquote>
+                    <div className="mt-1"><CharCount text={q.quote} limit={280} label="X" /></div>
+                    <p className="text-xs text-slate-500 mt-3 bg-slate-100 dark:bg-slate-800 p-2 rounded-lg">Card: {q.imagePrompt}</p>
+                  </>
+                )}
+                {images[key] ? (
+                  <div className="mt-3">
+                    <img src={images[key]} alt="" className="rounded-xl max-h-48 object-cover shadow-md" />
+                    <button onClick={() => downloadImage(images[key], `quote-${i + 1}.png`)} className="mt-2 text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium inline-flex items-center gap-1">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                      Download image
+                    </button>
+                  </div>
+                ) : (
+                  <button onClick={() => onGenerateImage(key, q.imagePrompt, "1:1")} disabled={imageLoading.has(key)} className="mt-3 text-sm text-indigo-600 dark:text-indigo-400 font-medium hover:text-indigo-800 dark:hover:text-indigo-300">
+                    {imageLoading.has(key) ? "Generating..." : "Generate quote card"}
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* YouTube */}
+      {content.youtube.length > 0 && (
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-slate-700 dark:text-slate-300 text-lg">YouTube</h3>
+            <button onClick={() => downloadSectionAsWord(buildYoutubeParagraphs, "youtube-scripts.docx")} className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium">
+              Download as Word
+            </button>
+          </div>
+          {content.youtube.map((y, i) => {
+            const key = `yt-${i}`;
+            const isEditing = editingKey === key;
+            return (
+              <div key={i} className="mb-4 p-5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700">
+                <div className="flex items-center justify-end gap-3 mb-3">
+                  <RegenerateButton loading={regeneratingKey === key} onClick={() => handleRegenerate(key, "youtube", y, (item) => { const newYt = [...content.youtube]; newYt[i] = item; onChange({ ...content, youtube: newYt }); })} />
+                  <CopyButton text={`${y.title}\n\n${y.script}`} label="Copy script" />
+                  <EditButton isEditing={isEditing} onToggle={() => setEditingKey(isEditing ? null : key)} />
+                </div>
+                {isEditing ? (
+                  <>
+                    <input type="text" value={y.title} onChange={(e) => updateYoutube(i, "title", e.target.value)} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-3 font-semibold focus:ring-2 focus:ring-indigo-500" />
+                    <textarea value={y.script} onChange={(e) => updateYoutube(i, "script", e.target.value)} rows={12} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-1 text-sm focus:ring-2 focus:ring-indigo-500" />
+                    <div className="mb-3"><WordCount text={y.script} label="Script" /></div>
+                    {y.thumbnailPrompt !== undefined && (
+                      <>
+                        <label className="block text-xs text-slate-500 mb-1">Thumbnail prompt:</label>
+                        <textarea value={y.thumbnailPrompt || ""} onChange={(e) => updateYoutube(i, "thumbnailPrompt", e.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-indigo-500" />
+                      </>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <h4 className="font-semibold text-slate-900 dark:text-white text-lg">{y.title}</h4>
+                    <p className="text-slate-700 dark:text-slate-300 mt-3 whitespace-pre-wrap text-sm">{y.script}</p>
+                    <div className="mt-1"><WordCount text={y.script} label="Script" /></div>
+                    {y.thumbnailPrompt && <p className="text-xs text-slate-500 mt-3 bg-slate-100 dark:bg-slate-800 p-2 rounded-lg">Thumbnail: {y.thumbnailPrompt}</p>}
+                  </>
+                )}
+                {y.thumbnailPrompt && (
+                  <>
+                    {!images[key] && (
+                      <button onClick={() => onGenerateImage(key, y.thumbnailPrompt!, "16:9")} disabled={imageLoading.has(key)} className="mt-3 text-sm text-indigo-600 dark:text-indigo-400 font-medium hover:text-indigo-800 dark:hover:text-indigo-300">
+                        {imageLoading.has(key) ? "Generating..." : "Generate thumbnail"}
+                      </button>
+                    )}
+                    {images[key] && (
+                      <div className="mt-3">
+                        <img src={images[key]} alt="" className="rounded-xl max-h-32 object-cover shadow-md" />
+                        <button onClick={() => downloadImage(images[key], `youtube-${i + 1}-thumbnail.png`)} className="mt-2 text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium inline-flex items-center gap-1">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                          Download image
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}

@@ -12,9 +12,9 @@ export interface SavedContentItem {
   name: string;
   theme: { id: string; title: string; description: string };
   content: {
-    posts: { caption: string; imagePrompt: string }[];
+    posts: { title: string; caption: string; imagePrompt: string }[];
     reels: { script: string; imagePrompt?: string }[];
-    linkedinArticles: { title: string; body: string; imagePrompt: string }[];
+    linkedinArticles: { title: string; caption: string; body: string; imagePrompt: string }[];
     carousels: { slides: { title: string; body: string }[]; imagePrompt: string }[];
     quotesForX: { quote: string; imagePrompt: string }[];
     youtube: { title: string; script: string; thumbnailPrompt?: string }[];
