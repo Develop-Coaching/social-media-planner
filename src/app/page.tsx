@@ -216,8 +216,11 @@ export default function Home() {
       if (!images[key]) jobs.push({ key, prompt: a.imagePrompt, aspectRatio: "16:9" });
     });
     content.carousels.forEach((c, i) => {
-      const key = `carousel-${i}`;
-      if (!images[key]) jobs.push({ key, prompt: c.imagePrompt, aspectRatio: "1:1" });
+      const totalSlides = c.slides.length;
+      c.slides.forEach((s, j) => {
+        const key = `carousel-${i}-slide-${j}`;
+        if (!images[key]) jobs.push({ key, prompt: `Part ${j + 1} of ${totalSlides} in a cohesive carousel series. MUST maintain identical visual style, color palette, layout, and typography across all slides. Style: ${c.imagePrompt}. This slide's content: "${s.title} - ${s.body}"`, aspectRatio: "1:1" });
+      });
     });
     content.quotesForX.forEach((q, i) => {
       const key = `quote-${i}`;

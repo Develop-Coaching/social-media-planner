@@ -5,6 +5,7 @@ import { CustomToneStyle } from "@/types";
 const DATA_DIR = path.join(process.cwd(), "data");
 
 function getUserDir(userId: string): string {
+  if (userId === "default") return DATA_DIR;
   return path.join(DATA_DIR, userId);
 }
 

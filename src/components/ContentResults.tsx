@@ -1,13 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel } from "docx";
 import { saveAs } from "file-saver";
 import { GeneratedContent, Theme, ToneStyle } from "@/types";
 import CopyButton from "@/components/ui/CopyButton";
 import EditButton from "@/components/ui/EditButton";
+import { useToast } from "@/components/ToastProvider";
 
 type ContentType = "post" | "reel" | "linkedinArticle" | "carousel" | "quoteForX" | "youtube";
+
+type SectionKey = "posts" | "reels" | "linkedinArticles" | "carousels" | "quotesForX" | "youtube";
+
+const MAX_HISTORY = 20;
+
+type HistoryStacks = Record<SectionKey, { undo: GeneratedContent[SectionKey][]; redo: GeneratedContent[SectionKey][] }>;
 
 function CharCount({ text, limit, label }: { text: string; limit?: number; label?: string }) {
   const count = text.length;
@@ -54,6 +61,45 @@ function RegenerateButton({ loading, onClick }: { loading: boolean; onClick: () 
   );
 }
 
+function UndoRedoButtons({
+  canUndo,
+  canRedo,
+  onUndo,
+  onRedo,
+}: {
+  canUndo: boolean;
+  canRedo: boolean;
+  onUndo: () => void;
+  onRedo: () => void;
+}) {
+  return (
+    <div className="inline-flex items-center gap-1">
+      <button
+        onClick={onUndo}
+        disabled={!canUndo}
+        title="Undo"
+        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+      >
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a5 5 0 015 5v2M3 10l4-4m-4 4l4 4" />
+        </svg>
+        Undo
+      </button>
+      <button
+        onClick={onRedo}
+        disabled={!canRedo}
+        title="Redo"
+        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+      >
+        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 10H11a5 5 0 00-5 5v2m15-7l-4-4m4 4l-4 4" />
+        </svg>
+        Redo
+      </button>
+    </div>
+  );
+}
+
 interface Props {
   content: GeneratedContent;
   onChange: (content: GeneratedContent) => void;
@@ -95,23 +141,155 @@ export default function ContentResults({
   onSaveContentNameChange,
   onSaveContent,
 }: Props) {
+  const { toast } = useToast();
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [regeneratingKey, setRegeneratingKey] = useState<string | null>(null);
+
+  // Listen for toggle-edit-mode custom event (from Cmd+E keyboard shortcut)
+  useEffect(() => {
+    function handleToggleEdit() {
+      setEditingKey((prev) => {
+        if (prev !== null) return null;
+        // Enter edit mode on the first available item
+        if (content.posts.length > 0) return "post-0";
+        if (content.reels.length > 0) return "reel-0";
+        if (content.linkedinArticles.length > 0) return "article-0";
+        if (content.carousels.length > 0) return "carousel-0";
+        if (content.quotesForX.length > 0) return "quote-0";
+        if (content.youtube.length > 0) return "yt-0";
+        return null;
+      });
+    }
+    window.addEventListener("toggle-edit-mode", handleToggleEdit);
+    return () => window.removeEventListener("toggle-edit-mode", handleToggleEdit);
+  }, [content]);
+
+  // Feature 2: Image prompt editing state
+  const [editingPromptKey, setEditingPromptKey] = useState<string | null>(null);
+  const [editedPrompts, setEditedPrompts] = useState<Record<string, string>>({});
+
+  // Feature 3: Freshly regenerated items indicator
+  const [freshlyRegenerated, setFreshlyRegenerated] = useState<Set<string>>(new Set());
+  const freshTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  // Feature 1: Undo/redo history stacks (useRef so mutations don't trigger re-renders)
+  const historyRef = useRef<HistoryStacks>({
+    posts: { undo: [], redo: [] },
+    reels: { undo: [], redo: [] },
+    linkedinArticles: { undo: [], redo: [] },
+    carousels: { undo: [], redo: [] },
+    quotesForX: { undo: [], redo: [] },
+    youtube: { undo: [], redo: [] },
+  });
+  // Counter to force re-render when undo/redo stacks change
+  const [, setHistoryTick] = useState(0);
+  const bumpHistory = useCallback(() => setHistoryTick((t) => t + 1), []);
+
+  // Clean up timers on unmount
+  useEffect(() => {
+    const timers = freshTimersRef.current;
+    return () => {
+      Object.values(timers).forEach(clearTimeout);
+    };
+  }, []);
+
+  const pushUndo = useCallback((section: SectionKey, snapshot: GeneratedContent[SectionKey]) => {
+    const h = historyRef.current[section];
+    h.undo = [...h.undo.slice(-(MAX_HISTORY - 1)), JSON.parse(JSON.stringify(snapshot))];
+    h.redo = [];
+    bumpHistory();
+  }, [bumpHistory]);
+
+  const handleUndo = useCallback((section: SectionKey) => {
+    const h = historyRef.current[section];
+    if (h.undo.length === 0) return;
+    const prev = h.undo.pop()!;
+    h.redo.push(JSON.parse(JSON.stringify(content[section])));
+    if (h.redo.length > MAX_HISTORY) h.redo.shift();
+    onChange({ ...content, [section]: prev });
+    bumpHistory();
+  }, [content, onChange, bumpHistory]);
+
+  const handleRedo = useCallback((section: SectionKey) => {
+    const h = historyRef.current[section];
+    if (h.redo.length === 0) return;
+    const next = h.redo.pop()!;
+    h.undo.push(JSON.parse(JSON.stringify(content[section])));
+    if (h.undo.length > MAX_HISTORY) h.undo.shift();
+    onChange({ ...content, [section]: next });
+    bumpHistory();
+  }, [content, onChange, bumpHistory]);
+
+  // Track first-edit snapshots per field for debouncing
+  const lastSnapshotRef = useRef<Record<string, string>>({});
+
+  function maybePushUndo(section: SectionKey, itemKey: string) {
+    const snapshotKey = `${section}-${itemKey}`;
+    const currentJson = JSON.stringify(content[section]);
+    if (lastSnapshotRef.current[snapshotKey] !== currentJson) {
+      pushUndo(section, content[section]);
+      lastSnapshotRef.current[snapshotKey] = currentJson;
+    }
+  }
+
+  // Clear snapshot tracking when editing key changes
+  useEffect(() => {
+    lastSnapshotRef.current = {};
+  }, [editingKey]);
+
+  function markFreshlyRegenerated(key: string) {
+    setFreshlyRegenerated((prev) => new Set(prev).add(key));
+    if (freshTimersRef.current[key]) clearTimeout(freshTimersRef.current[key]);
+    freshTimersRef.current[key] = setTimeout(() => {
+      setFreshlyRegenerated((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+      delete freshTimersRef.current[key];
+    }, 4000);
+  }
+
+  function getEffectivePrompt(key: string, originalPrompt: string): string {
+    return editedPrompts[key] !== undefined ? editedPrompts[key] : originalPrompt;
+  }
+
+  function handleTogglePromptEdit(key: string, originalPrompt: string) {
+    if (editingPromptKey === key) {
+      setEditingPromptKey(null);
+    } else {
+      setEditingPromptKey(key);
+      if (editedPrompts[key] === undefined) {
+        setEditedPrompts((prev) => ({ ...prev, [key]: originalPrompt }));
+      }
+    }
+  }
+
+  function handlePromptChange(key: string, value: string) {
+    setEditedPrompts((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function handleGenerateWithPrompt(key: string, originalPrompt: string, aspectRatio?: string) {
+    const prompt = getEffectivePrompt(key, originalPrompt);
+    setEditingPromptKey(null);
+    onGenerateImage(key, prompt, aspectRatio);
+  }
 
   const pendingImageCount = (() => {
     let count = 0;
     content.posts.forEach((_, i) => { if (!images[`post-${i}`]) count++; });
     content.reels.forEach((r, i) => { if (r.imagePrompt && !images[`reel-${i}`]) count++; });
     content.linkedinArticles.forEach((_, i) => { if (!images[`article-${i}`]) count++; });
-    content.carousels.forEach((_, i) => { if (!images[`carousel-${i}`]) count++; });
+    content.carousels.forEach((c, i) => { c.slides.forEach((_, j) => { if (!images[`carousel-${i}-slide-${j}`]) count++; }); });
     content.quotesForX.forEach((_, i) => { if (!images[`quote-${i}`]) count++; });
     content.youtube.forEach((y, i) => { if (y.thumbnailPrompt && !images[`yt-${i}`]) count++; });
     return count;
   })();
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  async function handleRegenerate(key: string, contentType: ContentType, currentItem: unknown, onReplace: (item: any) => void) {
+  async function handleRegenerate(key: string, contentType: ContentType, currentItem: unknown, onReplace: (item: any) => void, section: SectionKey) {
     setRegeneratingKey(key);
+    pushUndo(section, content[section]);
     try {
       const res = await fetch("/api/regenerate-item", {
         method: "POST",
@@ -121,12 +299,12 @@ export default function ContentResults({
 
       if (!res.ok) {
         const data = await res.json();
-        alert(data.error || "Failed to regenerate");
+        toast(data.error || "Failed to regenerate", "error");
         return;
       }
 
       const reader = res.body?.getReader();
-      if (!reader) { alert("Streaming not supported"); return; }
+      if (!reader) { toast("Streaming not supported", "error"); return; }
 
       const decoder = new TextDecoder();
       let fullText = "";
@@ -141,8 +319,9 @@ export default function ContentResults({
         const cleaned = fullText.replace(/^```json?\s*|\s*```$/g, "").trim();
         const item = JSON.parse(cleaned);
         onReplace(item);
+        markFreshlyRegenerated(key);
       } catch {
-        alert("Failed to parse regenerated content");
+        toast("Failed to parse regenerated content", "error");
       }
     } finally {
       setRegeneratingKey(null);
@@ -150,30 +329,35 @@ export default function ContentResults({
   }
 
   function updatePost(index: number, field: "title" | "caption" | "imagePrompt", value: string) {
+    maybePushUndo("posts", `post-${index}-${field}`);
     const newPosts = [...content.posts];
     newPosts[index] = { ...newPosts[index], [field]: value };
     onChange({ ...content, posts: newPosts });
   }
 
   function updateReel(index: number, field: "script" | "imagePrompt", value: string) {
+    maybePushUndo("reels", `reel-${index}-${field}`);
     const newReels = [...content.reels];
     newReels[index] = { ...newReels[index], [field]: value };
     onChange({ ...content, reels: newReels });
   }
 
   function updateArticle(index: number, field: "title" | "caption" | "body" | "imagePrompt", value: string) {
+    maybePushUndo("linkedinArticles", `article-${index}-${field}`);
     const newArticles = [...content.linkedinArticles];
     newArticles[index] = { ...newArticles[index], [field]: value };
     onChange({ ...content, linkedinArticles: newArticles });
   }
 
   function updateCarousel(index: number, field: "imagePrompt", value: string) {
+    maybePushUndo("carousels", `carousel-${index}-${field}`);
     const newCarousels = [...content.carousels];
     newCarousels[index] = { ...newCarousels[index], [field]: value };
     onChange({ ...content, carousels: newCarousels });
   }
 
   function updateCarouselSlide(carouselIndex: number, slideIndex: number, field: "title" | "body", value: string) {
+    maybePushUndo("carousels", `carousel-${carouselIndex}-slide-${slideIndex}-${field}`);
     const newCarousels = [...content.carousels];
     const newSlides = [...newCarousels[carouselIndex].slides];
     newSlides[slideIndex] = { ...newSlides[slideIndex], [field]: value };
@@ -182,12 +366,14 @@ export default function ContentResults({
   }
 
   function updateQuote(index: number, field: "quote" | "imagePrompt", value: string) {
+    maybePushUndo("quotesForX", `quote-${index}-${field}`);
     const newQuotes = [...content.quotesForX];
     newQuotes[index] = { ...newQuotes[index], [field]: value };
     onChange({ ...content, quotesForX: newQuotes });
   }
 
   function updateYoutube(index: number, field: "title" | "script" | "thumbnailPrompt", value: string) {
+    maybePushUndo("youtube", `yt-${index}-${field}`);
     const newYoutube = [...content.youtube];
     newYoutube[index] = { ...newYoutube[index], [field]: value };
     onChange({ ...content, youtube: newYoutube });
@@ -383,8 +569,90 @@ export default function ContentResults({
     link.click();
   }
 
+  function renderImagePromptEditor(key: string, originalPrompt: string, aspectRatio?: string) {
+    const isEditingPrompt = editingPromptKey === key;
+    const effectivePrompt = getEffectivePrompt(key, originalPrompt);
+    const hasBeenEdited = editedPrompts[key] !== undefined && editedPrompts[key] !== originalPrompt;
+
+    return (
+      <div className="mt-3">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => handleGenerateWithPrompt(key, originalPrompt, aspectRatio)}
+            disabled={imageLoading.has(key)}
+            className="text-sm text-indigo-600 dark:text-indigo-400 font-medium hover:text-indigo-800 dark:hover:text-indigo-300"
+          >
+            {imageLoading.has(key) ? "Generating..." : "Generate image (Gemini)"}
+          </button>
+          <button
+            onClick={() => handleTogglePromptEdit(key, originalPrompt)}
+            title="Edit image prompt before generating"
+            className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-colors ${
+              isEditingPrompt
+                ? "bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300"
+                : "text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-700"
+            }`}
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+            {isEditingPrompt ? "Hide prompt" : "Edit prompt"}
+            {hasBeenEdited && (
+              <span className="ml-1 w-1.5 h-1.5 rounded-full bg-indigo-500 inline-block" />
+            )}
+          </button>
+        </div>
+        {isEditingPrompt && (
+          <div className="mt-2 p-3 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Image prompt (edit before generating):</label>
+            <textarea
+              value={effectivePrompt}
+              onChange={(e) => handlePromptChange(key, e.target.value)}
+              rows={3}
+              className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-indigo-500"
+            />
+            {hasBeenEdited && (
+              <button
+                onClick={() => setEditedPrompts((prev) => { const next = { ...prev }; delete next[key]; return next; })}
+                className="mt-1 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
+              >
+                Reset to original
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  function freshClass(key: string): string {
+    return freshlyRegenerated.has(key)
+      ? "ring-2 ring-green-400 dark:ring-green-500 animate-pulse-once"
+      : "";
+  }
+
+  function renderFreshBadge(key: string) {
+    if (!freshlyRegenerated.has(key)) return null;
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400">
+        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
+        Regenerated
+      </span>
+    );
+  }
+
   return (
     <section className="rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-lg border border-slate-200 dark:border-slate-700">
+      <style>{`
+        @keyframes pulse-once {
+          0% { background-color: rgba(74, 222, 128, 0.15); }
+          100% { background-color: transparent; }
+        }
+        .animate-pulse-once {
+          animation: pulse-once 2s ease-out forwards;
+        }
+      `}</style>
+
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-3">
           <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-green-100 dark:bg-green-900/50 text-green-600 dark:text-green-400 text-sm font-bold">4</span>
@@ -482,7 +750,15 @@ export default function ContentResults({
       {content.posts.length > 0 && (
         <div className="mb-8">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-slate-700 dark:text-slate-300 text-lg">Posts</h3>
+            <div className="flex items-center gap-3">
+              <h3 className="font-semibold text-slate-700 dark:text-slate-300 text-lg">Posts</h3>
+              <UndoRedoButtons
+                canUndo={historyRef.current.posts.undo.length > 0}
+                canRedo={historyRef.current.posts.redo.length > 0}
+                onUndo={() => handleUndo("posts")}
+                onRedo={() => handleRedo("posts")}
+              />
+            </div>
             <button onClick={() => downloadSectionAsWord(buildPostsParagraphs, "posts.docx")} className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium">
               Download as Word
             </button>
@@ -490,12 +766,16 @@ export default function ContentResults({
           {content.posts.map((p, i) => {
             const key = `post-${i}`;
             const isEditing = editingKey === key;
+            const isFresh = freshlyRegenerated.has(key);
             return (
-              <div key={i} className="mb-4 p-5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700">
-                <div className="flex items-center justify-end gap-3 mb-3">
-                  <RegenerateButton loading={regeneratingKey === key} onClick={() => handleRegenerate(key, "post", p, (item) => { const newPosts = [...content.posts]; newPosts[i] = item; onChange({ ...content, posts: newPosts }); })} />
-                  <CopyButton text={p.caption} label="Copy caption" />
-                  <EditButton isEditing={isEditing} onToggle={() => setEditingKey(isEditing ? null : key)} />
+              <div key={i} className={`mb-4 p-5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700 transition-all ${freshClass(key)}`}>
+                <div className="flex items-center justify-between mb-3">
+                  {renderFreshBadge(key)}
+                  <div className={`flex items-center gap-3 ${isFresh ? "" : "ml-auto"}`}>
+                    <RegenerateButton loading={regeneratingKey === key} onClick={() => handleRegenerate(key, "post", p, (item) => { const newPosts = [...content.posts]; newPosts[i] = item; onChange({ ...content, posts: newPosts }); }, "posts")} />
+                    <CopyButton text={p.caption} label="Copy caption" />
+                    <EditButton isEditing={isEditing} onToggle={() => setEditingKey(isEditing ? null : key)} />
+                  </div>
                 </div>
                 {isEditing ? (
                   <>
@@ -524,9 +804,7 @@ export default function ContentResults({
                     </button>
                   </div>
                 ) : (
-                  <button onClick={() => onGenerateImage(key, p.imagePrompt)} disabled={imageLoading.has(key)} className="mt-3 text-sm text-indigo-600 dark:text-indigo-400 font-medium hover:text-indigo-800 dark:hover:text-indigo-300">
-                    {imageLoading.has(key) ? "Generating..." : "Generate image (Gemini)"}
-                  </button>
+                  renderImagePromptEditor(key, p.imagePrompt)
                 )}
               </div>
             );
@@ -538,7 +816,15 @@ export default function ContentResults({
       {content.reels.length > 0 && (
         <div className="mb-8">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-slate-700 dark:text-slate-300 text-lg">Reels</h3>
+            <div className="flex items-center gap-3">
+              <h3 className="font-semibold text-slate-700 dark:text-slate-300 text-lg">Reels</h3>
+              <UndoRedoButtons
+                canUndo={historyRef.current.reels.undo.length > 0}
+                canRedo={historyRef.current.reels.redo.length > 0}
+                onUndo={() => handleUndo("reels")}
+                onRedo={() => handleRedo("reels")}
+              />
+            </div>
             <button onClick={() => downloadSectionAsWord(buildReelsParagraphs, "reel-scripts.docx")} className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium">
               Download as Word
             </button>
@@ -546,12 +832,16 @@ export default function ContentResults({
           {content.reels.map((r, i) => {
             const key = `reel-${i}`;
             const isEditing = editingKey === key;
+            const isFresh = freshlyRegenerated.has(key);
             return (
-              <div key={i} className="mb-4 p-5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700">
-                <div className="flex items-center justify-end gap-3 mb-3">
-                  <RegenerateButton loading={regeneratingKey === key} onClick={() => handleRegenerate(key, "reel", r, (item) => { const newReels = [...content.reels]; newReels[i] = item; onChange({ ...content, reels: newReels }); })} />
-                  <CopyButton text={r.script} label="Copy script" />
-                  <EditButton isEditing={isEditing} onToggle={() => setEditingKey(isEditing ? null : key)} />
+              <div key={i} className={`mb-4 p-5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700 transition-all ${freshClass(key)}`}>
+                <div className="flex items-center justify-between mb-3">
+                  {renderFreshBadge(key)}
+                  <div className={`flex items-center gap-3 ${isFresh ? "" : "ml-auto"}`}>
+                    <RegenerateButton loading={regeneratingKey === key} onClick={() => handleRegenerate(key, "reel", r, (item) => { const newReels = [...content.reels]; newReels[i] = item; onChange({ ...content, reels: newReels }); }, "reels")} />
+                    <CopyButton text={r.script} label="Copy script" />
+                    <EditButton isEditing={isEditing} onToggle={() => setEditingKey(isEditing ? null : key)} />
+                  </div>
                 </div>
                 {isEditing ? (
                   <>
@@ -573,12 +863,9 @@ export default function ContentResults({
                 )}
                 {r.imagePrompt && (
                   <>
-                    {!images[key] && (
-                      <button onClick={() => onGenerateImage(key, r.imagePrompt!, "9:16")} disabled={imageLoading.has(key)} className="mt-3 text-sm text-indigo-600 dark:text-indigo-400 font-medium hover:text-indigo-800 dark:hover:text-indigo-300">
-                        {imageLoading.has(key) ? "Generating..." : "Generate thumbnail"}
-                      </button>
-                    )}
-                    {images[key] && (
+                    {!images[key] ? (
+                      renderImagePromptEditor(key, r.imagePrompt, "9:16")
+                    ) : (
                       <div className="mt-3">
                         <img src={images[key]} alt="" className="rounded-xl max-h-64 object-cover shadow-md" />
                         <button onClick={() => downloadImage(images[key], `reel-${i + 1}-thumbnail.png`)} className="mt-2 text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium inline-flex items-center gap-1">
@@ -599,7 +886,15 @@ export default function ContentResults({
       {content.linkedinArticles.length > 0 && (
         <div className="mb-8">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-slate-700 dark:text-slate-300 text-lg">LinkedIn articles</h3>
+            <div className="flex items-center gap-3">
+              <h3 className="font-semibold text-slate-700 dark:text-slate-300 text-lg">LinkedIn articles</h3>
+              <UndoRedoButtons
+                canUndo={historyRef.current.linkedinArticles.undo.length > 0}
+                canRedo={historyRef.current.linkedinArticles.redo.length > 0}
+                onUndo={() => handleUndo("linkedinArticles")}
+                onRedo={() => handleRedo("linkedinArticles")}
+              />
+            </div>
             <button onClick={() => downloadSectionAsWord(buildArticlesParagraphs, "linkedin-articles.docx")} className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium">
               Download as Word
             </button>
@@ -607,12 +902,16 @@ export default function ContentResults({
           {content.linkedinArticles.map((a, i) => {
             const key = `article-${i}`;
             const isEditing = editingKey === key;
+            const isFresh = freshlyRegenerated.has(key);
             return (
-              <div key={i} className="mb-4 p-5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700">
-                <div className="flex items-center justify-end gap-3 mb-3">
-                  <RegenerateButton loading={regeneratingKey === key} onClick={() => handleRegenerate(key, "linkedinArticle", a, (item) => { const newArticles = [...content.linkedinArticles]; newArticles[i] = item; onChange({ ...content, linkedinArticles: newArticles }); })} />
-                  <CopyButton text={`${a.title}\n\n${a.caption ? `Caption: ${a.caption}\n\n` : ""}${a.body}`} label="Copy article" />
-                  <EditButton isEditing={isEditing} onToggle={() => setEditingKey(isEditing ? null : key)} />
+              <div key={i} className={`mb-4 p-5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700 transition-all ${freshClass(key)}`}>
+                <div className="flex items-center justify-between mb-3">
+                  {renderFreshBadge(key)}
+                  <div className={`flex items-center gap-3 ${isFresh ? "" : "ml-auto"}`}>
+                    <RegenerateButton loading={regeneratingKey === key} onClick={() => handleRegenerate(key, "linkedinArticle", a, (item) => { const newArticles = [...content.linkedinArticles]; newArticles[i] = item; onChange({ ...content, linkedinArticles: newArticles }); }, "linkedinArticles")} />
+                    <CopyButton text={`${a.title}\n\n${a.caption ? `Caption: ${a.caption}\n\n` : ""}${a.body}`} label="Copy article" />
+                    <EditButton isEditing={isEditing} onToggle={() => setEditingKey(isEditing ? null : key)} />
+                  </div>
                 </div>
                 {isEditing ? (
                   <>
@@ -650,9 +949,7 @@ export default function ContentResults({
                     </button>
                   </div>
                 ) : (
-                  <button onClick={() => onGenerateImage(key, a.imagePrompt, "16:9")} disabled={imageLoading.has(key)} className="mt-3 text-sm text-indigo-600 dark:text-indigo-400 font-medium hover:text-indigo-800 dark:hover:text-indigo-300">
-                    {imageLoading.has(key) ? "Generating..." : "Generate hero image"}
-                  </button>
+                  renderImagePromptEditor(key, a.imagePrompt, "16:9")
                 )}
               </div>
             );
@@ -664,7 +961,15 @@ export default function ContentResults({
       {content.carousels.length > 0 && (
         <div className="mb-8">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-slate-700 dark:text-slate-300 text-lg">Carousels</h3>
+            <div className="flex items-center gap-3">
+              <h3 className="font-semibold text-slate-700 dark:text-slate-300 text-lg">Carousels</h3>
+              <UndoRedoButtons
+                canUndo={historyRef.current.carousels.undo.length > 0}
+                canRedo={historyRef.current.carousels.redo.length > 0}
+                onUndo={() => handleUndo("carousels")}
+                onRedo={() => handleRedo("carousels")}
+              />
+            </div>
             <button onClick={() => downloadSectionAsWord(buildCarouselsParagraphs, "carousels.docx")} className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium">
               Download as Word
             </button>
@@ -673,12 +978,16 @@ export default function ContentResults({
             const key = `carousel-${i}`;
             const isEditing = editingKey === key;
             const carouselText = c.slides.map((s, j) => `Slide ${j + 1}: ${s.title}\n${s.body}`).join("\n\n");
+            const isFresh = freshlyRegenerated.has(key);
             return (
-              <div key={i} className="mb-4 p-5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700">
-                <div className="flex items-center justify-end gap-3 mb-3">
-                  <RegenerateButton loading={regeneratingKey === key} onClick={() => handleRegenerate(key, "carousel", c, (item) => { const newCarousels = [...content.carousels]; newCarousels[i] = item; onChange({ ...content, carousels: newCarousels }); })} />
-                  <CopyButton text={carouselText} label="Copy slides" />
-                  <EditButton isEditing={isEditing} onToggle={() => setEditingKey(isEditing ? null : key)} />
+              <div key={i} className={`mb-4 p-5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700 transition-all ${freshClass(key)}`}>
+                <div className="flex items-center justify-between mb-3">
+                  {renderFreshBadge(key)}
+                  <div className={`flex items-center gap-3 ${isFresh ? "" : "ml-auto"}`}>
+                    <RegenerateButton loading={regeneratingKey === key} onClick={() => handleRegenerate(key, "carousel", c, (item) => { const newCarousels = [...content.carousels]; newCarousels[i] = item; onChange({ ...content, carousels: newCarousels }); }, "carousels")} />
+                    <CopyButton text={carouselText} label="Copy slides" />
+                    <EditButton isEditing={isEditing} onToggle={() => setEditingKey(isEditing ? null : key)} />
+                  </div>
                 </div>
                 {isEditing ? (
                   <>
@@ -695,27 +1004,39 @@ export default function ContentResults({
                   </>
                 ) : (
                   <>
-                    {c.slides.map((s, j) => (
-                      <div key={j} className="mb-3 pb-3 border-b border-slate-200 dark:border-slate-700 last:border-0 last:pb-0 last:mb-0">
-                        <span className="font-semibold text-slate-800 dark:text-slate-200">{s.title}</span>
-                        <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{s.body}</p>
-                      </div>
-                    ))}
+                    {c.slides.map((s, j) => {
+                      const slideKey = `carousel-${i}-slide-${j}`;
+                      return (
+                        <div key={j} className="mb-4 pb-4 border-b border-slate-200 dark:border-slate-700 last:border-0 last:pb-0 last:mb-0">
+                          <span className="font-semibold text-slate-800 dark:text-slate-200">{s.title}</span>
+                          <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{s.body}</p>
+                          {images[slideKey] ? (
+                            <div className="mt-2">
+                              <img src={images[slideKey]} alt="" className="rounded-xl max-h-48 object-cover shadow-md" />
+                              <button onClick={() => downloadImage(images[slideKey], `carousel-${i + 1}-slide-${j + 1}.png`)} className="mt-1 text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium inline-flex items-center gap-1">
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                                Download
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="mt-2">
+                              {imageLoading.has(slideKey) ? (
+                                <div className="flex items-center gap-2 text-sm text-slate-500">
+                                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" /></svg>
+                                  Generating...
+                                </div>
+                              ) : (
+                                <button onClick={() => onGenerateImage(slideKey, `Part ${j + 1} of ${c.slides.length} in a cohesive carousel series. MUST maintain identical visual style, color palette, layout, and typography across all slides. Style: ${c.imagePrompt}. This slide's content: "${s.title} - ${s.body}"`, "1:1")} className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium">
+                                  Generate slide image
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                     <p className="text-xs text-slate-500 mt-3 bg-slate-100 dark:bg-slate-800 p-2 rounded-lg">Style: {c.imagePrompt}</p>
                   </>
-                )}
-                {images[key] ? (
-                  <div className="mt-3">
-                    <img src={images[key]} alt="" className="rounded-xl max-h-48 object-cover shadow-md" />
-                    <button onClick={() => downloadImage(images[key], `carousel-${i + 1}.png`)} className="mt-2 text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium inline-flex items-center gap-1">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                      Download image
-                    </button>
-                  </div>
-                ) : (
-                  <button onClick={() => onGenerateImage(key, c.imagePrompt, "1:1")} disabled={imageLoading.has(key)} className="mt-3 text-sm text-indigo-600 dark:text-indigo-400 font-medium hover:text-indigo-800 dark:hover:text-indigo-300">
-                    {imageLoading.has(key) ? "Generating..." : "Generate carousel image"}
-                  </button>
                 )}
               </div>
             );
@@ -727,7 +1048,15 @@ export default function ContentResults({
       {content.quotesForX.length > 0 && (
         <div className="mb-8">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-slate-700 dark:text-slate-300 text-lg">Quotes for X</h3>
+            <div className="flex items-center gap-3">
+              <h3 className="font-semibold text-slate-700 dark:text-slate-300 text-lg">Quotes for X</h3>
+              <UndoRedoButtons
+                canUndo={historyRef.current.quotesForX.undo.length > 0}
+                canRedo={historyRef.current.quotesForX.redo.length > 0}
+                onUndo={() => handleUndo("quotesForX")}
+                onRedo={() => handleRedo("quotesForX")}
+              />
+            </div>
             <button onClick={() => downloadSectionAsWord(buildQuotesParagraphs, "quotes-for-x.docx")} className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium">
               Download as Word
             </button>
@@ -735,12 +1064,16 @@ export default function ContentResults({
           {content.quotesForX.map((q, i) => {
             const key = `quote-${i}`;
             const isEditing = editingKey === key;
+            const isFresh = freshlyRegenerated.has(key);
             return (
-              <div key={i} className="mb-4 p-5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700">
-                <div className="flex items-center justify-end gap-3 mb-3">
-                  <RegenerateButton loading={regeneratingKey === key} onClick={() => handleRegenerate(key, "quoteForX", q, (item) => { const newQuotes = [...content.quotesForX]; newQuotes[i] = item; onChange({ ...content, quotesForX: newQuotes }); })} />
-                  <CopyButton text={q.quote} label="Copy quote" />
-                  <EditButton isEditing={isEditing} onToggle={() => setEditingKey(isEditing ? null : key)} />
+              <div key={i} className={`mb-4 p-5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700 transition-all ${freshClass(key)}`}>
+                <div className="flex items-center justify-between mb-3">
+                  {renderFreshBadge(key)}
+                  <div className={`flex items-center gap-3 ${isFresh ? "" : "ml-auto"}`}>
+                    <RegenerateButton loading={regeneratingKey === key} onClick={() => handleRegenerate(key, "quoteForX", q, (item) => { const newQuotes = [...content.quotesForX]; newQuotes[i] = item; onChange({ ...content, quotesForX: newQuotes }); }, "quotesForX")} />
+                    <CopyButton text={q.quote} label="Copy quote" />
+                    <EditButton isEditing={isEditing} onToggle={() => setEditingKey(isEditing ? null : key)} />
+                  </div>
                 </div>
                 {isEditing ? (
                   <>
@@ -765,9 +1098,7 @@ export default function ContentResults({
                     </button>
                   </div>
                 ) : (
-                  <button onClick={() => onGenerateImage(key, q.imagePrompt, "1:1")} disabled={imageLoading.has(key)} className="mt-3 text-sm text-indigo-600 dark:text-indigo-400 font-medium hover:text-indigo-800 dark:hover:text-indigo-300">
-                    {imageLoading.has(key) ? "Generating..." : "Generate quote card"}
-                  </button>
+                  renderImagePromptEditor(key, q.imagePrompt, "1:1")
                 )}
               </div>
             );
@@ -779,7 +1110,15 @@ export default function ContentResults({
       {content.youtube.length > 0 && (
         <div className="mb-8">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-slate-700 dark:text-slate-300 text-lg">YouTube</h3>
+            <div className="flex items-center gap-3">
+              <h3 className="font-semibold text-slate-700 dark:text-slate-300 text-lg">YouTube</h3>
+              <UndoRedoButtons
+                canUndo={historyRef.current.youtube.undo.length > 0}
+                canRedo={historyRef.current.youtube.redo.length > 0}
+                onUndo={() => handleUndo("youtube")}
+                onRedo={() => handleRedo("youtube")}
+              />
+            </div>
             <button onClick={() => downloadSectionAsWord(buildYoutubeParagraphs, "youtube-scripts.docx")} className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium">
               Download as Word
             </button>
@@ -787,12 +1126,16 @@ export default function ContentResults({
           {content.youtube.map((y, i) => {
             const key = `yt-${i}`;
             const isEditing = editingKey === key;
+            const isFresh = freshlyRegenerated.has(key);
             return (
-              <div key={i} className="mb-4 p-5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700">
-                <div className="flex items-center justify-end gap-3 mb-3">
-                  <RegenerateButton loading={regeneratingKey === key} onClick={() => handleRegenerate(key, "youtube", y, (item) => { const newYt = [...content.youtube]; newYt[i] = item; onChange({ ...content, youtube: newYt }); })} />
-                  <CopyButton text={`${y.title}\n\n${y.script}`} label="Copy script" />
-                  <EditButton isEditing={isEditing} onToggle={() => setEditingKey(isEditing ? null : key)} />
+              <div key={i} className={`mb-4 p-5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700 transition-all ${freshClass(key)}`}>
+                <div className="flex items-center justify-between mb-3">
+                  {renderFreshBadge(key)}
+                  <div className={`flex items-center gap-3 ${isFresh ? "" : "ml-auto"}`}>
+                    <RegenerateButton loading={regeneratingKey === key} onClick={() => handleRegenerate(key, "youtube", y, (item) => { const newYt = [...content.youtube]; newYt[i] = item; onChange({ ...content, youtube: newYt }); }, "youtube")} />
+                    <CopyButton text={`${y.title}\n\n${y.script}`} label="Copy script" />
+                    <EditButton isEditing={isEditing} onToggle={() => setEditingKey(isEditing ? null : key)} />
+                  </div>
                 </div>
                 {isEditing ? (
                   <>
@@ -816,12 +1159,9 @@ export default function ContentResults({
                 )}
                 {y.thumbnailPrompt && (
                   <>
-                    {!images[key] && (
-                      <button onClick={() => onGenerateImage(key, y.thumbnailPrompt!, "16:9")} disabled={imageLoading.has(key)} className="mt-3 text-sm text-indigo-600 dark:text-indigo-400 font-medium hover:text-indigo-800 dark:hover:text-indigo-300">
-                        {imageLoading.has(key) ? "Generating..." : "Generate thumbnail"}
-                      </button>
-                    )}
-                    {images[key] && (
+                    {!images[key] ? (
+                      renderImagePromptEditor(key, y.thumbnailPrompt, "16:9")
+                    ) : (
                       <div className="mt-3">
                         <img src={images[key]} alt="" className="rounded-xl max-h-32 object-cover shadow-md" />
                         <button onClick={() => downloadImage(images[key], `youtube-${i + 1}-thumbnail.png`)} className="mt-2 text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium inline-flex items-center gap-1">

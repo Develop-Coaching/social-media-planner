@@ -1,7 +1,14 @@
 import { cookies } from "next/headers";
-import { COOKIE_NAME, getUserFromToken, TokenPayload } from "./auth";
+import { COOKIE_NAME, getUserFromToken, isAuthEnabled, TokenPayload } from "./auth";
+
+const DEFAULT_USER: TokenPayload = { userId: "default", role: "admin" };
 
 export async function requireAuth(): Promise<TokenPayload> {
+  // When auth is disabled, use a default user so data goes to data/default/
+  if (!isAuthEnabled()) {
+    return DEFAULT_USER;
+  }
+
   const cookieStore = await cookies();
   const token = cookieStore.get(COOKIE_NAME)?.value;
   if (!token) {

@@ -4,6 +4,8 @@ import path from "path";
 const DATA_DIR = path.join(process.cwd(), "data");
 
 function getUserDir(userId: string): string {
+  // "default" user (auth disabled) uses flat data/ directory for backwards compat
+  if (userId === "default") return DATA_DIR;
   return path.join(DATA_DIR, userId);
 }
 
