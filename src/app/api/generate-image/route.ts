@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
 import { requireAuth, AuthError } from "@/lib/auth-helpers";
 
-const IMAGE_MODEL = "imagen-4.0-generate-001";
+const IMAGE_MODEL = "gemini-3-pro-image-preview";
 
 export async function POST(request: NextRequest) {
   const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
@@ -38,20 +38,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const response = await ai.models.generateImages({
+    const response = await ai.models.generateContent({
       model: IMAGE_MODEL,
-      prompt,
+      contents: prompt,
       config: {
-        numberOfImages: 1,
-        aspectRatio,
+        responseModalities: ["IMAGE"],
+        imageConfig: {
+          aspectRatio,
+        },
       },
     });
 
-    const generatedImage = response.generatedImages?.[0];
-    if (generatedImage?.image?.imageBytes) {
+    // Find the image part in the response
+    const parts = response.candidates?.[0]?.content?.parts;
+    const imagePart = parts?.find((p) => p.inlineData);
+
+    if (imagePart?.inlineData?.data) {
       return NextResponse.json({
-        imageBase64: generatedImage.image.imageBytes,
-        mimeType: "image/png",
+        imageBase64: imagePart.inlineData.data,
+        mimeType: imagePart.inlineData.mimeType || "image/png",
       });
     }
 

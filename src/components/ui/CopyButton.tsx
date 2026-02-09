@@ -25,7 +25,7 @@ export default function CopyButton({ text, label = "Copy" }: { text: string; lab
   return (
     <button
       onClick={handleCopy}
-      className="inline-flex items-center gap-1.5 text-sm text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 font-medium transition-colors"
+      className="inline-flex items-center gap-1.5 text-sm text-slate-600 dark:text-slate-400 hover:text-sky-600 dark:hover:text-sky-400 font-medium transition-colors"
     >
       {copied ? (
         <>

@@ -31,7 +31,7 @@ export default function LogoutButton({ variant = "header" }: { variant?: "header
         className={`p-2 rounded-lg transition-colors ${
           variant === "page"
             ? "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-700/50"
-            : "text-indigo-100 hover:text-white hover:bg-white/10"
+            : "text-sky-100 hover:text-white hover:bg-white/10"
         }`}
         title="Sign out"
       >

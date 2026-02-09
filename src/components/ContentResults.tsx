@@ -7,6 +7,7 @@ import { GeneratedContent, Theme, ToneStyle } from "@/types";
 import CopyButton from "@/components/ui/CopyButton";
 import EditButton from "@/components/ui/EditButton";
 import { useToast } from "@/components/ToastProvider";
+import { ElapsedTimer } from "@/components/Skeleton";
 
 type ContentType = "post" | "reel" | "linkedinArticle" | "carousel" | "quoteForX" | "youtube";
 
@@ -78,7 +79,7 @@ function UndoRedoButtons({
         onClick={onUndo}
         disabled={!canUndo}
         title="Undo"
-        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-sky-600 dark:hover:text-sky-400 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
       >
         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a5 5 0 015 5v2M3 10l4-4m-4 4l4 4" />
@@ -89,7 +90,7 @@ function UndoRedoButtons({
         onClick={onRedo}
         disabled={!canRedo}
         title="Redo"
-        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-sky-600 dark:hover:text-sky-400 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
       >
         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 10H11a5 5 0 00-5 5v2m15-7l-4-4m4 4l-4 4" />
@@ -119,6 +120,7 @@ interface Props {
   saveContentName: string;
   onSaveContentNameChange: (name: string) => void;
   onSaveContent: () => void;
+  brandColors?: string[];
 }
 
 export default function ContentResults({
@@ -140,10 +142,21 @@ export default function ContentResults({
   saveContentName,
   onSaveContentNameChange,
   onSaveContent,
+  brandColors,
 }: Props) {
   const { toast } = useToast();
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [regeneratingKey, setRegeneratingKey] = useState<string | null>(null);
+  const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
+
+  // Close fullscreen on Escape
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape" && fullscreenImage) setFullscreenImage(null);
+    }
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [fullscreenImage]);
 
   // Listen for toggle-edit-mode custom event (from Cmd+E keyboard shortcut)
   useEffect(() => {
@@ -163,6 +176,10 @@ export default function ContentResults({
     window.addEventListener("toggle-edit-mode", handleToggleEdit);
     return () => window.removeEventListener("toggle-edit-mode", handleToggleEdit);
   }, [content]);
+
+  // Image regeneration feedback state
+  const [imageRegenKey, setImageRegenKey] = useState<string | null>(null);
+  const [imageRegenFeedback, setImageRegenFeedback] = useState("");
 
   // Feature 2: Image prompt editing state
   const [editingPromptKey, setEditingPromptKey] = useState<string | null>(null);
@@ -270,7 +287,7 @@ export default function ContentResults({
   }
 
   function handleGenerateWithPrompt(key: string, originalPrompt: string, aspectRatio?: string) {
-    const prompt = getEffectivePrompt(key, originalPrompt);
+    const prompt = withBrandColors(getEffectivePrompt(key, originalPrompt));
     setEditingPromptKey(null);
     onGenerateImage(key, prompt, aspectRatio);
   }
@@ -569,6 +586,63 @@ export default function ContentResults({
     link.click();
   }
 
+  function renderImageWithRegenerate(key: string, prompt: string, filename: string, aspectRatio?: string) {
+    const showingFeedback = imageRegenKey === key;
+    return (
+      <div className="mt-3">
+        <img src={images[key]} alt="" className="rounded-xl max-h-64 object-cover shadow-md cursor-pointer hover:opacity-90 transition-opacity" onClick={() => setFullscreenImage(images[key])} />
+        <div className="flex items-center gap-3 mt-2">
+          <button onClick={() => downloadImage(images[key], filename)} className="text-sm text-sky-600 dark:text-sky-400 hover:text-sky-800 dark:hover:text-sky-300 font-medium inline-flex items-center gap-1">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+            Download
+          </button>
+          <button
+            onClick={() => {
+              if (showingFeedback) {
+                setImageRegenKey(null);
+                setImageRegenFeedback("");
+              } else {
+                setImageRegenKey(key);
+                setImageRegenFeedback("");
+              }
+            }}
+            disabled={imageLoading.has(key)}
+            className="text-sm text-slate-500 dark:text-slate-400 hover:text-orange-600 dark:hover:text-orange-400 font-medium inline-flex items-center gap-1"
+          >
+            <svg className={`w-4 h-4 ${imageLoading.has(key) ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            {imageLoading.has(key) ? "Regenerating..." : "Regenerate image"}
+          </button>
+        </div>
+        {showingFeedback && (
+          <div className="mt-2 p-3 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">What should be different? (optional)</label>
+            <input
+              type="text"
+              value={imageRegenFeedback}
+              onChange={(e) => setImageRegenFeedback(e.target.value)}
+              placeholder="e.g. Make it brighter, less text, more minimalist..."
+              className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-sky-500 mb-2"
+            />
+            <button
+              onClick={() => {
+                const feedback = imageRegenFeedback.trim();
+                const basePrompt = feedback ? `${prompt}. IMPORTANT CHANGE: ${feedback}` : prompt;
+                onGenerateImage(key, withBrandColors(basePrompt), aspectRatio);
+                setImageRegenKey(null);
+                setImageRegenFeedback("");
+              }}
+              className="px-4 py-1.5 rounded-lg bg-sky-600 text-white text-sm font-medium hover:bg-sky-700 transition-colors"
+            >
+              Regenerate
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   function renderImagePromptEditor(key: string, originalPrompt: string, aspectRatio?: string) {
     const isEditingPrompt = editingPromptKey === key;
     const effectivePrompt = getEffectivePrompt(key, originalPrompt);
@@ -580,17 +654,17 @@ export default function ContentResults({
           <button
             onClick={() => handleGenerateWithPrompt(key, originalPrompt, aspectRatio)}
             disabled={imageLoading.has(key)}
-            className="text-sm text-indigo-600 dark:text-indigo-400 font-medium hover:text-indigo-800 dark:hover:text-indigo-300"
+            className="text-sm text-sky-600 dark:text-sky-400 font-medium hover:text-sky-800 dark:hover:text-sky-300"
           >
-            {imageLoading.has(key) ? "Generating..." : "Generate image (Gemini)"}
+            {imageLoading.has(key) ? "Generating..." : "Generate image"}
           </button>
           <button
             onClick={() => handleTogglePromptEdit(key, originalPrompt)}
             title="Edit image prompt before generating"
             className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-colors ${
               isEditingPrompt
-                ? "bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300"
-                : "text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-700"
+                ? "bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300"
+                : "text-slate-500 dark:text-slate-400 hover:text-sky-600 dark:hover:text-sky-400 hover:bg-slate-100 dark:hover:bg-slate-700"
             }`}
           >
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -598,7 +672,7 @@ export default function ContentResults({
             </svg>
             {isEditingPrompt ? "Hide prompt" : "Edit prompt"}
             {hasBeenEdited && (
-              <span className="ml-1 w-1.5 h-1.5 rounded-full bg-indigo-500 inline-block" />
+              <span className="ml-1 w-1.5 h-1.5 rounded-full bg-sky-500 inline-block" />
             )}
           </button>
         </div>
@@ -609,7 +683,7 @@ export default function ContentResults({
               value={effectivePrompt}
               onChange={(e) => handlePromptChange(key, e.target.value)}
               rows={3}
-              className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-indigo-500"
+              className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-sky-500"
             />
             {hasBeenEdited && (
               <button
@@ -623,6 +697,19 @@ export default function ContentResults({
         )}
       </div>
     );
+  }
+
+  function buildCarouselSlidePrompt(carousel: GeneratedContent["carousels"][number], slideIndex: number): string {
+    const s = carousel.slides[slideIndex];
+    const allTitles = carousel.slides.map((sl, idx) => `${idx + 1}. ${sl.title}`).join("; ");
+    return `Create a social media carousel slide image. Overall carousel topic with ${carousel.slides.length} slides: [${allTitles}]. This slide (${slideIndex + 1} of ${carousel.slides.length}): "${s.title} - ${s.body}". Visual style for ALL slides: ${carousel.imagePrompt}. IMPORTANT: Use a consistent layout, typography, illustration style, and color scheme that would look unified across all slides in this carousel.`;
+  }
+
+  function withBrandColors(prompt: string): string {
+    if (brandColors && brandColors.length > 0) {
+      return `${prompt}. Use these brand colors: ${brandColors.join(", ")}`;
+    }
+    return prompt;
   }
 
   function freshClass(key: string): string {
@@ -653,6 +740,29 @@ export default function ContentResults({
         }
       `}</style>
 
+      {/* Fullscreen image overlay */}
+      {fullscreenImage && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
+          onClick={() => setFullscreenImage(null)}
+        >
+          <button
+            onClick={() => setFullscreenImage(null)}
+            className="absolute top-4 right-4 text-white/80 hover:text-white transition-colors"
+          >
+            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+          <img
+            src={fullscreenImage}
+            alt=""
+            className="max-w-full max-h-full object-contain rounded-lg"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-3">
           <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-green-100 dark:bg-green-900/50 text-green-600 dark:text-green-400 text-sm font-bold">4</span>
@@ -666,7 +776,7 @@ export default function ContentResults({
             <button
               onClick={onGenerateAllImages}
               disabled={imageLoading.size > 0}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-600 text-white font-medium hover:bg-purple-700 disabled:opacity-50 transition-colors text-sm"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-sky-600 text-white font-medium hover:bg-sky-700 disabled:opacity-50 transition-colors text-sm"
             >
               <svg className={`w-4 h-4 ${imageLoading.size > 0 ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -674,6 +784,7 @@ export default function ContentResults({
               {imageLoading.size > 0 ? `Generating ${imageLoading.size} image${imageLoading.size > 1 ? "s" : ""}...` : `Generate all images (${pendingImageCount})`}
             </button>
           )}
+          {imageLoading.size > 0 && <ElapsedTimer />}
           <button
             onClick={downloadAllAsWord}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors text-sm"
@@ -718,7 +829,7 @@ export default function ContentResults({
       </div>
 
       {showSaveDialog && (
-        <div className="mb-6 p-4 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800">
+        <div className="mb-6 p-4 rounded-xl bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800">
           <h3 className="font-medium text-slate-800 dark:text-slate-200 mb-3">Save this content</h3>
           <div className="flex gap-3">
             <input
@@ -727,12 +838,12 @@ export default function ContentResults({
               value={saveContentName}
               onChange={(e) => onSaveContentNameChange(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && onSaveContent()}
-              className="flex-1 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500"
+              className="flex-1 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500"
             />
             <button
               onClick={onSaveContent}
               disabled={savingContent || !saveContentName.trim()}
-              className="px-4 py-2 rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+              className="px-4 py-2 rounded-lg bg-sky-600 text-white font-medium hover:bg-sky-700 disabled:opacity-50 transition-colors"
             >
               {savingContent ? "Saving..." : "Save"}
             </button>
@@ -759,7 +870,7 @@ export default function ContentResults({
                 onRedo={() => handleRedo("posts")}
               />
             </div>
-            <button onClick={() => downloadSectionAsWord(buildPostsParagraphs, "posts.docx")} className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium">
+            <button onClick={() => downloadSectionAsWord(buildPostsParagraphs, "posts.docx")} className="text-sm text-sky-600 dark:text-sky-400 hover:text-sky-800 dark:hover:text-sky-300 font-medium">
               Download as Word
             </button>
           </div>
@@ -780,29 +891,23 @@ export default function ContentResults({
                 {isEditing ? (
                   <>
                     <label className="block text-xs text-slate-500 mb-1">Title:</label>
-                    <input type="text" value={p.title} onChange={(e) => updatePost(i, "title", e.target.value)} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-3 font-semibold focus:ring-2 focus:ring-indigo-500" />
+                    <input type="text" value={p.title} onChange={(e) => updatePost(i, "title", e.target.value)} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-3 font-semibold focus:ring-2 focus:ring-sky-500" />
                     <label className="block text-xs text-slate-500 mb-1">Caption:</label>
-                    <textarea value={p.caption} onChange={(e) => updatePost(i, "caption", e.target.value)} rows={6} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-1 focus:ring-2 focus:ring-indigo-500" />
+                    <textarea value={p.caption} onChange={(e) => updatePost(i, "caption", e.target.value)} rows={6} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-1 focus:ring-2 focus:ring-sky-500" />
                     <div className="flex gap-3 mb-3"><CharCount text={p.caption} limit={2200} label="IG" /> <CharCount text={p.caption} limit={3000} label="LinkedIn" /></div>
                     <label className="block text-xs text-slate-500 mb-1">Image prompt:</label>
-                    <textarea value={p.imagePrompt} onChange={(e) => updatePost(i, "imagePrompt", e.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-indigo-500" />
+                    <textarea value={p.imagePrompt} onChange={(e) => updatePost(i, "imagePrompt", e.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-sky-500" />
                   </>
                 ) : (
                   <>
-                    <h4 className="font-semibold text-indigo-600 dark:text-indigo-400 mb-2">{p.title}</h4>
+                    <h4 className="font-semibold text-sky-600 dark:text-sky-400 mb-2">{p.title}</h4>
                     <p className="text-slate-800 dark:text-slate-200 whitespace-pre-wrap">{p.caption}</p>
                     <div className="flex gap-3 mt-1"><CharCount text={p.caption} limit={2200} label="IG" /> <CharCount text={p.caption} limit={3000} label="LinkedIn" /></div>
                     <p className="text-xs text-slate-500 mt-3 bg-slate-100 dark:bg-slate-800 p-2 rounded-lg">Image prompt: {p.imagePrompt}</p>
                   </>
                 )}
                 {images[key] ? (
-                  <div className="mt-3">
-                    <img src={images[key]} alt="" className="rounded-xl max-h-64 object-cover shadow-md" />
-                    <button onClick={() => downloadImage(images[key], `post-${i + 1}.png`)} className="mt-2 text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium inline-flex items-center gap-1">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                      Download image
-                    </button>
-                  </div>
+                  renderImageWithRegenerate(key, p.imagePrompt, `post-${i + 1}.png`)
                 ) : (
                   renderImagePromptEditor(key, p.imagePrompt)
                 )}
@@ -825,7 +930,7 @@ export default function ContentResults({
                 onRedo={() => handleRedo("reels")}
               />
             </div>
-            <button onClick={() => downloadSectionAsWord(buildReelsParagraphs, "reel-scripts.docx")} className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium">
+            <button onClick={() => downloadSectionAsWord(buildReelsParagraphs, "reel-scripts.docx")} className="text-sm text-sky-600 dark:text-sky-400 hover:text-sky-800 dark:hover:text-sky-300 font-medium">
               Download as Word
             </button>
           </div>
@@ -845,12 +950,12 @@ export default function ContentResults({
                 </div>
                 {isEditing ? (
                   <>
-                    <textarea value={r.script} onChange={(e) => updateReel(i, "script", e.target.value)} rows={8} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-1 focus:ring-2 focus:ring-indigo-500" />
+                    <textarea value={r.script} onChange={(e) => updateReel(i, "script", e.target.value)} rows={8} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-1 focus:ring-2 focus:ring-sky-500" />
                     <div className="mb-3"><WordCount text={r.script} label="Script" /></div>
                     {r.imagePrompt !== undefined && (
                       <>
                         <label className="block text-xs text-slate-500 mb-1">Thumbnail prompt:</label>
-                        <textarea value={r.imagePrompt || ""} onChange={(e) => updateReel(i, "imagePrompt", e.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-indigo-500" />
+                        <textarea value={r.imagePrompt || ""} onChange={(e) => updateReel(i, "imagePrompt", e.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-sky-500" />
                       </>
                     )}
                   </>
@@ -866,13 +971,7 @@ export default function ContentResults({
                     {!images[key] ? (
                       renderImagePromptEditor(key, r.imagePrompt, "9:16")
                     ) : (
-                      <div className="mt-3">
-                        <img src={images[key]} alt="" className="rounded-xl max-h-64 object-cover shadow-md" />
-                        <button onClick={() => downloadImage(images[key], `reel-${i + 1}-thumbnail.png`)} className="mt-2 text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium inline-flex items-center gap-1">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                          Download image
-                        </button>
-                      </div>
+                      renderImageWithRegenerate(key, r.imagePrompt, `reel-${i + 1}-thumbnail.png`, "9:16")
                     )}
                   </>
                 )}
@@ -895,7 +994,7 @@ export default function ContentResults({
                 onRedo={() => handleRedo("linkedinArticles")}
               />
             </div>
-            <button onClick={() => downloadSectionAsWord(buildArticlesParagraphs, "linkedin-articles.docx")} className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium">
+            <button onClick={() => downloadSectionAsWord(buildArticlesParagraphs, "linkedin-articles.docx")} className="text-sm text-sky-600 dark:text-sky-400 hover:text-sky-800 dark:hover:text-sky-300 font-medium">
               Download as Word
             </button>
           </div>
@@ -916,22 +1015,22 @@ export default function ContentResults({
                 {isEditing ? (
                   <>
                     <label className="block text-xs text-slate-500 mb-1">Title:</label>
-                    <input type="text" value={a.title} onChange={(e) => updateArticle(i, "title", e.target.value)} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-3 font-semibold focus:ring-2 focus:ring-indigo-500" />
+                    <input type="text" value={a.title} onChange={(e) => updateArticle(i, "title", e.target.value)} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-3 font-semibold focus:ring-2 focus:ring-sky-500" />
                     <label className="block text-xs text-slate-500 mb-1">LinkedIn post caption (teaser):</label>
-                    <textarea value={a.caption} onChange={(e) => updateArticle(i, "caption", e.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-1 text-sm focus:ring-2 focus:ring-indigo-500" />
+                    <textarea value={a.caption} onChange={(e) => updateArticle(i, "caption", e.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-1 text-sm focus:ring-2 focus:ring-sky-500" />
                     <div className="mb-3"><CharCount text={a.caption} limit={3000} label="LinkedIn" /></div>
                     <label className="block text-xs text-slate-500 mb-1">Article body:</label>
-                    <textarea value={a.body} onChange={(e) => updateArticle(i, "body", e.target.value)} rows={12} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-1 text-sm focus:ring-2 focus:ring-indigo-500" />
+                    <textarea value={a.body} onChange={(e) => updateArticle(i, "body", e.target.value)} rows={12} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-1 text-sm focus:ring-2 focus:ring-sky-500" />
                     <div className="mb-3"><WordCount text={a.body} label="Article" /></div>
                     <label className="block text-xs text-slate-500 mb-1">Hero image prompt:</label>
-                    <textarea value={a.imagePrompt} onChange={(e) => updateArticle(i, "imagePrompt", e.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-indigo-500" />
+                    <textarea value={a.imagePrompt} onChange={(e) => updateArticle(i, "imagePrompt", e.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-sky-500" />
                   </>
                 ) : (
                   <>
                     <h4 className="font-semibold text-slate-900 dark:text-white text-lg">{a.title}</h4>
                     {a.caption && (
-                      <div className="mt-2 p-3 rounded-lg bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800">
-                        <p className="text-xs text-indigo-600 dark:text-indigo-400 font-medium mb-1">LinkedIn post caption:</p>
+                      <div className="mt-2 p-3 rounded-lg bg-sky-50 dark:bg-sky-900/20 border border-sky-100 dark:border-sky-800">
+                        <p className="text-xs text-sky-600 dark:text-sky-400 font-medium mb-1">LinkedIn post caption:</p>
                         <p className="text-sm text-slate-700 dark:text-slate-300">{a.caption}</p>
                       </div>
                     )}
@@ -941,13 +1040,7 @@ export default function ContentResults({
                   </>
                 )}
                 {images[key] ? (
-                  <div className="mt-3">
-                    <img src={images[key]} alt="" className="rounded-xl max-h-48 object-cover shadow-md" />
-                    <button onClick={() => downloadImage(images[key], `article-${i + 1}-hero.png`)} className="mt-2 text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium inline-flex items-center gap-1">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                      Download image
-                    </button>
-                  </div>
+                  renderImageWithRegenerate(key, a.imagePrompt, `article-${i + 1}-hero.png`, "16:9")
                 ) : (
                   renderImagePromptEditor(key, a.imagePrompt, "16:9")
                 )}
@@ -970,7 +1063,7 @@ export default function ContentResults({
                 onRedo={() => handleRedo("carousels")}
               />
             </div>
-            <button onClick={() => downloadSectionAsWord(buildCarouselsParagraphs, "carousels.docx")} className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium">
+            <button onClick={() => downloadSectionAsWord(buildCarouselsParagraphs, "carousels.docx")} className="text-sm text-sky-600 dark:text-sky-400 hover:text-sky-800 dark:hover:text-sky-300 font-medium">
               Download as Word
             </button>
           </div>
@@ -994,13 +1087,13 @@ export default function ContentResults({
                     {c.slides.map((s, j) => (
                       <div key={j} className="mb-4 pb-4 border-b border-slate-200 dark:border-slate-700 last:border-0">
                         <label className="block text-xs text-slate-500 mb-1">Slide {j + 1} title:</label>
-                        <input type="text" value={s.title} onChange={(e) => updateCarouselSlide(i, j, "title", e.target.value)} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-2 font-semibold focus:ring-2 focus:ring-indigo-500" />
+                        <input type="text" value={s.title} onChange={(e) => updateCarouselSlide(i, j, "title", e.target.value)} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-2 font-semibold focus:ring-2 focus:ring-sky-500" />
                         <label className="block text-xs text-slate-500 mb-1">Slide {j + 1} body:</label>
-                        <textarea value={s.body} onChange={(e) => updateCarouselSlide(i, j, "body", e.target.value)} rows={3} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-indigo-500" />
+                        <textarea value={s.body} onChange={(e) => updateCarouselSlide(i, j, "body", e.target.value)} rows={3} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-sky-500" />
                       </div>
                     ))}
                     <label className="block text-xs text-slate-500 mb-1">Image style prompt:</label>
-                    <textarea value={c.imagePrompt} onChange={(e) => updateCarousel(i, "imagePrompt", e.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-indigo-500" />
+                    <textarea value={c.imagePrompt} onChange={(e) => updateCarousel(i, "imagePrompt", e.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-sky-500" />
                   </>
                 ) : (
                   <>
@@ -1011,13 +1104,7 @@ export default function ContentResults({
                           <span className="font-semibold text-slate-800 dark:text-slate-200">{s.title}</span>
                           <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{s.body}</p>
                           {images[slideKey] ? (
-                            <div className="mt-2">
-                              <img src={images[slideKey]} alt="" className="rounded-xl max-h-48 object-cover shadow-md" />
-                              <button onClick={() => downloadImage(images[slideKey], `carousel-${i + 1}-slide-${j + 1}.png`)} className="mt-1 text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium inline-flex items-center gap-1">
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                                Download
-                              </button>
-                            </div>
+                            renderImageWithRegenerate(slideKey, buildCarouselSlidePrompt(c, j), `carousel-${i + 1}-slide-${j + 1}.png`, "1:1")
                           ) : (
                             <div className="mt-2">
                               {imageLoading.has(slideKey) ? (
@@ -1026,7 +1113,7 @@ export default function ContentResults({
                                   Generating...
                                 </div>
                               ) : (
-                                <button onClick={() => onGenerateImage(slideKey, `Part ${j + 1} of ${c.slides.length} in a cohesive carousel series. MUST maintain identical visual style, color palette, layout, and typography across all slides. Style: ${c.imagePrompt}. This slide's content: "${s.title} - ${s.body}"`, "1:1")} className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium">
+                                <button onClick={() => onGenerateImage(slideKey, withBrandColors(buildCarouselSlidePrompt(c, j)), "1:1")} className="text-sm text-sky-600 dark:text-sky-400 hover:text-sky-800 dark:hover:text-sky-300 font-medium">
                                   Generate slide image
                                 </button>
                               )}
@@ -1057,7 +1144,7 @@ export default function ContentResults({
                 onRedo={() => handleRedo("quotesForX")}
               />
             </div>
-            <button onClick={() => downloadSectionAsWord(buildQuotesParagraphs, "quotes-for-x.docx")} className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium">
+            <button onClick={() => downloadSectionAsWord(buildQuotesParagraphs, "quotes-for-x.docx")} className="text-sm text-sky-600 dark:text-sky-400 hover:text-sky-800 dark:hover:text-sky-300 font-medium">
               Download as Word
             </button>
           </div>
@@ -1077,10 +1164,10 @@ export default function ContentResults({
                 </div>
                 {isEditing ? (
                   <>
-                    <textarea value={q.quote} onChange={(e) => updateQuote(i, "quote", e.target.value)} rows={3} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-1 focus:ring-2 focus:ring-indigo-500" />
+                    <textarea value={q.quote} onChange={(e) => updateQuote(i, "quote", e.target.value)} rows={3} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-1 focus:ring-2 focus:ring-sky-500" />
                     <div className="mb-3"><CharCount text={q.quote} limit={280} label="X" /></div>
                     <label className="block text-xs text-slate-500 mb-1">Quote card prompt:</label>
-                    <textarea value={q.imagePrompt} onChange={(e) => updateQuote(i, "imagePrompt", e.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-indigo-500" />
+                    <textarea value={q.imagePrompt} onChange={(e) => updateQuote(i, "imagePrompt", e.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-sky-500" />
                   </>
                 ) : (
                   <>
@@ -1090,13 +1177,7 @@ export default function ContentResults({
                   </>
                 )}
                 {images[key] ? (
-                  <div className="mt-3">
-                    <img src={images[key]} alt="" className="rounded-xl max-h-48 object-cover shadow-md" />
-                    <button onClick={() => downloadImage(images[key], `quote-${i + 1}.png`)} className="mt-2 text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium inline-flex items-center gap-1">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                      Download image
-                    </button>
-                  </div>
+                  renderImageWithRegenerate(key, q.imagePrompt, `quote-${i + 1}.png`, "1:1")
                 ) : (
                   renderImagePromptEditor(key, q.imagePrompt, "1:1")
                 )}
@@ -1119,7 +1200,7 @@ export default function ContentResults({
                 onRedo={() => handleRedo("youtube")}
               />
             </div>
-            <button onClick={() => downloadSectionAsWord(buildYoutubeParagraphs, "youtube-scripts.docx")} className="text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium">
+            <button onClick={() => downloadSectionAsWord(buildYoutubeParagraphs, "youtube-scripts.docx")} className="text-sm text-sky-600 dark:text-sky-400 hover:text-sky-800 dark:hover:text-sky-300 font-medium">
               Download as Word
             </button>
           </div>
@@ -1139,13 +1220,13 @@ export default function ContentResults({
                 </div>
                 {isEditing ? (
                   <>
-                    <input type="text" value={y.title} onChange={(e) => updateYoutube(i, "title", e.target.value)} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-3 font-semibold focus:ring-2 focus:ring-indigo-500" />
-                    <textarea value={y.script} onChange={(e) => updateYoutube(i, "script", e.target.value)} rows={12} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-1 text-sm focus:ring-2 focus:ring-indigo-500" />
+                    <input type="text" value={y.title} onChange={(e) => updateYoutube(i, "title", e.target.value)} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-3 font-semibold focus:ring-2 focus:ring-sky-500" />
+                    <textarea value={y.script} onChange={(e) => updateYoutube(i, "script", e.target.value)} rows={12} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-1 text-sm focus:ring-2 focus:ring-sky-500" />
                     <div className="mb-3"><WordCount text={y.script} label="Script" /></div>
                     {y.thumbnailPrompt !== undefined && (
                       <>
                         <label className="block text-xs text-slate-500 mb-1">Thumbnail prompt:</label>
-                        <textarea value={y.thumbnailPrompt || ""} onChange={(e) => updateYoutube(i, "thumbnailPrompt", e.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-indigo-500" />
+                        <textarea value={y.thumbnailPrompt || ""} onChange={(e) => updateYoutube(i, "thumbnailPrompt", e.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-sky-500" />
                       </>
                     )}
                   </>
@@ -1162,13 +1243,7 @@ export default function ContentResults({
                     {!images[key] ? (
                       renderImagePromptEditor(key, y.thumbnailPrompt, "16:9")
                     ) : (
-                      <div className="mt-3">
-                        <img src={images[key]} alt="" className="rounded-xl max-h-32 object-cover shadow-md" />
-                        <button onClick={() => downloadImage(images[key], `youtube-${i + 1}-thumbnail.png`)} className="mt-2 text-sm text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 font-medium inline-flex items-center gap-1">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-                          Download image
-                        </button>
-                      </div>
+                      renderImageWithRegenerate(key, y.thumbnailPrompt, `youtube-${i + 1}-thumbnail.png`, "16:9")
                     )}
                   </>
                 )}

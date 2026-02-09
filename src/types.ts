@@ -1,4 +1,4 @@
-export type Company = { id: string; name: string };
+export type Company = { id: string; name: string; logo?: string; brandColors?: string[] };
 export type MemoryFile = { id: string; name: string; content: string; addedAt: string };
 export type Theme = { id: string; title: string; description: string };
 export type ContentCounts = {

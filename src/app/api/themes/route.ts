@@ -64,7 +64,8 @@ Output ONLY the JSON array, no other text. Example format:
 
     let themes: { id: string; title: string; description: string }[];
     try {
-      const parsed = JSON.parse(text.trim());
+      const cleaned = text.replace(/^```json?\s*|\s*```$/g, "").trim();
+      const parsed = JSON.parse(cleaned);
       themes = Array.isArray(parsed) ? parsed : [parsed];
     } catch {
       themes = [];

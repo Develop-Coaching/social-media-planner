@@ -16,6 +16,8 @@ function getCompaniesFile(userId: string): string {
 export interface Company {
   id: string;
   name: string;
+  logo?: string;
+  brandColors?: string[];
 }
 
 export interface CompaniesData {
@@ -70,6 +72,15 @@ export async function addCompany(userId: string, name: string): Promise<Company>
   companies.push(company);
   await saveCompanies(userId, companies);
   return company;
+}
+
+export async function updateCompany(userId: string, id: string, updates: Partial<Pick<Company, "name" | "logo" | "brandColors">>): Promise<Company | null> {
+  const companies = await getCompanies(userId);
+  const index = companies.findIndex((c) => c.id === id);
+  if (index === -1) return null;
+  companies[index] = { ...companies[index], ...updates };
+  await saveCompanies(userId, companies);
+  return companies[index];
 }
 
 export async function deleteCompany(userId: string, id: string): Promise<boolean> {
