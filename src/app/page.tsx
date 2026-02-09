@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Company, Theme, ContentCounts, GeneratedContent, SavedContentItem, ToneStyle, defaultCounts, toneOptions } from "@/types";
+import { Company, Theme, ContentCounts, GeneratedContent, SavedContentItem, ToneStyle, CustomToneStyle, defaultCounts, toneOptions } from "@/types";
 import CompanySelector from "@/components/CompanySelector";
 import MemoryManager from "@/components/MemoryManager";
 import SavedContentList from "@/components/SavedContentList";
@@ -31,6 +31,9 @@ export default function Home() {
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [currentSavedId, setCurrentSavedId] = useState<string | null>(null);
 
+  // Custom tones state
+  const [customTones, setCustomTones] = useState<CustomToneStyle[]>([]);
+
   function handleSelectCompany(company: Company) {
     setSelectedCompany(company);
     setSelectedTheme(null);
@@ -38,6 +41,7 @@ export default function Home() {
     setImages({});
     setCurrentSavedId(null);
     loadSavedContent(company.id);
+    loadCustomTones(company.id);
   }
 
   function handleBackToCompanies() {
@@ -47,6 +51,7 @@ export default function Home() {
     setImages({});
     setSavedContent([]);
     setCurrentSavedId(null);
+    setCustomTones([]);
   }
 
   function handleSelectTheme(theme: Theme) {
@@ -61,6 +66,46 @@ export default function Home() {
       if (res.ok && data.items) setSavedContent(data.items);
     } catch {
       // ignore
+    }
+  }
+
+  async function loadCustomTones(companyId: string) {
+    try {
+      const res = await fetch(`/api/custom-tones?companyId=${companyId}`);
+      const data = await res.json();
+      if (res.ok && data.tones) setCustomTones(data.tones);
+    } catch {
+      // ignore
+    }
+  }
+
+  async function handleAddCustomTone(label: string, prompt: string) {
+    if (!selectedCompany) return;
+    try {
+      const res = await fetch("/api/custom-tones", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId: selectedCompany.id, label, prompt }),
+      });
+      if (res.ok) {
+        const tone: CustomToneStyle = await res.json();
+        setCustomTones((prev) => [tone, ...prev]);
+        setSelectedTone(tone);
+      } else {
+        const data = await res.json();
+        alert(data.error || "Failed to create custom tone");
+      }
+    } catch {
+      alert("Failed to create custom tone");
+    }
+  }
+
+  async function handleDeleteCustomTone(id: string) {
+    if (!selectedCompany) return;
+    const res = await fetch(`/api/custom-tones?companyId=${selectedCompany.id}&id=${id}`, { method: "DELETE" });
+    if (res.ok) {
+      setCustomTones((prev) => prev.filter((t) => t.id !== id));
+      if (selectedTone.id === id) setSelectedTone(toneOptions[0]);
     }
   }
 
@@ -276,6 +321,9 @@ export default function Home() {
             onToneChange={setSelectedTone}
             onGenerate={handleGenerateContent}
             loading={contentLoading}
+            customTones={customTones}
+            onAddCustomTone={handleAddCustomTone}
+            onDeleteCustomTone={handleDeleteCustomTone}
           />
         )}
 

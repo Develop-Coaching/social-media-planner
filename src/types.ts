@@ -32,6 +32,11 @@ export type ToneStyle = {
   prompt: string;
 };
 
+export type CustomToneStyle = ToneStyle & {
+  isCustom: true;
+  createdAt: string;
+};
+
 export const toneOptions: ToneStyle[] = [
   { id: "professional", label: "Professional", description: "Polished & authoritative", prompt: "Write in a professional, authoritative tone. Use clear, confident language suitable for business audiences." },
   { id: "conversational", label: "Conversational", description: "Friendly & approachable", prompt: "Write in a warm, conversational tone like talking to a friend. Use casual language, contractions, and a relatable voice." },
