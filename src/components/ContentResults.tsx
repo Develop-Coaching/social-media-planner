@@ -185,10 +185,6 @@ export default function ContentResults({
   const [imageRegenKey, setImageRegenKey] = useState<string | null>(null);
   const [imageRegenFeedback, setImageRegenFeedback] = useState("");
 
-  // Feature 2: Image prompt editing state
-  const [editingPromptKey, setEditingPromptKey] = useState<string | null>(null);
-  const [editedPrompts, setEditedPrompts] = useState<Record<string, string>>({});
-
   // Feature 3: Freshly regenerated items indicator
   const [freshlyRegenerated, setFreshlyRegenerated] = useState<Set<string>>(new Set());
   const freshTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -271,31 +267,6 @@ export default function ContentResults({
     }, 4000);
   }
 
-  function getEffectivePrompt(key: string, originalPrompt: string): string {
-    return editedPrompts[key] !== undefined ? editedPrompts[key] : originalPrompt;
-  }
-
-  function handleTogglePromptEdit(key: string, originalPrompt: string) {
-    if (editingPromptKey === key) {
-      setEditingPromptKey(null);
-    } else {
-      setEditingPromptKey(key);
-      if (editedPrompts[key] === undefined) {
-        setEditedPrompts((prev) => ({ ...prev, [key]: originalPrompt }));
-      }
-    }
-  }
-
-  function handlePromptChange(key: string, value: string) {
-    setEditedPrompts((prev) => ({ ...prev, [key]: value }));
-  }
-
-  function handleGenerateWithPrompt(key: string, originalPrompt: string, aspectRatio?: string) {
-    const prompt = withBrandColors(getEffectivePrompt(key, originalPrompt));
-    setEditingPromptKey(null);
-    onGenerateImage(key, prompt, aspectRatio);
-  }
-
   const pendingImageCount = useMemo(() => {
     let count = 0;
     content.posts.forEach((_, i) => { if (!images[`post-${i}`]) count++; });
@@ -356,7 +327,7 @@ export default function ContentResults({
     onChange({ ...content, posts: newPosts });
   }
 
-  function updateReel(index: number, field: "script" | "imagePrompt", value: string) {
+  function updateReel(index: number, field: "script" | "caption" | "imagePrompt", value: string) {
     maybePushUndo("reels", `reel-${index}-${field}`);
     const newReels = [...content.reels];
     newReels[index] = { ...newReels[index], [field]: value };
@@ -431,6 +402,15 @@ export default function ContentResults({
       children.push(
         new Paragraph({ text: `Reel ${index + 1}`, heading: HeadingLevel.HEADING_2 }),
         new Paragraph({ text: "" }),
+      );
+      if (reel.caption) {
+        children.push(
+          new Paragraph({ children: [new TextRun({ text: "Caption: ", bold: true }), new TextRun({ text: reel.caption })] }),
+          new Paragraph({ text: "" }),
+        );
+      }
+      children.push(
+        new Paragraph({ children: [new TextRun({ text: "Script:", bold: true })] }),
       );
       reel.script.split("\n").forEach((para) => {
         children.push(new Paragraph({ children: [new TextRun({ text: para })] }));
@@ -568,7 +548,7 @@ export default function ContentResults({
   function downloadCSV() {
     const rows: string[][] = [["Type", "Title", "Content", "Image Prompt"]];
     content.posts.forEach((p) => rows.push(["Post", p.title, p.caption, p.imagePrompt]));
-    content.reels.forEach((r, i) => rows.push(["Reel", `Reel ${i + 1}`, r.script, r.imagePrompt || ""]));
+    content.reels.forEach((r, i) => rows.push(["Reel", `Reel ${i + 1}`, `${r.caption ? `Caption: ${r.caption}\n\n` : ""}Script: ${r.script}`, r.imagePrompt || ""]));
     content.linkedinArticles.forEach((a) => rows.push(["LinkedIn Article", a.title, `${a.caption ? `Caption: ${a.caption}\n\n` : ""}${a.body}`, a.imagePrompt]));
     content.carousels.forEach((c, i) => {
       const slideText = c.slides.map((s, j) => `Slide ${j + 1}: ${s.title}\n${s.body}`).join("\n\n");
@@ -656,58 +636,26 @@ export default function ContentResults({
     );
   }
 
-  function renderImagePromptEditor(key: string, originalPrompt: string, aspectRatio?: string) {
-    const isEditingPrompt = editingPromptKey === key;
-    const effectivePrompt = getEffectivePrompt(key, originalPrompt);
-    const hasBeenEdited = editedPrompts[key] !== undefined && editedPrompts[key] !== originalPrompt;
-
+  function renderAlwaysVisiblePrompt(key: string, prompt: string, onPromptChange: (value: string) => void, aspectRatio?: string) {
     return (
-      <div className="mt-3">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => handleGenerateWithPrompt(key, originalPrompt, aspectRatio)}
-            disabled={imageLoading.has(key)}
-            className="text-sm text-sky-600 dark:text-sky-400 font-medium hover:text-sky-800 dark:hover:text-sky-300"
-          >
-            {imageLoading.has(key) ? "Generating..." : "Generate image"}
-          </button>
-          <button
-            onClick={() => handleTogglePromptEdit(key, originalPrompt)}
-            title="Edit image prompt before generating"
-            className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-colors ${
-              isEditingPrompt
-                ? "bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300"
-                : "text-slate-500 dark:text-slate-400 hover:text-sky-600 dark:hover:text-sky-400 hover:bg-slate-100 dark:hover:bg-slate-700"
-            }`}
-          >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-            </svg>
-            {isEditingPrompt ? "Hide prompt" : "Edit prompt"}
-            {hasBeenEdited && (
-              <span className="ml-1 w-1.5 h-1.5 rounded-full bg-sky-500 inline-block" />
-            )}
-          </button>
-        </div>
-        {isEditingPrompt && (
-          <div className="mt-2 p-3 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
-            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Image prompt (edit before generating):</label>
-            <textarea
-              value={effectivePrompt}
-              onChange={(e) => handlePromptChange(key, e.target.value)}
-              rows={3}
-              className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-sky-500"
-            />
-            {hasBeenEdited && (
-              <button
-                onClick={() => setEditedPrompts((prev) => { const next = { ...prev }; delete next[key]; return next; })}
-                className="mt-1 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
-              >
-                Reset to original
-              </button>
-            )}
-          </div>
-        )}
+      <div className="mt-3 p-3 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+        <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Image prompt:</label>
+        <textarea
+          value={prompt}
+          onChange={(e) => onPromptChange(e.target.value)}
+          rows={2}
+          className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-sky-500"
+        />
+        <button
+          onClick={() => onGenerateImage(key, withBrandColors(prompt), aspectRatio)}
+          disabled={imageLoading.has(key) || !prompt.trim()}
+          className="mt-2 inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-sky-600 text-white text-sm font-medium hover:bg-sky-700 disabled:opacity-50 transition-colors"
+        >
+          <svg className={`w-4 h-4 ${imageLoading.has(key) ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          {imageLoading.has(key) ? "Generating..." : "Generate image"}
+        </button>
       </div>
     );
   }
@@ -898,22 +846,16 @@ export default function ContentResults({
                     <label className="block text-xs text-slate-500 mb-1">Caption:</label>
                     <textarea value={p.caption} onChange={(e) => updatePost(i, "caption", e.target.value)} rows={6} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-1 focus:ring-2 focus:ring-sky-500" />
                     <div className="flex gap-3 mb-3"><CharCount text={p.caption} limit={2200} label="IG" /> <CharCount text={p.caption} limit={3000} label="LinkedIn" /></div>
-                    <label className="block text-xs text-slate-500 mb-1">Image prompt:</label>
-                    <textarea value={p.imagePrompt} onChange={(e) => updatePost(i, "imagePrompt", e.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-sky-500" />
                   </>
                 ) : (
                   <>
                     <h4 className="font-semibold text-sky-600 dark:text-sky-400 mb-2">{p.title}</h4>
                     <p className="text-slate-800 dark:text-slate-200 whitespace-pre-wrap">{p.caption}</p>
                     <div className="flex gap-3 mt-1"><CharCount text={p.caption} limit={2200} label="IG" /> <CharCount text={p.caption} limit={3000} label="LinkedIn" /></div>
-                    <p className="text-xs text-slate-500 mt-3 bg-slate-100 dark:bg-slate-800 p-2 rounded-lg">Image prompt: {p.imagePrompt}</p>
                   </>
                 )}
-                {images[key] ? (
-                  renderImageWithRegenerate(key, p.imagePrompt, `post-${i + 1}.png`)
-                ) : (
-                  renderImagePromptEditor(key, p.imagePrompt)
-                )}
+                {images[key] && renderImageWithRegenerate(key, p.imagePrompt, `post-${i + 1}.png`)}
+                {renderAlwaysVisiblePrompt(key, p.imagePrompt, (v) => updatePost(i, "imagePrompt", v))}
               </div>
             );
           })}
@@ -947,37 +889,34 @@ export default function ContentResults({
                   {renderFreshBadge(key)}
                   <div className={`flex items-center gap-3 ${isFresh ? "" : "ml-auto"}`}>
                     <RegenerateButton loading={regeneratingKey === key} onClick={() => handleRegenerate(key, "reel", r, (item) => { const newReels = [...content.reels]; newReels[i] = item; onChange({ ...content, reels: newReels }); }, "reels")} />
-                    <CopyButton text={r.script} label="Copy script" />
+                    <CopyButton text={`${r.caption || ""}\n\n${r.script}`} label="Copy" />
                     <EditButton isEditing={isEditing} onToggle={() => setEditingKey(isEditing ? null : key)} />
                   </div>
                 </div>
                 {isEditing ? (
                   <>
+                    <label className="block text-xs text-slate-500 mb-1">Script (spoken words):</label>
                     <textarea value={r.script} onChange={(e) => updateReel(i, "script", e.target.value)} rows={8} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-1 focus:ring-2 focus:ring-sky-500" />
                     <div className="mb-3"><WordCount text={r.script} label="Script" /></div>
-                    {r.imagePrompt !== undefined && (
-                      <>
-                        <label className="block text-xs text-slate-500 mb-1">Thumbnail prompt:</label>
-                        <textarea value={r.imagePrompt || ""} onChange={(e) => updateReel(i, "imagePrompt", e.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-sky-500" />
-                      </>
-                    )}
+                    <label className="block text-xs text-slate-500 mb-1">Caption (posted with the reel):</label>
+                    <textarea value={r.caption || ""} onChange={(e) => updateReel(i, "caption", e.target.value)} rows={4} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-1 focus:ring-2 focus:ring-sky-500" />
+                    <div className="flex gap-3 mb-3"><CharCount text={r.caption || ""} limit={2200} label="IG" /></div>
                   </>
                 ) : (
                   <>
                     <p className="text-slate-800 dark:text-slate-200 whitespace-pre-wrap">{r.script}</p>
                     <div className="mt-1"><WordCount text={r.script} label="Script" /></div>
-                    {r.imagePrompt && <p className="text-xs text-slate-500 mt-3 bg-slate-100 dark:bg-slate-800 p-2 rounded-lg">Thumbnail: {r.imagePrompt}</p>}
-                  </>
-                )}
-                {r.imagePrompt && (
-                  <>
-                    {!images[key] ? (
-                      renderImagePromptEditor(key, r.imagePrompt, "9:16")
-                    ) : (
-                      renderImageWithRegenerate(key, r.imagePrompt, `reel-${i + 1}-thumbnail.png`, "9:16")
+                    {(r.caption || "") && (
+                      <div className="mt-3 p-3 rounded-lg bg-sky-50 dark:bg-sky-900/20 border border-sky-100 dark:border-sky-800">
+                        <p className="text-xs text-sky-600 dark:text-sky-400 font-medium mb-1">Caption:</p>
+                        <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap">{r.caption}</p>
+                        <div className="mt-1"><CharCount text={r.caption || ""} limit={2200} label="IG" /></div>
+                      </div>
                     )}
                   </>
                 )}
+                {images[key] && renderImageWithRegenerate(key, r.imagePrompt || "", `reel-${i + 1}-thumbnail.png`, "9:16")}
+                {renderAlwaysVisiblePrompt(key, r.imagePrompt || "", (v) => updateReel(i, "imagePrompt", v), "9:16")}
               </div>
             );
           })}
@@ -1025,8 +964,6 @@ export default function ContentResults({
                     <label className="block text-xs text-slate-500 mb-1">Article body:</label>
                     <textarea value={a.body} onChange={(e) => updateArticle(i, "body", e.target.value)} rows={12} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-1 text-sm focus:ring-2 focus:ring-sky-500" />
                     <div className="mb-3"><WordCount text={a.body} label="Article" /></div>
-                    <label className="block text-xs text-slate-500 mb-1">Hero image prompt:</label>
-                    <textarea value={a.imagePrompt} onChange={(e) => updateArticle(i, "imagePrompt", e.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-sky-500" />
                   </>
                 ) : (
                   <>
@@ -1039,14 +976,10 @@ export default function ContentResults({
                     )}
                     <p className="text-slate-700 dark:text-slate-300 mt-3 whitespace-pre-wrap text-sm">{a.body}</p>
                     <div className="mt-1"><WordCount text={a.body} label="Article" /></div>
-                    <p className="text-xs text-slate-500 mt-3 bg-slate-100 dark:bg-slate-800 p-2 rounded-lg">Hero image: {a.imagePrompt}</p>
                   </>
                 )}
-                {images[key] ? (
-                  renderImageWithRegenerate(key, a.imagePrompt, `article-${i + 1}-hero.png`, "16:9")
-                ) : (
-                  renderImagePromptEditor(key, a.imagePrompt, "16:9")
-                )}
+                {images[key] && renderImageWithRegenerate(key, a.imagePrompt, `article-${i + 1}-hero.png`, "16:9")}
+                {renderAlwaysVisiblePrompt(key, a.imagePrompt, (v) => updateArticle(i, "imagePrompt", v), "16:9")}
               </div>
             );
           })}
@@ -1194,21 +1127,15 @@ export default function ContentResults({
                   <>
                     <textarea value={q.quote} onChange={(e) => updateQuote(i, "quote", e.target.value)} rows={3} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-1 focus:ring-2 focus:ring-sky-500" />
                     <div className="mb-3"><CharCount text={q.quote} limit={280} label="X" /></div>
-                    <label className="block text-xs text-slate-500 mb-1">Quote card prompt:</label>
-                    <textarea value={q.imagePrompt} onChange={(e) => updateQuote(i, "imagePrompt", e.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-sky-500" />
                   </>
                 ) : (
                   <>
                     <blockquote className="text-slate-800 dark:text-slate-200 text-lg italic">&ldquo;{q.quote}&rdquo;</blockquote>
                     <div className="mt-1"><CharCount text={q.quote} limit={280} label="X" /></div>
-                    <p className="text-xs text-slate-500 mt-3 bg-slate-100 dark:bg-slate-800 p-2 rounded-lg">Card: {q.imagePrompt}</p>
                   </>
                 )}
-                {images[key] ? (
-                  renderImageWithRegenerate(key, q.imagePrompt, `quote-${i + 1}.png`, "1:1")
-                ) : (
-                  renderImagePromptEditor(key, q.imagePrompt, "1:1")
-                )}
+                {images[key] && renderImageWithRegenerate(key, q.imagePrompt, `quote-${i + 1}.png`, "1:1")}
+                {renderAlwaysVisiblePrompt(key, q.imagePrompt, (v) => updateQuote(i, "imagePrompt", v), "1:1")}
               </div>
             );
           })}
@@ -1251,30 +1178,16 @@ export default function ContentResults({
                     <input type="text" value={y.title} onChange={(e) => updateYoutube(i, "title", e.target.value)} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-3 font-semibold focus:ring-2 focus:ring-sky-500" />
                     <textarea value={y.script} onChange={(e) => updateYoutube(i, "script", e.target.value)} rows={12} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-1 text-sm focus:ring-2 focus:ring-sky-500" />
                     <div className="mb-3"><WordCount text={y.script} label="Script" /></div>
-                    {y.thumbnailPrompt !== undefined && (
-                      <>
-                        <label className="block text-xs text-slate-500 mb-1">Thumbnail prompt:</label>
-                        <textarea value={y.thumbnailPrompt || ""} onChange={(e) => updateYoutube(i, "thumbnailPrompt", e.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-sky-500" />
-                      </>
-                    )}
                   </>
                 ) : (
                   <>
                     <h4 className="font-semibold text-slate-900 dark:text-white text-lg">{y.title}</h4>
                     <p className="text-slate-700 dark:text-slate-300 mt-3 whitespace-pre-wrap text-sm">{y.script}</p>
                     <div className="mt-1"><WordCount text={y.script} label="Script" /></div>
-                    {y.thumbnailPrompt && <p className="text-xs text-slate-500 mt-3 bg-slate-100 dark:bg-slate-800 p-2 rounded-lg">Thumbnail: {y.thumbnailPrompt}</p>}
                   </>
                 )}
-                {y.thumbnailPrompt && (
-                  <>
-                    {!images[key] ? (
-                      renderImagePromptEditor(key, y.thumbnailPrompt, "16:9")
-                    ) : (
-                      renderImageWithRegenerate(key, y.thumbnailPrompt, `youtube-${i + 1}-thumbnail.png`, "16:9")
-                    )}
-                  </>
-                )}
+                {images[key] && renderImageWithRegenerate(key, y.thumbnailPrompt || "", `youtube-${i + 1}-thumbnail.png`, "16:9")}
+                {renderAlwaysVisiblePrompt(key, y.thumbnailPrompt || "", (v) => updateYoutube(i, "thumbnailPrompt", v), "16:9")}
               </div>
             );
           })}

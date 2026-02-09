@@ -7,7 +7,7 @@ type ContentType = "post" | "reel" | "linkedinArticle" | "carousel" | "quoteForX
 
 const typePrompts: Record<ContentType, string> = {
   post: `Generate 1 Instagram/LinkedIn feed post. Return a JSON object with: title (short 3-8 word summary), caption (engaging, with optional hashtags), imagePrompt (detailed description for an AI image generator).`,
-  reel: `Generate 1 talking-head reel script. Return a JSON object with: script (a direct-to-camera script for someone to speak, approximately 30 seconds when read aloud - NO scene directions, NO B-roll instructions, just the actual words to say), imagePrompt (optional thumbnail description).`,
+  reel: `Generate 1 talking-head reel script. Return a JSON object with: script (a direct-to-camera script for someone to speak, approximately 30 seconds when read aloud - NO scene directions, NO B-roll instructions, just the actual words to say), caption (engaging social media caption with hashtags to post alongside the reel), imagePrompt (optional thumbnail description).`,
   linkedinArticle: `Generate 1 LinkedIn article. Return a JSON object with: title (article headline), caption (a short 1-2 sentence teaser/hook for the LinkedIn post), body (full article, 400-800 words), imagePrompt (hero image description).`,
   carousel: `Generate 1 carousel. Return a JSON object with: slides (array of objects, each with title and body - all slides should build on the theme), imagePrompt (describing the carousel visual style).`,
   quoteForX: `Generate 1 quote for X/Twitter. Return a JSON object with: quote (short, punchy insight related to the theme), imagePrompt (quote card style description).`,

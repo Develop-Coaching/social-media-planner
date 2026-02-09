@@ -46,8 +46,8 @@ function collectItems(content: GeneratedContent): CalendarItem[] {
       type: "Reel",
       label: "Reel",
       title: `Reel ${i + 1}`,
-      preview: r.script.slice(0, 80),
-      fullText: r.script,
+      preview: (r.caption || r.script).slice(0, 80),
+      fullText: r.caption ? `${r.caption}\n\n${r.script}` : r.script,
       color: TYPE_COLORS.Reel,
     })
   );

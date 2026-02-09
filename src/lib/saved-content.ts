@@ -23,7 +23,7 @@ export interface SavedContentItem {
   theme: { id: string; title: string; description: string };
   content: {
     posts: { title: string; caption: string; imagePrompt: string }[];
-    reels: { script: string; imagePrompt?: string }[];
+    reels: { script: string; caption: string; imagePrompt?: string }[];
     linkedinArticles: { title: string; caption: string; body: string; imagePrompt: string }[];
     carousels: { slides: { title: string; body: string }[]; imagePrompt: string }[];
     quotesForX: { quote: string; imagePrompt: string }[];
