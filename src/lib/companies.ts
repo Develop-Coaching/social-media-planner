@@ -1,16 +1,21 @@
 import { promises as fs } from "fs";
 import path from "path";
+import { sanitizeId, validatePath } from "@/lib/sanitize";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 
 function getUserDir(userId: string): string {
   // "default" user (auth disabled) uses flat data/ directory for backwards compat
   if (userId === "default") return DATA_DIR;
-  return path.join(DATA_DIR, userId);
+  const dir = path.join(DATA_DIR, sanitizeId(userId));
+  validatePath(dir, DATA_DIR);
+  return dir;
 }
 
 function getCompaniesFile(userId: string): string {
-  return path.join(getUserDir(userId), "companies.json");
+  const filePath = path.join(getUserDir(userId), "companies.json");
+  validatePath(filePath, DATA_DIR);
+  return filePath;
 }
 
 export interface Company {

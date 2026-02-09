@@ -72,7 +72,6 @@ export default function Home() {
     const data = {
       theme: selectedTheme,
       content,
-      images, // note: base64 images can be large
       savedAt: Date.now(),
     };
     try {
@@ -80,7 +79,7 @@ export default function Home() {
     } catch {
       // localStorage quota exceeded - silently fail
     }
-  }, [autosaveRestored, selectedCompany, selectedTheme, content, images]);
+  }, [autosaveRestored, selectedCompany, selectedTheme, content]);
 
   function handleSelectCompany(company: Company) {
     setSelectedCompany(company);
@@ -99,7 +98,6 @@ export default function Home() {
         if (data.content && data.theme) {
           setSelectedTheme(data.theme);
           setContent(data.content);
-          if (data.images) setImages(data.images);
           toast("Restored your previous work", "info");
         }
       }
@@ -230,6 +228,7 @@ export default function Home() {
     if (!selectedCompany || !selectedTheme) return;
     setContentLoading(true);
     setContent(null);
+    setImages({});
     setCurrentSavedId(null);
     setStreamingText("");
     try {
@@ -250,14 +249,20 @@ export default function Home() {
 
       const decoder = new TextDecoder();
       let fullText = "";
+      let lastUpdate = 0;
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         const chunk = decoder.decode(value, { stream: true });
         fullText += chunk;
-        setStreamingText(fullText);
+        const now = Date.now();
+        if (now - lastUpdate >= 100) {
+          setStreamingText(fullText);
+          lastUpdate = now;
+        }
       }
+      setStreamingText(fullText);
 
       try {
         const cleaned = fullText.replace(/^```json?\s*|\s*```$/g, "").trim();
@@ -273,18 +278,23 @@ export default function Home() {
     }
   }, [selectedCompany, selectedTheme, counts, selectedTone, toast]);
 
-  async function generateImage(key: string, prompt: string, aspectRatio?: string) {
+  async function generateImage(key: string, prompt: string, aspectRatio?: string, referenceImage?: string): Promise<string | null> {
     setImageLoading((prev) => new Set(prev).add(key));
     try {
+      const body: Record<string, string> = { prompt, aspectRatio: aspectRatio || "1:1" };
+      if (referenceImage) body.referenceImage = referenceImage;
       const res = await fetch("/api/generate-image", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, aspectRatio: aspectRatio || "1:1" }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (res.ok && data.imageBase64) {
-        setImages((prev) => ({ ...prev, [key]: `data:${data.mimeType || "image/png"};base64,${data.imageBase64}` }));
+        const dataUrl = `data:${data.mimeType || "image/png"};base64,${data.imageBase64}`;
+        setImages((prev) => ({ ...prev, [key]: dataUrl }));
+        return data.imageBase64;
       }
+      return null;
     } finally {
       setImageLoading((prev) => {
         const next = new Set(prev);
@@ -294,14 +304,43 @@ export default function Home() {
     }
   }
 
+  async function generateCarouselImages(carouselIndex: number) {
+    if (!content) return;
+    const c = content.carousels[carouselIndex];
+    if (!c) return;
+
+    const allTitles = c.slides.map((sl, idx) => `${idx + 1}. ${sl.title}`).join("; ");
+
+    function buildPrompt(slideIndex: number): string {
+      const s = c.slides[slideIndex];
+      const prompt = `Create a social media carousel slide image. Overall carousel topic with ${c.slides.length} slides: [${allTitles}]. This slide (${slideIndex + 1} of ${c.slides.length}): "${s.title} - ${s.body}". Visual style for ALL slides: ${c.imagePrompt}. IMPORTANT: Use a consistent layout, typography, illustration style, and color scheme that would look unified across all slides in this carousel. Do not include any logo or watermark.`;
+      return addBrandColors(prompt);
+    }
+
+    // Step 1: Generate slide 1 first to establish the style
+    const firstKey = `carousel-${carouselIndex}-slide-0`;
+    const firstBase64 = await generateImage(firstKey, buildPrompt(0), "1:1");
+    if (!firstBase64) return; // failed, bail
+
+    // Step 2: Generate remaining slides in parallel, using slide 1 as reference
+    const remaining = c.slides.slice(1).map((_, j) => {
+      const slideIndex = j + 1;
+      const slideKey = `carousel-${carouselIndex}-slide-${slideIndex}`;
+      return generateImage(slideKey, buildPrompt(slideIndex), "1:1", firstBase64);
+    });
+    await Promise.all(remaining);
+  }
+
   function addBrandColors(prompt: string): string {
     const colors = selectedCompany?.brandColors;
     if (colors && colors.length > 0) return `${prompt}. Use these brand colors: ${colors.join(", ")}`;
     return prompt;
   }
 
-  function generateAllImages() {
+  async function generateAllImages() {
     if (!content) return;
+    const MAX_CONCURRENT = 3;
+    // Non-carousel images: generate with concurrency limit
     const jobs: { key: string; prompt: string; aspectRatio: string }[] = [];
     content.posts.forEach((p, i) => {
       const key = `post-${i}`;
@@ -315,16 +354,6 @@ export default function Home() {
       const key = `article-${i}`;
       if (!images[key]) jobs.push({ key, prompt: addBrandColors(a.imagePrompt), aspectRatio: "16:9" });
     });
-    content.carousels.forEach((c, i) => {
-      const allTitles = c.slides.map((sl, idx) => `${idx + 1}. ${sl.title}`).join("; ");
-      c.slides.forEach((s, j) => {
-        const key = `carousel-${i}-slide-${j}`;
-        if (!images[key]) {
-          const prompt = `Create a social media carousel slide image. Overall carousel topic with ${c.slides.length} slides: [${allTitles}]. This slide (${j + 1} of ${c.slides.length}): "${s.title} - ${s.body}". Visual style for ALL slides: ${c.imagePrompt}. IMPORTANT: Use a consistent layout, typography, illustration style, and color scheme that would look unified across all slides in this carousel.`;
-          jobs.push({ key, prompt: addBrandColors(prompt), aspectRatio: "1:1" });
-        }
-      });
-    });
     content.quotesForX.forEach((q, i) => {
       const key = `quote-${i}`;
       if (!images[key]) jobs.push({ key, prompt: addBrandColors(q.imagePrompt), aspectRatio: "1:1" });
@@ -333,7 +362,23 @@ export default function Home() {
       const key = `yt-${i}`;
       if (!images[key] && y.thumbnailPrompt) jobs.push({ key, prompt: addBrandColors(y.thumbnailPrompt), aspectRatio: "16:9" });
     });
-    jobs.forEach((job) => generateImage(job.key, job.prompt, job.aspectRatio));
+
+    // Process non-carousel jobs with max-3-concurrent queue
+    let i = 0;
+    async function runNext(): Promise<void> {
+      while (i < jobs.length) {
+        const job = jobs[i++];
+        await generateImage(job.key, job.prompt, job.aspectRatio);
+      }
+    }
+    const workers = Array.from({ length: Math.min(MAX_CONCURRENT, jobs.length) }, () => runNext());
+    await Promise.all(workers);
+
+    // Carousels: sequential (slide 1 first, then rest with reference)
+    content.carousels.forEach((_, ci) => {
+      const hasAnyPending = content.carousels[ci].slides.some((__, j) => !images[`carousel-${ci}-slide-${j}`]);
+      if (hasAnyPending) generateCarouselImages(ci);
+    });
   }
 
   function handleLoadSaved(item: SavedContentItem) {
@@ -715,6 +760,8 @@ export default function Home() {
                   onSaveContentNameChange={setSaveContentName}
                   onSaveContent={handleSaveContent}
                   brandColors={selectedCompany.brandColors}
+                  onDeleteImage={(key) => setImages((prev) => { const next = { ...prev }; delete next[key]; return next; })}
+                  onGenerateCarouselImages={generateCarouselImages}
                 />
               )}
             </>

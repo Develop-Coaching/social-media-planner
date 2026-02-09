@@ -1,16 +1,21 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { CustomToneStyle } from "@/types";
+import { sanitizeId, validatePath } from "@/lib/sanitize";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 
 function getUserDir(userId: string): string {
   if (userId === "default") return DATA_DIR;
-  return path.join(DATA_DIR, userId);
+  const dir = path.join(DATA_DIR, sanitizeId(userId));
+  validatePath(dir, DATA_DIR);
+  return dir;
 }
 
 function getCustomTonesFile(userId: string, companyId: string): string {
-  return path.join(getUserDir(userId), `custom-tones-${companyId}.json`);
+  const filePath = path.join(getUserDir(userId), `custom-tones-${sanitizeId(companyId)}.json`);
+  validatePath(filePath, DATA_DIR);
+  return filePath;
 }
 
 async function ensureUserDir(userId: string) {

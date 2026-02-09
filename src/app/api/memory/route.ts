@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getMemory, addToMemory, removeFromMemory } from "@/lib/memory";
 import { requireAuth, AuthError } from "@/lib/auth-helpers";
-import Anthropic from "@anthropic-ai/sdk";
+import { getAnthropicClient } from "@/lib/anthropic";
 import mammoth from "mammoth";
 
 // File size limits in bytes
@@ -11,14 +11,6 @@ const MAX_SIZES = {
   image: 5 * 1024 * 1024,  // 5 MB
   word: 10 * 1024 * 1024,  // 10 MB
 };
-
-function getAnthropicClient() {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    throw new Error("ANTHROPIC_API_KEY is not set");
-  }
-  return new Anthropic({ apiKey });
-}
 
 async function extractTextFromPDF(base64Data: string): Promise<string> {
   const buffer = Buffer.from(base64Data, "base64");

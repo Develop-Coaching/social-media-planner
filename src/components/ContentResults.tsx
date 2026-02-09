@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel } from "docx";
 import { saveAs } from "file-saver";
 import { GeneratedContent, Theme, ToneStyle } from "@/types";
@@ -121,6 +121,8 @@ interface Props {
   onSaveContentNameChange: (name: string) => void;
   onSaveContent: () => void;
   brandColors?: string[];
+  onDeleteImage: (key: string) => void;
+  onGenerateCarouselImages: (carouselIndex: number) => void;
 }
 
 export default function ContentResults({
@@ -143,6 +145,8 @@ export default function ContentResults({
   onSaveContentNameChange,
   onSaveContent,
   brandColors,
+  onDeleteImage,
+  onGenerateCarouselImages,
 }: Props) {
   const { toast } = useToast();
   const [editingKey, setEditingKey] = useState<string | null>(null);
@@ -212,7 +216,7 @@ export default function ContentResults({
 
   const pushUndo = useCallback((section: SectionKey, snapshot: GeneratedContent[SectionKey]) => {
     const h = historyRef.current[section];
-    h.undo = [...h.undo.slice(-(MAX_HISTORY - 1)), JSON.parse(JSON.stringify(snapshot))];
+    h.undo = [...h.undo.slice(-(MAX_HISTORY - 1)), structuredClone(snapshot)];
     h.redo = [];
     bumpHistory();
   }, [bumpHistory]);
@@ -221,7 +225,7 @@ export default function ContentResults({
     const h = historyRef.current[section];
     if (h.undo.length === 0) return;
     const prev = h.undo.pop()!;
-    h.redo.push(JSON.parse(JSON.stringify(content[section])));
+    h.redo.push(structuredClone(content[section]));
     if (h.redo.length > MAX_HISTORY) h.redo.shift();
     onChange({ ...content, [section]: prev });
     bumpHistory();
@@ -231,7 +235,7 @@ export default function ContentResults({
     const h = historyRef.current[section];
     if (h.redo.length === 0) return;
     const next = h.redo.pop()!;
-    h.undo.push(JSON.parse(JSON.stringify(content[section])));
+    h.undo.push(structuredClone(content[section]));
     if (h.undo.length > MAX_HISTORY) h.undo.shift();
     onChange({ ...content, [section]: next });
     bumpHistory();
@@ -292,7 +296,7 @@ export default function ContentResults({
     onGenerateImage(key, prompt, aspectRatio);
   }
 
-  const pendingImageCount = (() => {
+  const pendingImageCount = useMemo(() => {
     let count = 0;
     content.posts.forEach((_, i) => { if (!images[`post-${i}`]) count++; });
     content.reels.forEach((r, i) => { if (r.imagePrompt && !images[`reel-${i}`]) count++; });
@@ -301,7 +305,7 @@ export default function ContentResults({
     content.quotesForX.forEach((_, i) => { if (!images[`quote-${i}`]) count++; });
     content.youtube.forEach((y, i) => { if (y.thumbnailPrompt && !images[`yt-${i}`]) count++; });
     return count;
-  })();
+  }, [content, images]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   async function handleRegenerate(key: string, contentType: ContentType, currentItem: unknown, onReplace: (item: any) => void, section: SectionKey) {
@@ -614,6 +618,15 @@ export default function ContentResults({
             </svg>
             {imageLoading.has(key) ? "Regenerating..." : "Regenerate image"}
           </button>
+          <button
+            onClick={() => onDeleteImage(key)}
+            className="text-sm text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400 font-medium inline-flex items-center gap-1"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            Delete
+          </button>
         </div>
         {showingFeedback && (
           <div className="mt-2 p-3 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
@@ -702,7 +715,7 @@ export default function ContentResults({
   function buildCarouselSlidePrompt(carousel: GeneratedContent["carousels"][number], slideIndex: number): string {
     const s = carousel.slides[slideIndex];
     const allTitles = carousel.slides.map((sl, idx) => `${idx + 1}. ${sl.title}`).join("; ");
-    return `Create a social media carousel slide image. Overall carousel topic with ${carousel.slides.length} slides: [${allTitles}]. This slide (${slideIndex + 1} of ${carousel.slides.length}): "${s.title} - ${s.body}". Visual style for ALL slides: ${carousel.imagePrompt}. IMPORTANT: Use a consistent layout, typography, illustration style, and color scheme that would look unified across all slides in this carousel.`;
+    return `Create a social media carousel slide image. Overall carousel topic with ${carousel.slides.length} slides: [${allTitles}]. This slide (${slideIndex + 1} of ${carousel.slides.length}): "${s.title} - ${s.body}". Visual style for ALL slides: ${carousel.imagePrompt}. IMPORTANT: Use a consistent layout, typography, illustration style, and color scheme that would look unified across all slides in this carousel. Do not include any logo or watermark.`;
   }
 
   function withBrandColors(prompt: string): string {
@@ -730,16 +743,6 @@ export default function ContentResults({
 
   return (
     <section className="rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-lg border border-slate-200 dark:border-slate-700">
-      <style>{`
-        @keyframes pulse-once {
-          0% { background-color: rgba(74, 222, 128, 0.15); }
-          100% { background-color: transparent; }
-        }
-        .animate-pulse-once {
-          animation: pulse-once 2s ease-out forwards;
-        }
-      `}</style>
-
       {/* Fullscreen image overlay */}
       {fullscreenImage && (
         <div
@@ -1097,6 +1100,31 @@ export default function ContentResults({
                   </>
                 ) : (
                   <>
+                    {/* Generate all slide images button */}
+                    {(() => {
+                      const pendingSlides = c.slides.filter((_, j) => !images[`carousel-${i}-slide-${j}`]);
+                      const loadingSlides = c.slides.filter((_, j) => imageLoading.has(`carousel-${i}-slide-${j}`));
+                      if (pendingSlides.length > 0) return (
+                        <div className="mb-4">
+                          <button
+                            onClick={() => onGenerateCarouselImages(i)}
+                            disabled={loadingSlides.length > 0}
+                            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-sky-600 text-white font-medium hover:bg-sky-700 disabled:opacity-50 transition-colors text-sm"
+                          >
+                            <svg className={`w-4 h-4 ${loadingSlides.length > 0 ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            {loadingSlides.length > 0
+                              ? `Generating slide images (slide 1 sets the style)...`
+                              : `Generate all ${pendingSlides.length} slide images`}
+                          </button>
+                          {loadingSlides.length > 0 && (
+                            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Slide 1 generates first to set the style, then remaining slides match it.</p>
+                          )}
+                        </div>
+                      );
+                      return null;
+                    })()}
                     {c.slides.map((s, j) => {
                       const slideKey = `carousel-${i}-slide-${j}`;
                       return (
@@ -1110,7 +1138,7 @@ export default function ContentResults({
                               {imageLoading.has(slideKey) ? (
                                 <div className="flex items-center gap-2 text-sm text-slate-500">
                                   <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" /></svg>
-                                  Generating...
+                                  Generating slide {j + 1}...
                                 </div>
                               ) : (
                                 <button onClick={() => onGenerateImage(slideKey, withBrandColors(buildCarouselSlidePrompt(c, j)), "1:1")} className="text-sm text-sky-600 dark:text-sky-400 hover:text-sky-800 dark:hover:text-sky-300 font-medium">

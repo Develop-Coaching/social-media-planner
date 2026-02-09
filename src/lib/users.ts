@@ -1,6 +1,7 @@
 import { promises as fs } from "fs";
 import path from "path";
 import bcrypt from "bcryptjs";
+import { sanitizeId, validatePath } from "@/lib/sanitize";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const USERS_FILE = path.join(DATA_DIR, "users.json");
@@ -102,6 +103,19 @@ export async function deleteUser(id: string): Promise<boolean> {
   if (index === -1) return false;
   users.splice(index, 1);
   await writeUsers(users);
+
+  // Clean up user's data directory
+  const safeId = sanitizeId(id);
+  if (safeId) {
+    const userDir = path.join(DATA_DIR, safeId);
+    validatePath(userDir, DATA_DIR);
+    try {
+      await fs.rm(userDir, { recursive: true, force: true });
+    } catch {
+      // Directory may not exist, that's fine
+    }
+  }
+
   return true;
 }
 

@@ -1,9 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createToken, COOKIE_NAME } from "@/lib/auth";
 import { hasAnyUsers, createUser, migrateExistingData } from "@/lib/users";
+import { createRateLimiter, getClientIP } from "@/lib/rate-limit";
+
+const setupLimiter = createRateLimiter("setup", { maxAttempts: 3, windowMs: 15 * 60 * 1000 });
 
 export async function POST(request: NextRequest) {
   try {
+    const ip = getClientIP(request);
+    const { allowed, retryAfterMs } = setupLimiter.check(ip);
+    if (!allowed) {
+      return NextResponse.json(
+        { error: "Too many setup attempts. Please try again later." },
+        {
+          status: 429,
+          headers: { "Retry-After": String(Math.ceil(retryAfterMs / 1000)) },
+        }
+      );
+    }
+
     const alreadySetUp = await hasAnyUsers();
     if (alreadySetUp) {
       return NextResponse.json({ error: "Setup already completed" }, { status: 400 });

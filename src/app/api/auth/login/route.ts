@@ -1,10 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createToken, COOKIE_NAME, isAuthEnabled } from "@/lib/auth";
 import { verifyPassword } from "@/lib/users";
+import { createRateLimiter, getClientIP } from "@/lib/rate-limit";
+
+const loginLimiter = createRateLimiter("login", { maxAttempts: 5, windowMs: 15 * 60 * 1000 });
 
 export async function POST(request: NextRequest) {
   if (!isAuthEnabled()) {
     return NextResponse.json({ error: "Auth not configured" }, { status: 400 });
+  }
+
+  const ip = getClientIP(request);
+  const { allowed, retryAfterMs } = loginLimiter.check(ip);
+  if (!allowed) {
+    return NextResponse.json(
+      { error: "Too many login attempts. Please try again later." },
+      {
+        status: 429,
+        headers: { "Retry-After": String(Math.ceil(retryAfterMs / 1000)) },
+      }
+    );
   }
 
   try {

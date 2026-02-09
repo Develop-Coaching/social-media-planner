@@ -110,6 +110,16 @@ button, a, input, textarea {
   animation: spin 1s linear infinite;
 }
 
+/* Pulse-once animation for freshly regenerated items */
+@keyframes pulse-once {
+  0% { background-color: rgba(74, 222, 128, 0.15); }
+  100% { background-color: transparent; }
+}
+
+.animate-pulse-once {
+  animation: pulse-once 2s ease-out forwards;
+}
+
 /* Selection color */
 ::selection {
   background: rgba(99, 102, 241, 0.3);

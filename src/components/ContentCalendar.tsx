@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { GeneratedContent } from "@/types";
 
 interface CalendarItem {
@@ -233,7 +233,7 @@ export default function ContentCalendar({ content, startDate }: Props) {
   // Track which content + weekOffset we last distributed for
   const lastDistributedRef = useRef<string>("");
 
-  const items = collectItems(content);
+  const items = useMemo(() => collectItems(content), [content]);
   const monday = getNextMonday(startDate);
   monday.setDate(monday.getDate() + weekOffset * 7);
 

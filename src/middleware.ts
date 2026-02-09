@@ -1,13 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify } from "jose";
-
-const COOKIE_NAME = "pc_session";
-
-function getSecret() {
-  return new TextEncoder().encode(
-    process.env.AUTH_SECRET || "post-creator-default-secret-change-me"
-  );
-}
+import { getSecret, COOKIE_NAME } from "@/lib/auth";
 
 export async function middleware(request: NextRequest) {
   // If ADMIN_PASSWORD is not set, auth is disabled — allow everything

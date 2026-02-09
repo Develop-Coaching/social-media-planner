@@ -1,20 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
 import { getContextForAI } from "@/lib/memory";
 import { requireAuth, AuthError } from "@/lib/auth-helpers";
-
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+import { getAnthropicClient } from "@/lib/anthropic";
 
 export async function POST(request: NextRequest) {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return NextResponse.json(
-      { error: "ANTHROPIC_API_KEY is not set" },
-      { status: 500 }
-    );
-  }
-
   try {
     const { userId } = await requireAuth();
     const body = await request.json();
@@ -28,6 +17,8 @@ export async function POST(request: NextRequest) {
     }
 
     const context = await getContextForAI(userId, companyId);
+
+    const anthropic = getAnthropicClient();
 
     const message = await anthropic.messages.create({
       model: "claude-sonnet-4-20250514",
