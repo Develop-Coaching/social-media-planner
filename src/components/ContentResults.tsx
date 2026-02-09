@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel } from "docx";
 import { saveAs } from "file-saver";
-import { GeneratedContent, Theme, ToneStyle } from "@/types";
+import { GeneratedContent, Theme, ToneStyle, LanguageOption } from "@/types";
 import CopyButton from "@/components/ui/CopyButton";
 import EditButton from "@/components/ui/EditButton";
 import { useToast } from "@/components/ToastProvider";
@@ -107,6 +107,7 @@ interface Props {
   companyId: string;
   theme: Theme;
   tone: ToneStyle;
+  language: LanguageOption;
   images: Record<string, string>;
   imageLoading: Set<string>;
   onGenerateImage: (key: string, prompt: string, aspectRatio?: string) => void;
@@ -131,6 +132,7 @@ export default function ContentResults({
   companyId,
   theme,
   tone,
+  language,
   images,
   imageLoading,
   onGenerateImage,
@@ -289,7 +291,7 @@ export default function ContentResults({
       const res = await fetch("/api/regenerate-item", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ companyId, theme, contentType, currentItem, tone }),
+        body: JSON.stringify({ companyId, theme, contentType, currentItem, tone, language }),
       });
 
       if (!res.ok) {

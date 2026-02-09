@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Company, Theme, ContentCounts, GeneratedContent, SavedContentItem, ToneStyle, CustomToneStyle, defaultCounts, toneOptions } from "@/types";
+import { Company, Theme, ContentCounts, GeneratedContent, SavedContentItem, ToneStyle, CustomToneStyle, LanguageOption, defaultCounts, toneOptions, languageOptions } from "@/types";
 import Link from "next/link";
 import CompanySelector from "@/components/CompanySelector";
 import MemoryManager from "@/components/MemoryManager";
@@ -22,6 +22,7 @@ export default function Home() {
   const [selectedTheme, setSelectedTheme] = useState<Theme | null>(null);
   const [counts, setCounts] = useState<ContentCounts>(defaultCounts);
   const [selectedTone, setSelectedTone] = useState<ToneStyle>(toneOptions[0]);
+  const [selectedLanguage, setSelectedLanguage] = useState<LanguageOption>(languageOptions[0]);
   const [content, setContent] = useState<GeneratedContent | null>(null);
   const [contentLoading, setContentLoading] = useState(false);
   const [images, setImages] = useState<Record<string, string>>({});
@@ -235,7 +236,7 @@ export default function Home() {
       const res = await fetch("/api/generate-content", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ companyId: selectedCompany.id, theme: selectedTheme, counts, tone: selectedTone }),
+        body: JSON.stringify({ companyId: selectedCompany.id, theme: selectedTheme, counts, tone: selectedTone, language: selectedLanguage }),
       });
 
       if (!res.ok) {
@@ -673,6 +674,8 @@ export default function Home() {
               onCountsChange={setCounts}
               selectedTone={selectedTone}
               onToneChange={setSelectedTone}
+              selectedLanguage={selectedLanguage}
+              onLanguageChange={setSelectedLanguage}
               onGenerate={handleGenerateContent}
               loading={contentLoading}
               customTones={customTones}
@@ -746,6 +749,7 @@ export default function Home() {
                   companyId={selectedCompany.id}
                   theme={selectedTheme!}
                   tone={selectedTone}
+                  language={selectedLanguage}
                   images={images}
                   imageLoading={imageLoading}
                   onGenerateImage={generateImage}

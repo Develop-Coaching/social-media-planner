@@ -18,12 +18,13 @@ export async function POST(request: NextRequest) {
   try {
     const { userId } = await requireAuth();
     const body = await request.json();
-    const { companyId, theme, contentType, currentItem, tone } = body as {
+    const { companyId, theme, contentType, currentItem, tone, language } = body as {
       companyId: string;
       theme: { title: string; description: string };
       contentType: ContentType;
       currentItem: unknown;
       tone?: { id: string; label: string; prompt: string };
+      language?: { id: string; prompt: string };
     };
 
     if (!companyId || !theme || !contentType) {
@@ -37,8 +38,9 @@ export async function POST(request: NextRequest) {
     const context = await getContextForAI(userId, companyId);
 
     const toneInstruction = tone?.prompt ? `\n\nTONE & STYLE: ${tone.prompt}` : "";
+    const languageInstruction = language?.prompt ? `\n\nLANGUAGE: ${language.prompt}` : "";
 
-    const prompt = `You are a social media content writer. Generate a SINGLE piece of content that is DIRECTLY tied to the weekly theme below.${toneInstruction}
+    const prompt = `You are a social media content writer. Generate a SINGLE piece of content that is DIRECTLY tied to the weekly theme below.${toneInstruction}${languageInstruction}
 
 WEEKLY THEME: ${theme.title}
 Theme Description: ${theme.description}

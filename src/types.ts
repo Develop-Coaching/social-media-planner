@@ -47,6 +47,17 @@ export const toneOptions: ToneStyle[] = [
   { id: "humorous", label: "Humorous", description: "Witty & lighthearted", prompt: "Write in a humorous, witty tone. Use clever wordplay, light sarcasm, and relatable humor while still delivering value." },
 ];
 
+export type LanguageOption = {
+  id: string;
+  label: string;
+  prompt: string;
+};
+
+export const languageOptions: LanguageOption[] = [
+  { id: "en-us", label: "American English", prompt: "Write in American English. Use American spelling (e.g. color, organize, center), vocabulary, and idioms." },
+  { id: "en-gb", label: "British English", prompt: "Write in British English. Use British spelling (e.g. colour, organise, centre), vocabulary, and idioms." },
+];
+
 export const defaultCounts: ContentCounts = {
   posts: 2,
   reels: 1,
