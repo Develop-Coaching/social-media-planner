@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
+import { requireAuth, AuthError } from "@/lib/auth-helpers";
 
 const IMAGE_MODEL = "gemini-2.5-flash-image";
 
@@ -10,6 +11,15 @@ export async function POST(request: NextRequest) {
       { error: "GOOGLE_GENERATIVE_AI_API_KEY is not set" },
       { status: 500 }
     );
+  }
+
+  try {
+    await requireAuth();
+  } catch (e) {
+    if (e instanceof AuthError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
+    return NextResponse.json({ error: "Auth failed" }, { status: 500 });
   }
 
   const ai = new GoogleGenAI({ apiKey });

@@ -3,8 +3,12 @@ import path from "path";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 
-function getSavedContentFile(companyId: string): string {
-  return path.join(DATA_DIR, `saved-content-${companyId}.json`);
+function getUserDir(userId: string): string {
+  return path.join(DATA_DIR, userId);
+}
+
+function getSavedContentFile(userId: string, companyId: string): string {
+  return path.join(getUserDir(userId), `saved-content-${companyId}.json`);
 }
 
 export interface SavedContentItem {
@@ -26,18 +30,18 @@ export interface SavedContentData {
   items: SavedContentItem[];
 }
 
-async function ensureDataDir() {
+async function ensureUserDir(userId: string) {
   try {
-    await fs.mkdir(DATA_DIR, { recursive: true });
+    await fs.mkdir(getUserDir(userId), { recursive: true });
   } catch {
     // ignore
   }
 }
 
-export async function getSavedContent(companyId: string): Promise<SavedContentItem[]> {
+export async function getSavedContent(userId: string, companyId: string): Promise<SavedContentItem[]> {
   try {
-    await ensureDataDir();
-    const raw = await fs.readFile(getSavedContentFile(companyId), "utf-8");
+    await ensureUserDir(userId);
+    const raw = await fs.readFile(getSavedContentFile(userId, companyId), "utf-8");
     const data = JSON.parse(raw) as SavedContentData;
     return data.items;
   } catch {
@@ -45,22 +49,23 @@ export async function getSavedContent(companyId: string): Promise<SavedContentIt
   }
 }
 
-async function saveSavedContent(companyId: string, items: SavedContentItem[]): Promise<void> {
-  await ensureDataDir();
+async function saveSavedContent(userId: string, companyId: string, items: SavedContentItem[]): Promise<void> {
+  await ensureUserDir(userId);
   await fs.writeFile(
-    getSavedContentFile(companyId),
+    getSavedContentFile(userId, companyId),
     JSON.stringify({ items }, null, 2),
     "utf-8"
   );
 }
 
 export async function addSavedContent(
+  userId: string,
   companyId: string,
   name: string,
   theme: SavedContentItem["theme"],
   content: SavedContentItem["content"]
 ): Promise<SavedContentItem> {
-  const items = await getSavedContent(companyId);
+  const items = await getSavedContent(userId, companyId);
   const item: SavedContentItem = {
     id: crypto.randomUUID(),
     name,
@@ -68,29 +73,30 @@ export async function addSavedContent(
     content,
     savedAt: new Date().toISOString(),
   };
-  items.unshift(item); // Add to beginning
-  await saveSavedContent(companyId, items);
+  items.unshift(item);
+  await saveSavedContent(userId, companyId, items);
   return item;
 }
 
-export async function deleteSavedContent(companyId: string, id: string): Promise<boolean> {
-  const items = await getSavedContent(companyId);
+export async function deleteSavedContent(userId: string, companyId: string, id: string): Promise<boolean> {
+  const items = await getSavedContent(userId, companyId);
   const index = items.findIndex((item) => item.id === id);
   if (index === -1) return false;
   items.splice(index, 1);
-  await saveSavedContent(companyId, items);
+  await saveSavedContent(userId, companyId, items);
   return true;
 }
 
 export async function updateSavedContent(
+  userId: string,
   companyId: string,
   id: string,
   content: SavedContentItem["content"]
 ): Promise<boolean> {
-  const items = await getSavedContent(companyId);
+  const items = await getSavedContent(userId, companyId);
   const index = items.findIndex((item) => item.id === id);
   if (index === -1) return false;
   items[index].content = content;
-  await saveSavedContent(companyId, items);
+  await saveSavedContent(userId, companyId, items);
   return true;
 }

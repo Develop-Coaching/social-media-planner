@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { getContextForAI } from "@/lib/memory";
+import { requireAuth, AuthError } from "@/lib/auth-helpers";
 
 type ContentType = "post" | "reel" | "linkedinArticle" | "carousel" | "quoteForX" | "youtube";
 
@@ -19,6 +20,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const { userId } = await requireAuth();
     const body = await request.json();
     const { companyId, theme, contentType, currentItem, tone } = body as {
       companyId: string;
@@ -36,7 +38,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid contentType" }, { status: 400 });
     }
 
-    const context = await getContextForAI(companyId);
+    const context = await getContextForAI(userId, companyId);
 
     const toneInstruction = tone?.prompt ? `\n\nTONE & STYLE: ${tone.prompt}` : "";
 
@@ -86,6 +88,9 @@ Output ONLY valid JSON, no markdown or extra text.`;
       },
     });
   } catch (e) {
+    if (e instanceof AuthError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
     console.error(e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Failed to regenerate content" },

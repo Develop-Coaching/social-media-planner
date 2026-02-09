@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { getContextForAI } from "@/lib/memory";
+import { requireAuth, AuthError } from "@/lib/auth-helpers";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -15,6 +16,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const { userId } = await requireAuth();
     const body = await request.json();
     const { companyId } = body as { companyId?: string };
 
@@ -25,7 +27,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const context = await getContextForAI(companyId);
+    const context = await getContextForAI(userId, companyId);
 
     const message = await anthropic.messages.create({
       model: "claude-sonnet-4-20250514",
@@ -70,6 +72,9 @@ Output ONLY the JSON array, no other text. Example format:
 
     return NextResponse.json({ themes });
   } catch (e) {
+    if (e instanceof AuthError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
     console.error(e);
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Failed to generate themes" },

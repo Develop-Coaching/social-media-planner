@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCustomTones, addCustomTone, deleteCustomTone } from "@/lib/custom-tones";
+import { requireAuth, AuthError } from "@/lib/auth-helpers";
 
 export async function GET(request: NextRequest) {
   try {
+    const { userId } = await requireAuth();
     const { searchParams } = new URL(request.url);
     const companyId = searchParams.get("companyId");
 
@@ -13,9 +15,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const tones = await getCustomTones(companyId);
+    const tones = await getCustomTones(userId, companyId);
     return NextResponse.json({ tones });
   } catch (e) {
+    if (e instanceof AuthError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
     console.error(e);
     return NextResponse.json(
       { error: "Failed to load custom tones" },
@@ -26,6 +31,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const { userId } = await requireAuth();
     const body = await request.json();
     const { companyId, label, prompt } = body as {
       companyId?: string;
@@ -47,9 +53,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const tone = await addCustomTone(companyId, label, prompt);
+    const tone = await addCustomTone(userId, companyId, label, prompt);
     return NextResponse.json(tone);
   } catch (e) {
+    if (e instanceof AuthError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
     console.error(e);
     return NextResponse.json(
       { error: "Failed to create custom tone" },
@@ -60,6 +69,7 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const { userId } = await requireAuth();
     const { searchParams } = new URL(request.url);
     const companyId = searchParams.get("companyId");
     const id = searchParams.get("id");
@@ -71,7 +81,7 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const deleted = await deleteCustomTone(companyId, id);
+    const deleted = await deleteCustomTone(userId, companyId, id);
 
     if (!deleted) {
       return NextResponse.json(
@@ -82,6 +92,9 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (e) {
+    if (e instanceof AuthError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
     console.error(e);
     return NextResponse.json(
       { error: "Failed to delete custom tone" },

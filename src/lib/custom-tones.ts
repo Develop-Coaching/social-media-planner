@@ -4,22 +4,26 @@ import { CustomToneStyle } from "@/types";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 
-function getCustomTonesFile(companyId: string): string {
-  return path.join(DATA_DIR, `custom-tones-${companyId}.json`);
+function getUserDir(userId: string): string {
+  return path.join(DATA_DIR, userId);
 }
 
-async function ensureDataDir() {
+function getCustomTonesFile(userId: string, companyId: string): string {
+  return path.join(getUserDir(userId), `custom-tones-${companyId}.json`);
+}
+
+async function ensureUserDir(userId: string) {
   try {
-    await fs.mkdir(DATA_DIR, { recursive: true });
+    await fs.mkdir(getUserDir(userId), { recursive: true });
   } catch {
     // ignore
   }
 }
 
-export async function getCustomTones(companyId: string): Promise<CustomToneStyle[]> {
+export async function getCustomTones(userId: string, companyId: string): Promise<CustomToneStyle[]> {
   try {
-    await ensureDataDir();
-    const raw = await fs.readFile(getCustomTonesFile(companyId), "utf-8");
+    await ensureUserDir(userId);
+    const raw = await fs.readFile(getCustomTonesFile(userId, companyId), "utf-8");
     const data = JSON.parse(raw) as { tones: CustomToneStyle[] };
     return data.tones;
   } catch {
@@ -27,21 +31,22 @@ export async function getCustomTones(companyId: string): Promise<CustomToneStyle
   }
 }
 
-async function saveCustomTones(companyId: string, tones: CustomToneStyle[]): Promise<void> {
-  await ensureDataDir();
+async function saveCustomTones(userId: string, companyId: string, tones: CustomToneStyle[]): Promise<void> {
+  await ensureUserDir(userId);
   await fs.writeFile(
-    getCustomTonesFile(companyId),
+    getCustomTonesFile(userId, companyId),
     JSON.stringify({ tones }, null, 2),
     "utf-8"
   );
 }
 
 export async function addCustomTone(
+  userId: string,
   companyId: string,
   label: string,
   prompt: string
 ): Promise<CustomToneStyle> {
-  const tones = await getCustomTones(companyId);
+  const tones = await getCustomTones(userId, companyId);
   const tone: CustomToneStyle = {
     id: crypto.randomUUID(),
     label,
@@ -51,15 +56,15 @@ export async function addCustomTone(
     createdAt: new Date().toISOString(),
   };
   tones.unshift(tone);
-  await saveCustomTones(companyId, tones);
+  await saveCustomTones(userId, companyId, tones);
   return tone;
 }
 
-export async function deleteCustomTone(companyId: string, id: string): Promise<boolean> {
-  const tones = await getCustomTones(companyId);
+export async function deleteCustomTone(userId: string, companyId: string, id: string): Promise<boolean> {
+  const tones = await getCustomTones(userId, companyId);
   const index = tones.findIndex((t) => t.id === id);
   if (index === -1) return false;
   tones.splice(index, 1);
-  await saveCustomTones(companyId, tones);
+  await saveCustomTones(userId, companyId, tones);
   return true;
 }

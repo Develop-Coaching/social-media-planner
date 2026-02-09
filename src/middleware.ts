@@ -10,16 +10,17 @@ function getSecret() {
 }
 
 export async function middleware(request: NextRequest) {
-  // If AUTH_PASSWORD is not set, auth is disabled — allow everything
-  if (!process.env.AUTH_PASSWORD) {
+  // If ADMIN_PASSWORD is not set, auth is disabled — allow everything
+  if (!process.env.ADMIN_PASSWORD) {
     return NextResponse.next();
   }
 
   const { pathname } = request.nextUrl;
 
-  // Allow login page and auth API routes
+  // Allow login page, setup page, and auth API routes (login, logout, setup, status)
   if (
     pathname === "/login" ||
+    pathname === "/setup" ||
     pathname.startsWith("/api/auth/")
   ) {
     return NextResponse.next();

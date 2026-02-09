@@ -6,9 +6,11 @@ import {
   updateSavedContent,
   SavedContentItem,
 } from "@/lib/saved-content";
+import { requireAuth, AuthError } from "@/lib/auth-helpers";
 
 export async function GET(request: NextRequest) {
   try {
+    const { userId } = await requireAuth();
     const { searchParams } = new URL(request.url);
     const companyId = searchParams.get("companyId");
 
@@ -19,9 +21,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const items = await getSavedContent(companyId);
+    const items = await getSavedContent(userId, companyId);
     return NextResponse.json({ items });
   } catch (e) {
+    if (e instanceof AuthError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
     console.error(e);
     return NextResponse.json(
       { error: "Failed to load saved content" },
@@ -32,6 +37,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const { userId } = await requireAuth();
     const body = await request.json();
     const { companyId, name, theme, content } = body as {
       companyId?: string;
@@ -54,9 +60,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const item = await addSavedContent(companyId, name, theme, content);
+    const item = await addSavedContent(userId, companyId, name, theme, content);
     return NextResponse.json(item);
   } catch (e) {
+    if (e instanceof AuthError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
     console.error(e);
     return NextResponse.json(
       { error: "Failed to save content" },
@@ -67,6 +76,7 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
+    const { userId } = await requireAuth();
     const body = await request.json();
     const { companyId, id, content } = body as {
       companyId?: string;
@@ -81,7 +91,7 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    const updated = await updateSavedContent(companyId, id, content);
+    const updated = await updateSavedContent(userId, companyId, id, content);
 
     if (!updated) {
       return NextResponse.json(
@@ -92,6 +102,9 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (e) {
+    if (e instanceof AuthError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
     console.error(e);
     return NextResponse.json(
       { error: "Failed to update saved content" },
@@ -102,6 +115,7 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const { userId } = await requireAuth();
     const { searchParams } = new URL(request.url);
     const companyId = searchParams.get("companyId");
     const id = searchParams.get("id");
@@ -113,7 +127,7 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const deleted = await deleteSavedContent(companyId, id);
+    const deleted = await deleteSavedContent(userId, companyId, id);
 
     if (!deleted) {
       return NextResponse.json(
@@ -124,6 +138,9 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (e) {
+    if (e instanceof AuthError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
     console.error(e);
     return NextResponse.json(
       { error: "Failed to delete saved content" },

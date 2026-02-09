@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getMemory, addToMemory, removeFromMemory } from "@/lib/memory";
+import { requireAuth, AuthError } from "@/lib/auth-helpers";
 import Anthropic from "@anthropic-ai/sdk";
 import mammoth from "mammoth";
 
@@ -11,7 +12,6 @@ const MAX_SIZES = {
   word: 10 * 1024 * 1024,  // 10 MB
 };
 
-// Initialize Anthropic client
 function getAnthropicClient() {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -20,7 +20,6 @@ function getAnthropicClient() {
   return new Anthropic({ apiKey });
 }
 
-// Extract text from PDF using Claude's document understanding
 async function extractTextFromPDF(base64Data: string): Promise<string> {
   const buffer = Buffer.from(base64Data, "base64");
 
@@ -75,7 +74,6 @@ Output only the extracted content, no commentary or summaries.`,
   return text.trim();
 }
 
-// Extract text from Word document using mammoth
 async function extractTextFromWord(base64Data: string): Promise<string> {
   const buffer = Buffer.from(base64Data, "base64");
 
@@ -98,7 +96,6 @@ async function extractTextFromWord(base64Data: string): Promise<string> {
   }
 }
 
-// Extract text from image using Claude Vision API
 async function extractTextFromImage(
   base64Data: string,
   mimeType: string
@@ -164,6 +161,7 @@ Output only the extracted/described content, no additional commentary.`,
 
 export async function GET(request: NextRequest) {
   try {
+    const { userId } = await requireAuth();
     const { searchParams } = new URL(request.url);
     const companyId = searchParams.get("companyId");
 
@@ -174,9 +172,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const memory = await getMemory(companyId);
+    const memory = await getMemory(userId, companyId);
     return NextResponse.json(memory);
   } catch (e) {
+    if (e instanceof AuthError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
     console.error(e);
     return NextResponse.json(
       { error: "Failed to load memory" },
@@ -187,6 +188,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const { userId } = await requireAuth();
     const body = await request.json();
     const { companyId } = body as { companyId?: string };
 
@@ -197,7 +199,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if this is a file upload (PDF/image/word) or direct text
     if (body.fileData && body.fileType) {
       const { name, fileData, fileType, mimeType } = body as {
         name: string;
@@ -258,11 +259,10 @@ export async function POST(request: NextRequest) {
       }
 
       const contentWithMetadata = `[Extracted from ${sourceType}]\n\n${extractedText}`;
-      const file = await addToMemory(companyId, name, contentWithMetadata);
+      const file = await addToMemory(userId, companyId, name, contentWithMetadata);
       return NextResponse.json(file);
 
     } else {
-      // Original text path
       const { name, content } = body as { name?: string; content?: string };
 
       if (!name || typeof content !== "string") {
@@ -272,10 +272,13 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const file = await addToMemory(companyId, name, content);
+      const file = await addToMemory(userId, companyId, name, content);
       return NextResponse.json(file);
     }
   } catch (e) {
+    if (e instanceof AuthError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
     console.error(e);
     return NextResponse.json(
       { error: "Failed to save to memory" },
@@ -286,6 +289,7 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const { userId } = await requireAuth();
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
     const companyId = searchParams.get("companyId");
@@ -304,7 +308,7 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const removed = await removeFromMemory(companyId, id);
+    const removed = await removeFromMemory(userId, companyId, id);
 
     if (!removed) {
       return NextResponse.json(
@@ -315,6 +319,9 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (e) {
+    if (e instanceof AuthError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
     console.error(e);
     return NextResponse.json(
       { error: "Failed to delete from memory" },

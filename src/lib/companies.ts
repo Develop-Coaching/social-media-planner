@@ -2,7 +2,14 @@ import { promises as fs } from "fs";
 import path from "path";
 
 const DATA_DIR = path.join(process.cwd(), "data");
-const COMPANIES_FILE = path.join(DATA_DIR, "companies.json");
+
+function getUserDir(userId: string): string {
+  return path.join(DATA_DIR, userId);
+}
+
+function getCompaniesFile(userId: string): string {
+  return path.join(getUserDir(userId), "companies.json");
+}
 
 export interface Company {
   id: string;
@@ -13,38 +20,29 @@ export interface CompaniesData {
   companies: Company[];
 }
 
-const defaultCompanies: CompaniesData = {
-  companies: [
-    { id: "peak-span", name: "Peak Span" },
-    { id: "develop", name: "Develop" },
-  ],
-};
-
-async function ensureDataDir() {
+async function ensureUserDir(userId: string) {
   try {
-    await fs.mkdir(DATA_DIR, { recursive: true });
+    await fs.mkdir(getUserDir(userId), { recursive: true });
   } catch {
     // ignore
   }
 }
 
-export async function getCompanies(): Promise<Company[]> {
+export async function getCompanies(userId: string): Promise<Company[]> {
   try {
-    await ensureDataDir();
-    const raw = await fs.readFile(COMPANIES_FILE, "utf-8");
+    await ensureUserDir(userId);
+    const raw = await fs.readFile(getCompaniesFile(userId), "utf-8");
     const data = JSON.parse(raw) as CompaniesData;
     return data.companies;
   } catch {
-    // File doesn't exist, create with defaults
-    await saveCompanies(defaultCompanies.companies);
-    return defaultCompanies.companies;
+    return [];
   }
 }
 
-async function saveCompanies(companies: Company[]): Promise<void> {
-  await ensureDataDir();
+async function saveCompanies(userId: string, companies: Company[]): Promise<void> {
+  await ensureUserDir(userId);
   await fs.writeFile(
-    COMPANIES_FILE,
+    getCompaniesFile(userId),
     JSON.stringify({ companies }, null, 2),
     "utf-8"
   );
@@ -58,26 +56,25 @@ function generateId(name: string): string {
     || `company-${Date.now()}`;
 }
 
-export async function addCompany(name: string): Promise<Company> {
-  const companies = await getCompanies();
+export async function addCompany(userId: string, name: string): Promise<Company> {
+  const companies = await getCompanies(userId);
   const id = generateId(name);
 
-  // Check for duplicate ID
   if (companies.some((c) => c.id === id)) {
     throw new Error(`Company with ID "${id}" already exists`);
   }
 
   const company: Company = { id, name };
   companies.push(company);
-  await saveCompanies(companies);
+  await saveCompanies(userId, companies);
   return company;
 }
 
-export async function deleteCompany(id: string): Promise<boolean> {
-  const companies = await getCompanies();
+export async function deleteCompany(userId: string, id: string): Promise<boolean> {
+  const companies = await getCompanies(userId);
   const index = companies.findIndex((c) => c.id === id);
   if (index === -1) return false;
   companies.splice(index, 1);
-  await saveCompanies(companies);
+  await saveCompanies(userId, companies);
   return true;
 }

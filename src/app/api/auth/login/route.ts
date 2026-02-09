@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createToken, COOKIE_NAME, isAuthEnabled } from "@/lib/auth";
+import { verifyPassword } from "@/lib/users";
 
 export async function POST(request: NextRequest) {
   if (!isAuthEnabled()) {
@@ -7,13 +8,21 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { password } = (await request.json()) as { password?: string };
+    const { username, password } = (await request.json()) as {
+      username?: string;
+      password?: string;
+    };
 
-    if (!password || password !== process.env.AUTH_PASSWORD) {
-      return NextResponse.json({ error: "Invalid password" }, { status: 401 });
+    if (!username || !password) {
+      return NextResponse.json({ error: "Username and password required" }, { status: 400 });
     }
 
-    const token = await createToken();
+    const user = await verifyPassword(username, password);
+    if (!user) {
+      return NextResponse.json({ error: "Invalid username or password" }, { status: 401 });
+    }
+
+    const token = await createToken(user.id, user.role);
     const response = NextResponse.json({ success: true });
 
     response.cookies.set(COOKIE_NAME, token, {
@@ -21,7 +30,7 @@ export async function POST(request: NextRequest) {
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
       path: "/",
-      maxAge: 7 * 24 * 60 * 60, // 7 days
+      maxAge: 7 * 24 * 60 * 60,
     });
 
     return response;

@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAuth, AuthError } from "@/lib/auth-helpers";
 
 export async function POST(request: NextRequest) {
   try {
+    await requireAuth();
+
     const body = await request.json();
     const { url } = body as { url?: string };
 
@@ -12,7 +15,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Extract doc ID from various Google Docs URL formats
     const match = url.match(/\/document\/d\/([a-zA-Z0-9_-]+)/);
     if (!match) {
       return NextResponse.json(
@@ -42,6 +44,9 @@ export async function POST(request: NextRequest) {
     const text = await res.text();
     return NextResponse.json({ text });
   } catch (e) {
+    if (e instanceof AuthError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
     console.error(e);
     return NextResponse.json(
       { error: "Failed to fetch Google Doc" },

@@ -3,8 +3,12 @@ import path from "path";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 
-function getMemoryFile(companyId: string): string {
-  return path.join(DATA_DIR, `memory-${companyId}.json`);
+function getUserDir(userId: string): string {
+  return path.join(DATA_DIR, userId);
+}
+
+function getMemoryFile(userId: string, companyId: string): string {
+  return path.join(getUserDir(userId), `memory-${companyId}.json`);
 }
 
 export interface MemoryFile {
@@ -20,31 +24,31 @@ export interface Memory {
 
 const defaultMemory: Memory = { files: [] };
 
-async function ensureDataDir() {
+async function ensureUserDir(userId: string) {
   try {
-    await fs.mkdir(DATA_DIR, { recursive: true });
+    await fs.mkdir(getUserDir(userId), { recursive: true });
   } catch {
     // ignore
   }
 }
 
-export async function getMemory(companyId: string): Promise<Memory> {
+export async function getMemory(userId: string, companyId: string): Promise<Memory> {
   try {
-    await ensureDataDir();
-    const raw = await fs.readFile(getMemoryFile(companyId), "utf-8");
+    await ensureUserDir(userId);
+    const raw = await fs.readFile(getMemoryFile(userId, companyId), "utf-8");
     return JSON.parse(raw) as Memory;
   } catch {
     return { ...defaultMemory };
   }
 }
 
-export async function saveMemory(companyId: string, memory: Memory): Promise<void> {
-  await ensureDataDir();
-  await fs.writeFile(getMemoryFile(companyId), JSON.stringify(memory, null, 2), "utf-8");
+export async function saveMemory(userId: string, companyId: string, memory: Memory): Promise<void> {
+  await ensureUserDir(userId);
+  await fs.writeFile(getMemoryFile(userId, companyId), JSON.stringify(memory, null, 2), "utf-8");
 }
 
-export async function addToMemory(companyId: string, name: string, content: string): Promise<MemoryFile> {
-  const mem = await getMemory(companyId);
+export async function addToMemory(userId: string, companyId: string, name: string, content: string): Promise<MemoryFile> {
+  const mem = await getMemory(userId, companyId);
   const file: MemoryFile = {
     id: crypto.randomUUID(),
     name,
@@ -52,21 +56,21 @@ export async function addToMemory(companyId: string, name: string, content: stri
     addedAt: new Date().toISOString(),
   };
   mem.files.push(file);
-  await saveMemory(companyId, mem);
+  await saveMemory(userId, companyId, mem);
   return file;
 }
 
-export async function removeFromMemory(companyId: string, id: string): Promise<boolean> {
-  const mem = await getMemory(companyId);
+export async function removeFromMemory(userId: string, companyId: string, id: string): Promise<boolean> {
+  const mem = await getMemory(userId, companyId);
   const index = mem.files.findIndex((f) => f.id === id);
   if (index === -1) return false;
   mem.files.splice(index, 1);
-  await saveMemory(companyId, mem);
+  await saveMemory(userId, companyId, mem);
   return true;
 }
 
-export async function getContextForAI(companyId: string): Promise<string> {
-  const mem = await getMemory(companyId);
+export async function getContextForAI(userId: string, companyId: string): Promise<string> {
+  const mem = await getMemory(userId, companyId);
   if (mem.files.length === 0) {
     return "No files have been added to memory yet. The user has not provided any context.";
   }
