@@ -51,11 +51,7 @@ function buildSlackText(payload: SlackPayload): string {
       const timeStr = item.time ? `${item.time} \u2014 ` : "";
       lines.push(`\u2022 ${timeStr}*${item.type}:* ${item.title}`);
       if (item.preview) {
-        const truncated =
-          item.preview.length > 150
-            ? item.preview.slice(0, 150) + "\u2026"
-            : item.preview;
-        lines.push(`   _${truncated}_`);
+        lines.push(`${item.preview}`);
       }
     }
   }

@@ -782,12 +782,12 @@ export default function ContentResults({
     setSlackSending(true);
     try {
       const items: { type: string; title: string; preview: string; imageKey?: string }[] = [];
-      content.posts.forEach((p, i) => items.push({ type: "Post", title: p.title, preview: p.caption.slice(0, 150), imageKey: `post-${i}` }));
-      content.reels.forEach((r, i) => items.push({ type: "Reel", title: `Reel ${i + 1}`, preview: (r.caption || r.script).slice(0, 150) }));
-      content.linkedinArticles.forEach((a, i) => items.push({ type: "Article", title: a.title, preview: (a.caption || a.body).slice(0, 150), imageKey: `article-${i}` }));
-      content.carousels.forEach((c, i) => items.push({ type: "Carousel", title: c.slides[0]?.title || `Carousel ${i + 1}`, preview: c.slides.map(s => s.title).join(" / "), imageKey: `carousel-${i}` }));
+      content.posts.forEach((p, i) => items.push({ type: "Post", title: p.title, preview: p.caption, imageKey: `post-${i}` }));
+      content.reels.forEach((r, i) => items.push({ type: "Reel", title: `Reel ${i + 1}`, preview: r.caption ? `${r.caption}\n\n${r.script}` : r.script }));
+      content.linkedinArticles.forEach((a, i) => items.push({ type: "Article", title: a.title, preview: a.caption ? `${a.caption}\n\n${a.body}` : a.body, imageKey: `article-${i}` }));
+      content.carousels.forEach((c, i) => items.push({ type: "Carousel", title: c.slides[0]?.title || `Carousel ${i + 1}`, preview: (c.caption ? `${c.caption}\n\n` : "") + c.slides.map((s, j) => `Slide ${j + 1}: ${s.title}\n${s.body}`).join("\n\n"), imageKey: `carousel-${i}` }));
       content.quotesForX.forEach((q, i) => items.push({ type: "Quote (X)", title: q.quote.slice(0, 40), preview: q.quote, imageKey: `quote-${i}` }));
-      content.youtube.forEach((y, i) => items.push({ type: "YouTube", title: y.title, preview: y.script.slice(0, 150), imageKey: `youtube-${i}` }));
+      content.youtube.forEach((y, i) => items.push({ type: "YouTube", title: y.title, preview: y.script, imageKey: `youtube-${i}` }));
 
       const days = [{ dayName: "All Content", date: "", items: items.map(item => ({ time: "", ...item })) }];
 
