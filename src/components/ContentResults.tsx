@@ -8,6 +8,7 @@ import CopyButton from "@/components/ui/CopyButton";
 import EditButton from "@/components/ui/EditButton";
 import { useToast } from "@/components/ToastProvider";
 import { ElapsedTimer } from "@/components/Skeleton";
+import DriveImportModal from "@/components/DriveImportModal";
 
 type ContentType = "post" | "reel" | "linkedinArticle" | "carousel" | "quoteForX" | "youtube";
 
@@ -101,10 +102,26 @@ function UndoRedoButtons({
   );
 }
 
+function RemoveButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      title="Remove this item"
+      className="inline-flex items-center gap-1 text-sm text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400 font-medium transition-colors"
+    >
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+      </svg>
+      Remove
+    </button>
+  );
+}
+
 interface Props {
   content: GeneratedContent;
   onChange: (content: GeneratedContent) => void;
   companyId: string;
+  companyName: string;
   theme: Theme;
   tone: ToneStyle;
   language: LanguageOption;
@@ -124,12 +141,16 @@ interface Props {
   brandColors?: string[];
   onDeleteImage: (key: string) => void;
   onGenerateCarouselImages: (carouselIndex: number) => void;
+  onRemoveItem: (section: "posts" | "reels" | "linkedinArticles" | "carousels" | "quotesForX" | "youtube", index: number) => void;
+  driveConfigured?: boolean;
+  onDriveImport?: (importedImages: Record<string, string>) => void;
 }
 
 export default function ContentResults({
   content,
   onChange,
   companyId,
+  companyName,
   theme,
   tone,
   language,
@@ -149,6 +170,9 @@ export default function ContentResults({
   brandColors,
   onDeleteImage,
   onGenerateCarouselImages,
+  onRemoveItem,
+  driveConfigured,
+  onDriveImport,
 }: Props) {
   const { toast } = useToast();
   const [editingKey, setEditingKey] = useState<string | null>(null);
@@ -192,6 +216,10 @@ export default function ContentResults({
 
   // Add item loading state
   const [addingItemType, setAddingItemType] = useState<ContentType | null>(null);
+
+  // Drive integration state
+  const [driveUploading, setDriveUploading] = useState(false);
+  const [showDriveImport, setShowDriveImport] = useState(false);
 
   // Feature 3: Freshly regenerated items indicator
   const [freshlyRegenerated, setFreshlyRegenerated] = useState<Set<string>>(new Set());
@@ -647,6 +675,40 @@ export default function ContentResults({
     link.click();
   }
 
+  async function handleDriveUpload() {
+    if (!driveConfigured || Object.keys(images).length === 0) return;
+    setDriveUploading(true);
+    try {
+      const imageEntries = Object.keys(images).map((key) => ({
+        key,
+        fileName: `${key}.png`,
+      }));
+      const res = await fetch("/api/drive/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId,
+          companyName,
+          folderName: theme.title,
+          images: imageEntries,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast(`Uploaded ${data.uploaded} image(s) to Google Drive`, "success");
+        if (data.folderLink) {
+          window.open(data.folderLink, "_blank");
+        }
+      } else {
+        toast(data.error || "Failed to upload to Drive", "error");
+      }
+    } catch {
+      toast("Failed to upload to Drive", "error");
+    } finally {
+      setDriveUploading(false);
+    }
+  }
+
   function renderImageWithRegenerate(key: string, prompt: string, filename: string, aspectRatio?: string) {
     const showingFeedback = imageRegenKey === key;
     return (
@@ -805,6 +867,21 @@ export default function ContentResults({
 
   return (
     <section className="rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-lg border border-slate-200 dark:border-slate-700">
+      {/* Drive import modal */}
+      {showDriveImport && onDriveImport && (
+        <DriveImportModal
+          companyName={companyName}
+          companyId={companyId}
+          content={content}
+          images={images}
+          onImport={(imported) => {
+            onDriveImport(imported);
+            setShowDriveImport(false);
+          }}
+          onClose={() => setShowDriveImport(false)}
+        />
+      )}
+
       {/* Fullscreen image overlay */}
       {fullscreenImage && (
         <div
@@ -868,6 +945,29 @@ export default function ContentResults({
             </svg>
             CSV
           </button>
+          {driveConfigured && Object.keys(images).length > 0 && (
+            <button
+              onClick={handleDriveUpload}
+              disabled={driveUploading}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border-2 border-green-500 dark:border-green-400 text-green-700 dark:text-green-300 font-medium hover:bg-green-50 dark:hover:bg-green-900/30 disabled:opacity-50 transition-colors text-sm"
+            >
+              <svg className={`w-4 h-4 ${driveUploading ? "animate-spin" : ""}`} viewBox="0 0 24 24" fill="currentColor">
+                <path d="M7.71 3.5L1.15 15l2.16 3.75h4.73L4.46 12.5l2.17-3.75L7.71 3.5zm4.5 0L5.62 15l2.17 3.75h4.32l2.17-3.75L7.71 3.5h4.5zm4.5 0L10.12 15l2.17 3.75h4.32l6.56-11.5L20.71 3.5h-4z" />
+              </svg>
+              {driveUploading ? "Uploading..." : "Save to Drive"}
+            </button>
+          )}
+          {driveConfigured && (
+            <button
+              onClick={() => setShowDriveImport(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border-2 border-sky-500 dark:border-sky-400 text-sky-700 dark:text-sky-300 font-medium hover:bg-sky-50 dark:hover:bg-sky-900/30 transition-colors text-sm"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+              </svg>
+              Import from Drive
+            </button>
+          )}
           {currentSavedId ? (
             <button
               onClick={onUpdate}
@@ -951,6 +1051,7 @@ export default function ContentResults({
                     <RegenerateButton loading={regeneratingKey === key} onClick={() => handleRegenerate(key, "post", p, (item) => { const newPosts = [...content.posts]; newPosts[i] = item; onChange({ ...content, posts: newPosts }); }, "posts")} />
                     <CopyButton text={p.caption} label="Copy caption" />
                     <EditButton isEditing={isEditing} onToggle={() => setEditingKey(isEditing ? null : key)} />
+                    {content.posts.length > 1 && <RemoveButton onClick={() => onRemoveItem("posts", i)} />}
                   </div>
                 </div>
                 {isEditing ? (
@@ -1006,6 +1107,7 @@ export default function ContentResults({
                     <RegenerateButton loading={regeneratingKey === key} onClick={() => handleRegenerate(key, "reel", r, (item) => { const newReels = [...content.reels]; newReels[i] = item; onChange({ ...content, reels: newReels }); }, "reels")} />
                     <CopyButton text={`${r.caption || ""}\n\n${r.script}`} label="Copy" />
                     <EditButton isEditing={isEditing} onToggle={() => setEditingKey(isEditing ? null : key)} />
+                    {content.reels.length > 1 && <RemoveButton onClick={() => onRemoveItem("reels", i)} />}
                   </div>
                 </div>
                 {isEditing ? (
@@ -1066,6 +1168,7 @@ export default function ContentResults({
                     <RegenerateButton loading={regeneratingKey === key} onClick={() => handleRegenerate(key, "linkedinArticle", a, (item) => { const newArticles = [...content.linkedinArticles]; newArticles[i] = item; onChange({ ...content, linkedinArticles: newArticles }); }, "linkedinArticles")} />
                     <CopyButton text={`${a.title}\n\n${a.caption ? `Caption: ${a.caption}\n\n` : ""}${a.body}`} label="Copy article" />
                     <EditButton isEditing={isEditing} onToggle={() => setEditingKey(isEditing ? null : key)} />
+                    {content.linkedinArticles.length > 1 && <RemoveButton onClick={() => onRemoveItem("linkedinArticles", i)} />}
                   </div>
                 </div>
                 {isEditing ? (
@@ -1131,6 +1234,7 @@ export default function ContentResults({
                     <RegenerateButton loading={regeneratingKey === key} onClick={() => handleRegenerate(key, "carousel", c, (item) => { const newCarousels = [...content.carousels]; newCarousels[i] = item; onChange({ ...content, carousels: newCarousels }); }, "carousels")} />
                     <CopyButton text={carouselText} label="Copy slides" />
                     <EditButton isEditing={isEditing} onToggle={() => setEditingKey(isEditing ? null : key)} />
+                    {content.carousels.length > 1 && <RemoveButton onClick={() => onRemoveItem("carousels", i)} />}
                   </div>
                 </div>
                 {isEditing ? (
@@ -1237,6 +1341,7 @@ export default function ContentResults({
                     <RegenerateButton loading={regeneratingKey === key} onClick={() => handleRegenerate(key, "quoteForX", q, (item) => { const newQuotes = [...content.quotesForX]; newQuotes[i] = item; onChange({ ...content, quotesForX: newQuotes }); }, "quotesForX")} />
                     <CopyButton text={q.quote} label="Copy quote" />
                     <EditButton isEditing={isEditing} onToggle={() => setEditingKey(isEditing ? null : key)} />
+                    {content.quotesForX.length > 1 && <RemoveButton onClick={() => onRemoveItem("quotesForX", i)} />}
                   </div>
                 </div>
                 {isEditing ? (
@@ -1288,6 +1393,7 @@ export default function ContentResults({
                     <RegenerateButton loading={regeneratingKey === key} onClick={() => handleRegenerate(key, "youtube", y, (item) => { const newYt = [...content.youtube]; newYt[i] = item; onChange({ ...content, youtube: newYt }); }, "youtube")} />
                     <CopyButton text={`${y.title}\n\n${y.script}`} label="Copy script" />
                     <EditButton isEditing={isEditing} onToggle={() => setEditingKey(isEditing ? null : key)} />
+                    {content.youtube.length > 1 && <RemoveButton onClick={() => onRemoveItem("youtube", i)} />}
                   </div>
                 </div>
                 {isEditing ? (

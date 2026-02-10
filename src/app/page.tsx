@@ -47,6 +47,9 @@ export default function Home() {
   // Brand settings state
   const [showBrandSettings, setShowBrandSettings] = useState(false);
 
+  // Google Drive integration
+  const [driveConfigured, setDriveConfigured] = useState(false);
+
   // Keyboard shortcuts help
   const [showShortcuts, setShowShortcuts] = useState(false);
 
@@ -57,6 +60,10 @@ export default function Home() {
     fetch("/api/auth/me")
       .then((res) => res.ok ? res.json() : null)
       .then((data) => { if (data) setCurrentUser(data); })
+      .catch(() => {});
+    fetch("/api/drive/status")
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => { if (data) setDriveConfigured(data.configured); })
       .catch(() => {});
   }, []);
 
@@ -82,6 +89,16 @@ export default function Home() {
     }
   }, [autosaveRestored, selectedCompany, selectedTheme, content]);
 
+  async function loadImages(companyId: string) {
+    try {
+      const res = await fetch(`/api/images?companyId=${companyId}`);
+      const data = await res.json();
+      if (res.ok && data.images) setImages(data.images);
+    } catch {
+      // ignore
+    }
+  }
+
   function handleSelectCompany(company: Company) {
     setSelectedCompany(company);
     setSelectedTheme(null);
@@ -90,6 +107,7 @@ export default function Home() {
     setCurrentSavedId(null);
     loadSavedContent(company.id);
     loadCustomTones(company.id);
+    loadImages(company.id);
 
     // Autosave: restore if available
     try {
@@ -232,6 +250,12 @@ export default function Home() {
     setImages({});
     setCurrentSavedId(null);
     setStreamingText("");
+    // Clear persisted images for fresh generation
+    fetch("/api/images", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ companyId: selectedCompany.id, images: {} }),
+    }).catch(() => {});
     try {
       const res = await fetch("/api/generate-content", {
         method: "POST",
@@ -293,6 +317,14 @@ export default function Home() {
       if (res.ok && data.imageBase64) {
         const dataUrl = `data:${data.mimeType || "image/png"};base64,${data.imageBase64}`;
         setImages((prev) => ({ ...prev, [key]: dataUrl }));
+        // Persist to server (fire-and-forget)
+        if (selectedCompany) {
+          fetch("/api/images", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ companyId: selectedCompany.id, key, dataUrl }),
+          }).catch(() => {});
+        }
         return data.imageBase64;
       }
       return null;
@@ -379,11 +411,101 @@ export default function Home() {
     });
   }
 
+  function handleRemoveItem(section: "posts" | "reels" | "linkedinArticles" | "carousels" | "quotesForX" | "youtube", index: number) {
+    if (!content || !selectedCompany) return;
+    const arr = content[section] as unknown[];
+    if (arr.length <= 1) return; // don't remove the last item
+
+    // Build new content with item removed
+    const newArr = arr.filter((_, i) => i !== index);
+    const newContent = { ...content, [section]: newArr };
+    setContent(newContent);
+
+    // Re-index images for this section
+    const prefixMap: Record<string, string> = {
+      posts: "post",
+      reels: "reel",
+      linkedinArticles: "article",
+      carousels: "carousel",
+      quotesForX: "quote",
+      youtube: "yt",
+    };
+    const prefix = prefixMap[section];
+
+    setImages((prev) => {
+      const next: Record<string, string> = {};
+
+      // Copy non-section images as-is
+      for (const [k, v] of Object.entries(prev)) {
+        if (section === "carousels") {
+          if (!k.startsWith("carousel-")) {
+            next[k] = v;
+          }
+        } else {
+          if (!k.startsWith(`${prefix}-`)) {
+            next[k] = v;
+          }
+        }
+      }
+
+      if (section === "carousels") {
+        // Re-index carousel images: carousel-{i}-slide-{j}
+        const carousels = newContent.carousels;
+        let oldIdx = 0;
+        for (let newIdx = 0; newIdx < carousels.length; newIdx++) {
+          if (oldIdx === index) oldIdx++; // skip removed carousel
+          const slides = carousels[newIdx].slides;
+          for (let j = 0; j < slides.length; j++) {
+            const oldKey = `carousel-${oldIdx}-slide-${j}`;
+            const newKey = `carousel-${newIdx}-slide-${j}`;
+            if (prev[oldKey]) next[newKey] = prev[oldKey];
+          }
+          oldIdx++;
+        }
+      } else {
+        // Re-index simple images: prefix-{i}
+        let oldIdx = 0;
+        for (let newIdx = 0; newIdx < newArr.length; newIdx++) {
+          if (oldIdx === index) oldIdx++; // skip removed item
+          const oldKey = `${prefix}-${oldIdx}`;
+          const newKey = `${prefix}-${newIdx}`;
+          if (prev[oldKey]) next[newKey] = prev[oldKey];
+          oldIdx++;
+        }
+      }
+
+      // Persist re-indexed images to server
+      fetch("/api/images", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId: selectedCompany.id, images: next }),
+      }).catch(() => {});
+
+      return next;
+    });
+  }
+
+  function handleDriveImport(importedImages: Record<string, string>) {
+    setImages((prev) => {
+      const next = { ...prev, ...importedImages };
+      // Persist merged images to server
+      if (selectedCompany) {
+        fetch("/api/images", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ companyId: selectedCompany.id, images: next }),
+        }).catch(() => {});
+      }
+      return next;
+    });
+    toast(`Imported ${Object.keys(importedImages).length} image(s) from Drive`, "success");
+  }
+
   function handleLoadSaved(item: SavedContentItem) {
     setSelectedTheme(item.theme);
     setContent(item.content);
     setCurrentSavedId(item.id);
-    setImages({});
+    // Keep current images - they're already loaded from the server for this company
   }
 
   async function handleDeleteSaved(id: string) {
@@ -736,7 +858,7 @@ export default function Home() {
               {viewMode === "calendar" ? (
                 <ErrorBoundary fallbackTitle="Failed to render calendar">
                   <section className="mb-8 rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-lg border border-slate-200 dark:border-slate-700">
-                    <ContentCalendar content={content} startDate={new Date()} />
+                    <ContentCalendar content={content} startDate={new Date()} companyName={selectedCompany.name} companyId={selectedCompany.id} themeName={selectedTheme?.title || ""} images={images} driveConfigured={driveConfigured} />
                   </section>
                 </ErrorBoundary>
               ) : (
@@ -744,6 +866,7 @@ export default function Home() {
                   content={content}
                   onChange={setContent}
                   companyId={selectedCompany.id}
+                  companyName={selectedCompany.name}
                   theme={selectedTheme!}
                   tone={selectedTone}
                   language={selectedLanguage}
@@ -761,8 +884,16 @@ export default function Home() {
                   onSaveContentNameChange={setSaveContentName}
                   onSaveContent={handleSaveContent}
                   brandColors={selectedCompany.brandColors}
-                  onDeleteImage={(key) => setImages((prev) => { const next = { ...prev }; delete next[key]; return next; })}
+                  onDeleteImage={(key) => {
+                    setImages((prev) => { const next = { ...prev }; delete next[key]; return next; });
+                    if (selectedCompany) {
+                      fetch(`/api/images?companyId=${selectedCompany.id}&key=${encodeURIComponent(key)}`, { method: "DELETE" }).catch(() => {});
+                    }
+                  }}
                   onGenerateCarouselImages={generateCarouselImages}
+                  onRemoveItem={handleRemoveItem}
+                  driveConfigured={driveConfigured}
+                  onDriveImport={handleDriveImport}
                 />
               )}
             </>

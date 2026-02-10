@@ -58,6 +58,16 @@ export const languageOptions: LanguageOption[] = [
   { id: "en-gb", label: "British English", prompt: "Write in British English. Use British spelling (e.g. colour, organise, centre), vocabulary, and idioms." },
 ];
 
+export interface DriveFileInfo {
+  id: string;
+  name: string;
+  mimeType: string;
+  thumbnailLink?: string;
+  webViewLink?: string;
+  modifiedTime?: string;
+  size?: string;
+}
+
 export const defaultCounts: ContentCounts = {
   posts: 2,
   reels: 1,

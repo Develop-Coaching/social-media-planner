@@ -11,11 +11,23 @@ interface CalendarItem {
   preview: string;
   fullText: string;
   color: string;
+  // Extended fields for modal
+  imageKey?: string;
+  caption?: string;
+  body?: string;
+  script?: string;
+  slides?: { title: string; body: string }[];
+  carouselIndex?: number;
 }
 
 interface Props {
   content: GeneratedContent;
   startDate: Date;
+  companyName: string;
+  companyId: string;
+  themeName: string;
+  images?: Record<string, string>;
+  driveConfigured?: boolean;
 }
 
 const TYPE_COLORS: Record<string, string> = {
@@ -38,6 +50,8 @@ function collectItems(content: GeneratedContent): CalendarItem[] {
       preview: p.caption.slice(0, 80),
       fullText: p.caption,
       color: TYPE_COLORS.Post,
+      imageKey: `post-${i}`,
+      caption: p.caption,
     })
   );
   content.reels.forEach((r, i) =>
@@ -49,6 +63,8 @@ function collectItems(content: GeneratedContent): CalendarItem[] {
       preview: (r.caption || r.script).slice(0, 80),
       fullText: r.caption ? `${r.caption}\n\n${r.script}` : r.script,
       color: TYPE_COLORS.Reel,
+      caption: r.caption || undefined,
+      script: r.script,
     })
   );
   content.linkedinArticles.forEach((a, i) =>
@@ -60,6 +76,9 @@ function collectItems(content: GeneratedContent): CalendarItem[] {
       preview: a.caption || a.body.slice(0, 80),
       fullText: a.caption ? `${a.caption}\n\n${a.body}` : a.body,
       color: TYPE_COLORS.Article,
+      imageKey: `article-${i}`,
+      caption: a.caption || undefined,
+      body: a.body,
     })
   );
   content.carousels.forEach((c, i) =>
@@ -71,6 +90,8 @@ function collectItems(content: GeneratedContent): CalendarItem[] {
       preview: c.slides.map((s) => s.title).join(" / "),
       fullText: c.slides.map((s) => `${s.title}: ${s.body}`).join("\n"),
       color: TYPE_COLORS.Carousel,
+      slides: c.slides,
+      carouselIndex: i,
     })
   );
   content.quotesForX.forEach((q, i) =>
@@ -82,6 +103,7 @@ function collectItems(content: GeneratedContent): CalendarItem[] {
       preview: q.quote,
       fullText: q.quote,
       color: TYPE_COLORS.Quote,
+      imageKey: `quote-${i}`,
     })
   );
   content.youtube.forEach((y, i) =>
@@ -93,6 +115,8 @@ function collectItems(content: GeneratedContent): CalendarItem[] {
       preview: y.script.slice(0, 80),
       fullText: y.script,
       color: TYPE_COLORS.YouTube,
+      imageKey: `yt-${i}`,
+      script: y.script,
     })
   );
   return items;
@@ -222,13 +246,157 @@ function downloadICS(icsContent: string, filename: string): void {
   URL.revokeObjectURL(url);
 }
 
+// ---------- Detail Modal ----------
+
+function DetailModal({ item, images, onClose }: { item: CalendarItem; images: Record<string, string>; onClose: () => void }) {
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [onClose]);
+
+  // Collect images for this item
+  const itemImages: { key: string; src: string }[] = [];
+  if (item.slides && item.carouselIndex !== undefined) {
+    item.slides.forEach((_, j) => {
+      const key = `carousel-${item.carouselIndex}-slide-${j}`;
+      if (images[key]) itemImages.push({ key, src: images[key] });
+    });
+  } else if (item.imageKey && images[item.imageKey]) {
+    itemImages.push({ key: item.imageKey, src: images[item.imageKey] });
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 max-w-2xl w-full max-h-[85vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="sticky top-0 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-6 py-4 flex items-center justify-between rounded-t-2xl z-10">
+          <div className="flex items-center gap-3">
+            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wide border ${item.color}`}>
+              {item.label}
+            </span>
+            <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200 line-clamp-1">{item.title}</h3>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="px-6 py-5 space-y-4">
+          {/* Caption (Posts, Articles) */}
+          {item.caption && item.type !== "Reel" && (
+            <div>
+              <h4 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
+                {item.type === "Article" ? "LinkedIn Post Caption" : "Caption"}
+              </h4>
+              <p className="text-slate-800 dark:text-slate-200 whitespace-pre-wrap">{item.caption}</p>
+            </div>
+          )}
+
+          {/* Script (Reels, YouTube) */}
+          {item.script && (
+            <div>
+              <h4 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">Script</h4>
+              <p className="text-slate-700 dark:text-slate-300 whitespace-pre-wrap text-sm">{item.script}</p>
+            </div>
+          )}
+
+          {/* Reel caption */}
+          {item.caption && item.type === "Reel" && (
+            <div className="p-3 rounded-lg bg-pink-50 dark:bg-pink-900/20 border border-pink-100 dark:border-pink-800">
+              <h4 className="text-xs font-semibold text-pink-600 dark:text-pink-400 uppercase tracking-wide mb-1">Caption</h4>
+              <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap">{item.caption}</p>
+            </div>
+          )}
+
+          {/* Article body */}
+          {item.body && (
+            <div>
+              <h4 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">Article</h4>
+              <p className="text-slate-700 dark:text-slate-300 whitespace-pre-wrap text-sm">{item.body}</p>
+            </div>
+          )}
+
+          {/* Quote full text */}
+          {item.type === "Quote" && (
+            <blockquote className="text-slate-800 dark:text-slate-200 text-lg italic border-l-4 border-purple-400 dark:border-purple-500 pl-4">
+              &ldquo;{item.fullText}&rdquo;
+            </blockquote>
+          )}
+
+          {/* Carousel slides */}
+          {item.slides && (
+            <div className="space-y-3">
+              <h4 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Slides</h4>
+              {item.slides.map((slide, j) => {
+                const slideKey = `carousel-${item.carouselIndex}-slide-${j}`;
+                const slideImg = images[slideKey];
+                return (
+                  <div key={j} className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700">
+                    <span className="font-semibold text-slate-800 dark:text-slate-200 text-sm">{j + 1}. {slide.title}</span>
+                    <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{slide.body}</p>
+                    {slideImg && (
+                      <img src={slideImg} alt="" className="mt-2 rounded-lg max-h-48 object-cover" />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Images (non-carousel) */}
+          {itemImages.length > 0 && !item.slides && (
+            <div>
+              <h4 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">Image</h4>
+              {itemImages.map((img) => (
+                <img key={img.key} src={img.src} alt="" className="rounded-xl max-h-72 object-cover shadow-md" />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------- Helpers ----------
+
+function getItemThumbnail(item: CalendarItem, images: Record<string, string>): string | null {
+  if (item.slides && item.carouselIndex !== undefined) {
+    const firstSlide = `carousel-${item.carouselIndex}-slide-0`;
+    return images[firstSlide] || null;
+  }
+  if (item.imageKey && images[item.imageKey]) {
+    return images[item.imageKey];
+  }
+  return null;
+}
+
 // ---------- Component ----------
 
-export default function ContentCalendar({ content, startDate }: Props) {
+export default function ContentCalendar({ content, startDate, companyName, companyId, themeName, images = {}, driveConfigured }: Props) {
   const [weekOffset, setWeekOffset] = useState(0);
-  const [expandedItem, setExpandedItem] = useState<string | null>(null);
+  const [modalItem, setModalItem] = useState<CalendarItem | null>(null);
   const [schedule, setSchedule] = useState<CalendarItem[][]>(() => []);
   const [dragOverDay, setDragOverDay] = useState<number | null>(null);
+  const [slackStatus, setSlackStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [slackSending, setSlackSending] = useState(false);
+  const [driveUploading, setDriveUploading] = useState(false);
+  const [driveStatus, setDriveStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   // Track which content + weekOffset we last distributed for
   const lastDistributedRef = useRef<string>("");
@@ -250,7 +418,7 @@ export default function ContentCalendar({ content, startDate }: Props) {
     if (lastDistributedRef.current !== contentFingerprint) {
       lastDistributedRef.current = contentFingerprint;
       setSchedule(distributeItems(items));
-      setExpandedItem(null);
+      setModalItem(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contentFingerprint]);
@@ -263,7 +431,6 @@ export default function ContentCalendar({ content, startDate }: Props) {
     (e: React.DragEvent<HTMLDivElement>, fromDay: number, itemId: string) => {
       e.dataTransfer.effectAllowed = "move";
       e.dataTransfer.setData("text/plain", JSON.stringify({ fromDay, itemId }));
-      // Slight opacity on the dragged element
       if (e.currentTarget) {
         (e.currentTarget as HTMLElement).style.opacity = "0.5";
       }
@@ -287,7 +454,6 @@ export default function ContentCalendar({ content, startDate }: Props) {
 
   const handleDragLeave = useCallback(
     (e: React.DragEvent<HTMLDivElement>, dayIndex: number) => {
-      // Only clear if we're actually leaving this day column (not entering a child)
       const related = e.relatedTarget as Node | null;
       if (related && (e.currentTarget as HTMLElement).contains(related)) return;
       if (dragOverDay === dayIndex) {
@@ -332,8 +498,100 @@ export default function ContentCalendar({ content, startDate }: Props) {
     downloadICS(icsStr, `content-calendar-${startStr}.ics`);
   }, [schedule, weekDays]);
 
+  // ---------- Slack ----------
+
+  const handleSendToSlack = useCallback(async () => {
+    setSlackStatus(null);
+    setSlackSending(true);
+
+    const FULL_DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+    const weekLabel = `${formatDate(weekDays[0])} – ${formatDate(weekDays[6])}`;
+
+    const days = schedule.map((dayItems, dayIndex) => ({
+      dayName: FULL_DAY_NAMES[dayIndex],
+      date: formatDate(weekDays[dayIndex]),
+      items: dayItems.map((item, itemIdx) => {
+        const startHour = 9 + Math.floor((itemIdx * 30) / 60);
+        const startMin = (itemIdx * 30) % 60;
+        const period = startHour >= 12 ? "PM" : "AM";
+        const displayHour = startHour > 12 ? startHour - 12 : startHour;
+        const time = `${displayHour}:${startMin.toString().padStart(2, "0")} ${period}`;
+        return {
+          time,
+          type: item.label,
+          title: item.title,
+          preview: item.preview,
+          imageKey: item.imageKey || (item.type === "Carousel" ? item.id : undefined),
+        };
+      }),
+    }));
+
+    try {
+      const res = await fetch("/api/notify-slack", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyName, companyId, themeName, weekLabel, days }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSlackStatus({ type: "success", message: "Schedule sent to Slack!" });
+      } else {
+        setSlackStatus({ type: "error", message: data.error || "Failed to send" });
+      }
+    } catch {
+      setSlackStatus({ type: "error", message: "Network error" });
+    } finally {
+      setSlackSending(false);
+      setTimeout(() => setSlackStatus(null), 5000);
+    }
+  }, [schedule, weekDays, companyName, companyId, themeName]);
+
+  // ---------- Drive upload ----------
+
+  const handleSaveToDrive = useCallback(async () => {
+    if (!driveConfigured || Object.keys(images).length === 0) return;
+    setDriveStatus(null);
+    setDriveUploading(true);
+
+    try {
+      const imageEntries = Object.keys(images).map((key) => ({
+        key,
+        fileName: `${key}.png`,
+      }));
+      const res = await fetch("/api/drive/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId,
+          companyName,
+          folderName: themeName || undefined,
+          images: imageEntries,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setDriveStatus({ type: "success", message: `Uploaded ${data.uploaded} image(s) to Drive` });
+        if (data.folderLink) {
+          window.open(data.folderLink, "_blank");
+        }
+      } else {
+        setDriveStatus({ type: "error", message: data.error || "Failed to upload" });
+      }
+    } catch {
+      setDriveStatus({ type: "error", message: "Network error" });
+    } finally {
+      setDriveUploading(false);
+      setTimeout(() => setDriveStatus(null), 5000);
+    }
+  }, [driveConfigured, images, companyId, companyName, themeName]);
+
   return (
     <div>
+      {/* Detail modal */}
+      {modalItem && (
+        <DetailModal item={modalItem} images={images} onClose={() => setModalItem(null)} />
+      )}
+
       {/* Week navigation */}
       <div className="flex items-center justify-between mb-4">
         <button
@@ -351,6 +609,30 @@ export default function ContentCalendar({ content, startDate }: Props) {
           <p className="text-xs text-slate-500 dark:text-slate-400">{totalItems} items across the week</p>
         </div>
         <div className="flex items-center gap-2">
+          {driveConfigured && Object.keys(images).length > 0 && (
+            <button
+              onClick={handleSaveToDrive}
+              disabled={driveUploading}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-green-300 dark:border-green-600 text-green-700 dark:text-green-300 bg-white dark:bg-slate-800 hover:bg-green-50 dark:hover:bg-green-900/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Save images to Google Drive"
+            >
+              <svg className={`w-4 h-4 ${driveUploading ? "animate-spin" : ""}`} viewBox="0 0 24 24" fill="currentColor">
+                <path d="M7.71 3.5L1.15 15l2.16 3.75h4.73L4.46 12.5l2.17-3.75L7.71 3.5zm4.5 0L5.62 15l2.17 3.75h4.32l2.17-3.75L7.71 3.5h4.5zm4.5 0L10.12 15l2.17 3.75h4.32l6.56-11.5L20.71 3.5h-4z" />
+              </svg>
+              {driveUploading ? "Uploading..." : "Save to Drive"}
+            </button>
+          )}
+          <button
+            onClick={handleSendToSlack}
+            disabled={totalItems === 0 || slackSending}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-purple-200 dark:border-purple-700 text-purple-600 dark:text-purple-300 bg-white dark:bg-slate-800 hover:bg-purple-50 dark:hover:bg-purple-900/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Send schedule to Slack"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zM18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312zM15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z"/>
+            </svg>
+            {slackSending ? "Sending..." : "Send to Slack"}
+          </button>
           <button
             onClick={handleExportICS}
             disabled={totalItems === 0}
@@ -378,80 +660,102 @@ export default function ContentCalendar({ content, startDate }: Props) {
         </div>
       </div>
 
-      {/* Calendar grid */}
-      <div className="grid grid-cols-7 gap-2">
+      {/* Status feedback */}
+      {slackStatus && (
+        <div
+          className={`mb-3 px-4 py-2 rounded-lg text-sm font-medium ${
+            slackStatus.type === "success"
+              ? "bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800"
+              : "bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800"
+          }`}
+        >
+          {slackStatus.message}
+        </div>
+      )}
+      {driveStatus && (
+        <div
+          className={`mb-3 px-4 py-2 rounded-lg text-sm font-medium ${
+            driveStatus.type === "success"
+              ? "bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800"
+              : "bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800"
+          }`}
+        >
+          {driveStatus.message}
+        </div>
+      )}
+
+      {/* Calendar grid - weekdays only for more space */}
+      <div className="grid grid-cols-5 gap-3">
         {/* Day headers */}
-        {DAY_NAMES.map((name, i) => (
+        {DAY_NAMES.slice(0, 5).map((name, i) => (
           <div
             key={name}
-            className={`text-center text-xs font-semibold py-2 rounded-lg ${
-              i >= 5 ? "text-slate-400 dark:text-slate-600" : "text-slate-600 dark:text-slate-300"
-            }`}
+            className="text-center text-sm font-semibold py-2.5 rounded-lg text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-900/30"
           >
             <div>{name}</div>
-            <div className="text-[10px] font-normal text-slate-400 dark:text-slate-500">{formatDate(weekDays[i])}</div>
+            <div className="text-xs font-normal text-slate-400 dark:text-slate-500 mt-0.5">{formatDate(weekDays[i])}</div>
           </div>
         ))}
 
-        {/* Day columns */}
-        {schedule.map((dayItems, dayIndex) => (
+        {/* Day columns - only Mon-Fri */}
+        {schedule.slice(0, 5).map((dayItems, dayIndex) => (
           <div
             key={dayIndex}
             onDragOver={(e) => handleDragOver(e, dayIndex)}
             onDragLeave={(e) => handleDragLeave(e, dayIndex)}
             onDrop={(e) => handleDrop(e, dayIndex)}
-            className={`min-h-[120px] rounded-xl border p-2 transition-colors ${
+            className={`min-h-[160px] rounded-xl border p-2.5 transition-colors ${
               dragOverDay === dayIndex
                 ? "bg-sky-50 dark:bg-sky-900/30 border-sky-300 dark:border-sky-600 ring-2 ring-sky-200 dark:ring-sky-700"
-                : dayIndex >= 5
-                  ? "bg-slate-50/50 dark:bg-slate-900/30 border-slate-100 dark:border-slate-800"
-                  : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+                : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
             }`}
           >
             {dayItems.length === 0 && (
-              <p className="text-[10px] text-slate-400 dark:text-slate-600 text-center mt-6">
-                {dragOverDay === dayIndex ? "Drop here" : dayIndex < 5 ? "No content" : ""}
+              <p className="text-xs text-slate-400 dark:text-slate-600 text-center mt-10">
+                {dragOverDay === dayIndex ? "Drop here" : "No content"}
               </p>
             )}
-            {dayItems.map((item, itemIndex) => {
-              const itemKey = `${dayIndex}-${item.id}`;
-              const isExpanded = expandedItem === itemKey;
+            {dayItems.map((item) => {
+              const imgSrc = getItemThumbnail(item, images);
               return (
                 <div
                   key={item.id}
                   draggable
                   onDragStart={(e) => handleDragStart(e, dayIndex, item.id)}
                   onDragEnd={handleDragEnd}
-                  onClick={() => setExpandedItem(isExpanded ? null : itemKey)}
-                  className={`w-full text-left mb-1.5 last:mb-0 rounded-lg border p-2 transition-all hover:shadow-sm cursor-grab active:cursor-grabbing ${item.color}`}
+                  onClick={() => setModalItem(item)}
+                  className={`w-full text-left mb-2 last:mb-0 rounded-lg border p-2.5 transition-all hover:shadow-md hover:scale-[1.02] cursor-pointer active:cursor-grabbing ${item.color}`}
                   role="button"
                   tabIndex={0}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
-                      setExpandedItem(isExpanded ? null : itemKey);
+                      setModalItem(item);
                     }
                   }}
                 >
-                  <div className="flex items-center gap-1.5">
-                    <svg
-                      className="w-3 h-3 opacity-40 flex-shrink-0"
-                      fill="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <circle cx="9" cy="5" r="1.5" />
-                      <circle cx="15" cy="5" r="1.5" />
-                      <circle cx="9" cy="12" r="1.5" />
-                      <circle cx="15" cy="12" r="1.5" />
-                      <circle cx="9" cy="19" r="1.5" />
-                      <circle cx="15" cy="19" r="1.5" />
-                    </svg>
-                    <span className="text-[10px] font-bold uppercase tracking-wide opacity-70">{item.label}</span>
+                  <div className="flex items-center justify-between gap-1.5 mb-1">
+                    <div className="flex items-center gap-1.5">
+                      <svg
+                        className="w-3 h-3 opacity-40 flex-shrink-0"
+                        fill="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle cx="9" cy="5" r="1.5" />
+                        <circle cx="15" cy="5" r="1.5" />
+                        <circle cx="9" cy="12" r="1.5" />
+                        <circle cx="15" cy="12" r="1.5" />
+                        <circle cx="9" cy="19" r="1.5" />
+                        <circle cx="15" cy="19" r="1.5" />
+                      </svg>
+                      <span className="text-[10px] font-bold uppercase tracking-wide opacity-70">{item.label}</span>
+                    </div>
+                    {imgSrc && (
+                      <img src={imgSrc} alt="" className="w-8 h-8 rounded object-cover flex-shrink-0 opacity-80" />
+                    )}
                   </div>
-                  <p className="text-xs font-medium mt-0.5 line-clamp-2">{item.title}</p>
-                  {isExpanded && (
-                    <p className="text-[11px] mt-1.5 opacity-80 line-clamp-4">{item.preview}...</p>
-                  )}
+                  <p className="text-xs font-semibold mt-0.5 line-clamp-2 leading-snug">{item.title}</p>
+                  <p className="text-[11px] mt-1 opacity-70 line-clamp-2 leading-snug">{item.preview}</p>
                 </div>
               );
             })}
@@ -462,7 +766,7 @@ export default function ContentCalendar({ content, startDate }: Props) {
       {/* Legend */}
       <div className="flex flex-wrap gap-3 mt-4 justify-center">
         {Object.entries(TYPE_COLORS).map(([type, color]) => (
-          <div key={type} className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-1 rounded-md border ${color}`}>
+          <div key={type} className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-md border ${color}`}>
             {type}
           </div>
         ))}
