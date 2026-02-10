@@ -16,7 +16,7 @@ export interface GeneratedContent {
   posts: { title: string; caption: string; imagePrompt: string }[];
   reels: { script: string; caption: string }[];
   linkedinArticles: { title: string; caption: string; body: string; imagePrompt: string }[];
-  carousels: { slides: { title: string; body: string }[]; imagePrompt: string }[];
+  carousels: { slides: { title: string; body: string }[]; caption: string; imagePrompt: string }[];
   quotesForX: { quote: string; imagePrompt: string }[];
   youtube: { title: string; script: string; thumbnailPrompt?: string }[];
 }
@@ -66,7 +66,7 @@ Generate exactly this many items (use these exact counts):
 - Posts (Instagram/LinkedIn feed): ${counts.posts}. Each needs: title (short 3-8 word summary of the post), caption (engaging, with optional hashtags), imagePrompt (detailed description for an AI image generator).
 - Reels (talking-head video scripts): ${counts.reels}. Each needs: script (a direct-to-camera script for someone to speak, approximately 30 seconds when read aloud - NO scene directions, NO B-roll instructions, just the actual words to say, must address an aspect of the theme), caption (engaging social media caption with hashtags to post alongside the reel).
 - LinkedIn articles: ${counts.linkedinArticles}. Each needs: title (article headline related to theme), caption (a short 1-2 sentence teaser/hook for the LinkedIn post that links to the article), body (full article, 400-800 words, exploring the theme in depth), imagePrompt for hero image.
-- Carousels: ${counts.carousels}. Each needs: slides array (each slide: title, body - all slides should build on the theme), one imagePrompt describing the carousel visual style.
+- Carousels: ${counts.carousels}. Each needs: slides array (each slide: title, body - all slides should build on the theme), caption (an engaging social media caption that summarises the carousel content and includes a call-to-action — this is the post description that accompanies the carousel, with optional hashtags), one imagePrompt describing the carousel visual style.
 - Quotes for X/Twitter: ${counts.quotesForX}. Each needs: quote (short, punchy insight related to the theme), imagePrompt (quote card style).
 - YouTube: ${counts.youtube}. Each needs: title, script (full video script, 3-8 min, deep-diving into the theme), optional thumbnailPrompt.
 

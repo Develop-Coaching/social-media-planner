@@ -1,44 +1,54 @@
 import { google, drive_v3 } from "googleapis";
+import { getDriveTokens, refreshAccessToken } from "@/lib/drive-tokens";
 
-let driveClient: drive_v3.Drive | null = null;
-
-export function isDriveConfigured(): boolean {
-  return !!(
-    (process.env.GOOGLE_SERVICE_ACCOUNT_KEY || process.env.GOOGLE_SERVICE_ACCOUNT_KEY_PATH) &&
-    process.env.GOOGLE_DRIVE_FOLDER_ID
-  );
+/** Check if OAuth client ID is configured (server-side only) */
+export function isDriveEnabled(): boolean {
+  return !!process.env.GOOGLE_OAUTH_CLIENT_ID;
 }
 
-function getDriveClient(): drive_v3.Drive {
-  if (driveClient) return driveClient;
-
-  let credentials: { client_email: string; private_key: string };
-
-  if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
-    credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
-  } else if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY_PATH) {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const fs = require("fs");
-    credentials = JSON.parse(fs.readFileSync(process.env.GOOGLE_SERVICE_ACCOUNT_KEY_PATH, "utf-8"));
-  } else {
-    throw new Error("Google Drive credentials not configured");
+/** Get a Drive client for a specific user using their OAuth tokens */
+export async function getDriveClient(userId: string): Promise<drive_v3.Drive> {
+  const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
+  if (!clientId || !clientSecret) {
+    throw new Error("Google OAuth not configured");
   }
 
-  const auth = new google.auth.GoogleAuth({
-    credentials,
-    scopes: ["https://www.googleapis.com/auth/drive"],
+  let tokens = await getDriveTokens(userId);
+  if (!tokens) {
+    throw new DriveAuthError("not_authenticated");
+  }
+
+  // Auto-refresh if expired (with 5-minute buffer)
+  if (tokens.expiresAt < Date.now() + 5 * 60 * 1000) {
+    const refreshed = await refreshAccessToken(userId);
+    if (!refreshed) {
+      throw new DriveAuthError("not_authenticated");
+    }
+    tokens = refreshed;
+  }
+
+  const oauth2 = new google.auth.OAuth2(clientId, clientSecret);
+  oauth2.setCredentials({
+    access_token: tokens.accessToken,
+    refresh_token: tokens.refreshToken,
   });
 
-  driveClient = google.drive({ version: "v3", auth });
-  return driveClient;
+  return google.drive({ version: "v3", auth: oauth2 });
+}
+
+export class DriveAuthError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "DriveAuthError";
+  }
 }
 
 export async function ensureFolder(
+  drive: drive_v3.Drive,
   parentId: string,
   name: string
 ): Promise<string> {
-  const drive = getDriveClient();
-
   // Check if folder already exists
   const res = await drive.files.list({
     q: `'${parentId}' in parents and name = '${name.replace(/'/g, "\\'")}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
@@ -64,13 +74,12 @@ export async function ensureFolder(
 }
 
 export async function uploadImage(
+  drive: drive_v3.Drive,
   folderId: string,
   fileName: string,
   dataUrl: string
 ): Promise<{ ok: boolean; fileId?: string; webViewLink?: string; error?: string }> {
   try {
-    const drive = getDriveClient();
-
     // Parse data URL: data:image/png;base64,<data>
     const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
     if (!match) {
@@ -118,12 +127,11 @@ export interface DriveFileInfo {
 }
 
 export async function listImages(
+  drive: drive_v3.Drive,
   folderId: string,
   pageToken?: string
 ): Promise<{ ok: boolean; files?: DriveFileInfo[]; nextPageToken?: string; error?: string }> {
   try {
-    const drive = getDriveClient();
-
     const res = await drive.files.list({
       q: `'${folderId}' in parents and mimeType contains 'image/' and trashed = false`,
       fields: "nextPageToken, files(id, name, mimeType, thumbnailLink, webViewLink, modifiedTime, size)",
@@ -158,11 +166,10 @@ export async function listImages(
 const MAX_DOWNLOAD_SIZE = 10 * 1024 * 1024; // 10MB
 
 export async function downloadImage(
+  drive: drive_v3.Drive,
   fileId: string
 ): Promise<{ ok: boolean; dataUrl?: string; error?: string }> {
   try {
-    const drive = getDriveClient();
-
     // Check file size first
     const meta = await drive.files.get({
       fileId,
@@ -196,11 +203,10 @@ export async function downloadImage(
 
 /** List subfolders within a parent folder */
 export async function listFolders(
+  drive: drive_v3.Drive,
   parentId: string
 ): Promise<{ ok: boolean; folders?: { id: string; name: string }[]; error?: string }> {
   try {
-    const drive = getDriveClient();
-
     const res = await drive.files.list({
       q: `'${parentId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
       fields: "files(id, name)",

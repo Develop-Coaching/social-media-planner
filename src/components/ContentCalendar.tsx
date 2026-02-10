@@ -87,9 +87,10 @@ function collectItems(content: GeneratedContent): CalendarItem[] {
       type: "Carousel",
       label: "Carousel",
       title: c.slides[0]?.title || `Carousel ${i + 1}`,
-      preview: c.slides.map((s) => s.title).join(" / "),
-      fullText: c.slides.map((s) => `${s.title}: ${s.body}`).join("\n"),
+      preview: c.caption || c.slides.map((s) => s.title).join(" / "),
+      fullText: c.caption || c.slides.map((s) => `${s.title}: ${s.body}`).join("\n"),
       color: TYPE_COLORS.Carousel,
+      caption: c.caption || undefined,
       slides: c.slides,
       carouselIndex: i,
     })
@@ -248,7 +249,33 @@ function downloadICS(icsContent: string, filename: string): void {
 
 // ---------- Detail Modal ----------
 
+function downloadDataUrl(dataUrl: string, filename: string) {
+  const a = document.createElement("a");
+  a.href = dataUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+function DownloadButton({ src, filename }: { src: string; filename: string }) {
+  return (
+    <button
+      onClick={() => downloadDataUrl(src, filename)}
+      className="mt-1.5 inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+      title="Download image"
+    >
+      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+      </svg>
+      Download
+    </button>
+  );
+}
+
 function DetailModal({ item, images, onClose }: { item: CalendarItem; images: Record<string, string>; onClose: () => void }) {
+  const [captionCopied, setCaptionCopied] = useState(false);
+
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
       if (e.key === "Escape") onClose();
@@ -267,6 +294,17 @@ function DetailModal({ item, images, onClose }: { item: CalendarItem; images: Re
   } else if (item.imageKey && images[item.imageKey]) {
     itemImages.push({ key: item.imageKey, src: images[item.imageKey] });
   }
+
+  // AI-generated carousel caption (for the post description)
+  const carouselCaption = item.slides ? (item.caption || null) : null;
+
+  const handleCopyCaption = () => {
+    if (!carouselCaption) return;
+    navigator.clipboard.writeText(carouselCaption).then(() => {
+      setCaptionCopied(true);
+      setTimeout(() => setCaptionCopied(false), 2000);
+    });
+  };
 
   return (
     <div
@@ -338,6 +376,42 @@ function DetailModal({ item, images, onClose }: { item: CalendarItem; images: Re
             </blockquote>
           )}
 
+          {/* Carousel: combined caption with copy button */}
+          {carouselCaption && (
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <h4 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Carousel Caption</h4>
+                <button
+                  onClick={handleCopyCaption}
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium rounded-md border transition-colors ${
+                    captionCopied
+                      ? "border-green-300 dark:border-green-600 text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/30"
+                      : "border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700"
+                  }`}
+                >
+                  {captionCopied ? (
+                    <>
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      Copied!
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                      Copy Caption
+                    </>
+                  )}
+                </button>
+              </div>
+              <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap select-all">{carouselCaption}</p>
+              </div>
+            </div>
+          )}
+
           {/* Carousel slides */}
           {item.slides && (
             <div className="space-y-3">
@@ -350,7 +424,10 @@ function DetailModal({ item, images, onClose }: { item: CalendarItem; images: Re
                     <span className="font-semibold text-slate-800 dark:text-slate-200 text-sm">{j + 1}. {slide.title}</span>
                     <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{slide.body}</p>
                     {slideImg && (
-                      <img src={slideImg} alt="" className="mt-2 rounded-lg max-h-48 object-cover" />
+                      <div>
+                        <img src={slideImg} alt="" className="mt-2 rounded-lg max-h-48 object-cover" />
+                        <DownloadButton src={slideImg} filename={`carousel-slide-${j + 1}.png`} />
+                      </div>
                     )}
                   </div>
                 );
@@ -363,7 +440,10 @@ function DetailModal({ item, images, onClose }: { item: CalendarItem; images: Re
             <div>
               <h4 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">Image</h4>
               {itemImages.map((img) => (
-                <img key={img.key} src={img.src} alt="" className="rounded-xl max-h-72 object-cover shadow-md" />
+                <div key={img.key}>
+                  <img src={img.src} alt="" className="rounded-xl max-h-72 object-cover shadow-md" />
+                  <DownloadButton src={img.src} filename={`${img.key}.png`} />
+                </div>
               ))}
             </div>
           )}

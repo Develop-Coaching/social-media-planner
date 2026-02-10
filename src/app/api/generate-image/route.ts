@@ -26,9 +26,10 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { prompt, aspectRatio = "1:1" } = body as {
+    const { prompt, aspectRatio = "1:1", referenceImage } = body as {
       prompt: string;
       aspectRatio?: string;
+      referenceImage?: string; // base64 data (no data URL prefix)
     };
 
     if (!prompt || typeof prompt !== "string") {
@@ -38,9 +39,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Build contents: text-only or multimodal (reference image + text)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let contents: any = prompt;
+    if (referenceImage) {
+      contents = [
+        { inlineData: { mimeType: "image/png", data: referenceImage } },
+        { text: `Match the exact visual style, color palette, illustration style, layout, and typography of the reference image above. ${prompt}` },
+      ];
+    }
+
     const response = await ai.models.generateContent({
       model: IMAGE_MODEL,
-      contents: prompt,
+      contents,
       config: {
         responseModalities: ["IMAGE"],
         imageConfig: {
