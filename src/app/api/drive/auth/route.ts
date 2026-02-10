@@ -3,6 +3,8 @@ import { google } from "googleapis";
 import { requireAuth, AuthError } from "@/lib/auth-helpers";
 import { saveDriveTokens } from "@/lib/drive-tokens";
 
+export const dynamic = "force-dynamic";
+
 export async function POST(request: NextRequest) {
   try {
     const { userId } = await requireAuth();

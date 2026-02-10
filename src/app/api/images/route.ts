@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getImages, saveImage, saveAllImages, deleteImage } from "@/lib/images";
 import { requireAuth, AuthError } from "@/lib/auth-helpers";
 
+export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 export async function GET(request: NextRequest) {

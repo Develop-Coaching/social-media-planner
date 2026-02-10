@@ -4,6 +4,8 @@ import { sendSlackNotification } from "@/lib/slack";
 import { createAsanaTask } from "@/lib/asana";
 import { isDriveEnabled, getDriveClient, ensureFolder, DriveAuthError } from "@/lib/drive";
 
+export const dynamic = "force-dynamic";
+
 interface SendToEditorBody {
   companyName: string;
   companyId: string;

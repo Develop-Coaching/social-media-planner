@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCharacters, addCharacter, updateCharacter, uploadCharacterImage, deleteCharacterImage, deleteCharacter } from "@/lib/characters";
 import { requireAuth, AuthError } from "@/lib/auth-helpers";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: NextRequest) {
   try {
     const { userId } = await requireAuth();

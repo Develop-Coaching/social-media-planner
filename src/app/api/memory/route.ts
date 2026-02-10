@@ -5,6 +5,8 @@ import { getAnthropicClient } from "@/lib/anthropic";
 import { supabase } from "@/lib/supabase";
 import mammoth from "mammoth";
 
+export const dynamic = "force-dynamic";
+
 const BUCKET = "content-images";
 
 // File size limits in bytes

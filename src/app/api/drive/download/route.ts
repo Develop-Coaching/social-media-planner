@@ -3,6 +3,8 @@ import { requireAuth, AuthError } from "@/lib/auth-helpers";
 import { getDriveClient, DriveAuthError, downloadImage } from "@/lib/drive";
 import { saveImage } from "@/lib/images";
 
+export const dynamic = "force-dynamic";
+
 interface DownloadBody {
   companyId: string;
   files: { driveFileId: string; targetKey: string }[];

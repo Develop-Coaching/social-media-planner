@@ -3,6 +3,8 @@ import { createToken, COOKIE_NAME, isAuthEnabled } from "@/lib/auth";
 import { verifyPassword } from "@/lib/users";
 import { createRateLimiter, getClientIP } from "@/lib/rate-limit";
 
+export const dynamic = "force-dynamic";
+
 const loginLimiter = createRateLimiter("login", { maxAttempts: 5, windowMs: 15 * 60 * 1000 });
 
 export async function POST(request: NextRequest) {

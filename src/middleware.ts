@@ -19,14 +19,16 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Allow static assets and Next.js internals
+  // Allow static assets and Next.js internals (scoped to non-API paths)
   if (
     pathname.startsWith("/_next/") ||
     pathname.startsWith("/favicon") ||
-    pathname.endsWith(".ico") ||
-    pathname.endsWith(".svg") ||
-    pathname.endsWith(".png") ||
-    pathname.endsWith(".jpg")
+    (!pathname.startsWith("/api/") && (
+      pathname.endsWith(".ico") ||
+      pathname.endsWith(".svg") ||
+      pathname.endsWith(".png") ||
+      pathname.endsWith(".jpg")
+    ))
   ) {
     return NextResponse.next();
   }

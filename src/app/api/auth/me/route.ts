@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/auth-helpers";
 import { getUserById } from "@/lib/users";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   try {
     const { userId } = await requireAuth();

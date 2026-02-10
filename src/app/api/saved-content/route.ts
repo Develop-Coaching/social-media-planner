@@ -9,6 +9,8 @@ import {
 } from "@/lib/saved-content";
 import { requireAuth, AuthError } from "@/lib/auth-helpers";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: NextRequest) {
   try {
     const { userId } = await requireAuth();

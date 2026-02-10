@@ -3,6 +3,8 @@ import { requireAuth, AuthError } from "@/lib/auth-helpers";
 import { getDriveClient, DriveAuthError, uploadImage } from "@/lib/drive";
 import { getImages } from "@/lib/images";
 
+export const dynamic = "force-dynamic";
+
 interface UploadBody {
   companyId: string;
   companyName: string;

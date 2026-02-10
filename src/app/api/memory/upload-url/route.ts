@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/auth-helpers";
 import { supabase } from "@/lib/supabase";
 
+export const dynamic = "force-dynamic";
+
 const BUCKET = "content-images";
 
 export async function POST(request: NextRequest) {

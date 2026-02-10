@@ -3,6 +3,7 @@ import { getContextForAI } from "@/lib/memory";
 import { requireAuth, AuthError } from "@/lib/auth-helpers";
 import { getAnthropicClient } from "@/lib/anthropic";
 
+export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 type ContentType = "post" | "reel" | "linkedinArticle" | "carousel" | "quoteForX" | "youtube";

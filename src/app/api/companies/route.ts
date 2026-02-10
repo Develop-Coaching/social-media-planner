@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCompanies, addCompany, updateCompany, deleteCompany } from "@/lib/companies";
 import { requireAuth, AuthError } from "@/lib/auth-helpers";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   try {
     const { userId } = await requireAuth();

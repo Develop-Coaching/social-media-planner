@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCustomTones, addCustomTone, deleteCustomTone } from "@/lib/custom-tones";
 import { requireAuth, AuthError } from "@/lib/auth-helpers";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: NextRequest) {
   try {
     const { userId } = await requireAuth();
