@@ -960,6 +960,7 @@ export default function Home() {
                   driveStatus={driveStatus}
                   onDriveAuth={handleDriveAuth}
                   onDriveImport={handleDriveImport}
+                  themeName={selectedTheme?.title || ""}
                 />
               )}
             </>

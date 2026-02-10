@@ -25,63 +25,39 @@ interface SlackPayload {
   days: ScheduleDay[];
 }
 
-function buildSlackBlocks(payload: SlackPayload) {
-  const blocks: Record<string, unknown>[] = [];
+function buildSlackText(payload: SlackPayload): string {
+  const lines: string[] = [];
 
-  blocks.push({
-    type: "section",
-    text: {
-      type: "mrkdwn",
-      text: `*\ud83d\udccb Content Ready for Posting*`,
-    },
-  });
-
-  blocks.push({
-    type: "section",
-    fields: [
-      { type: "mrkdwn", text: `*Company:*\n${payload.companyName}` },
-      { type: "mrkdwn", text: `*Theme:*\n\u201c${payload.themeName}\u201d` },
-    ],
-  });
-
-  blocks.push({
-    type: "context",
-    elements: [
-      { type: "mrkdwn", text: `\ud83d\udcc5 *Week:* ${payload.weekLabel}` },
-    ],
-  });
-
-  blocks.push({ type: "divider" });
+  lines.push(`*\ud83d\udccb Content Ready for Posting*`);
+  lines.push(`*Company:* ${payload.companyName}`);
+  if (payload.themeName) {
+    lines.push(`*Theme:* \u201c${payload.themeName}\u201d`);
+  }
+  if (payload.weekLabel) {
+    lines.push(`*Week:* ${payload.weekLabel}`);
+  }
+  lines.push("---");
 
   for (const day of payload.days) {
     if (day.items.length === 0) continue;
 
-    blocks.push({
-      type: "section",
-      text: { type: "mrkdwn", text: `*\ud83d\udcc5 ${day.dayName}, ${day.date}*` },
-    });
+    lines.push("");
+    lines.push(`*\ud83d\udcc5 ${day.dayName}${day.date ? `, ${day.date}` : ""}*`);
 
     for (const item of day.items) {
-      let itemText = `\u2022 ${item.time} \u2014 *${item.type}:* ${item.title}`;
+      const timeStr = item.time ? `${item.time} \u2014 ` : "";
+      lines.push(`\u2022 ${timeStr}*${item.type}:* ${item.title}`);
       if (item.preview) {
         const truncated =
-          item.preview.length > 100
-            ? item.preview.slice(0, 100) + "\u2026"
+          item.preview.length > 150
+            ? item.preview.slice(0, 150) + "\u2026"
             : item.preview;
-        itemText += `\n    _${truncated}_`;
+        lines.push(`   _${truncated}_`);
       }
-
-      blocks.push({
-        type: "section",
-        text: { type: "mrkdwn", text: itemText },
-      });
     }
   }
 
-  return {
-    text: `\ud83d\udccb Content Ready for Posting \u2014 ${payload.companyName}`,
-    blocks,
-  };
+  return lines.join("\n");
 }
 
 function dataUrlToArrayBuffer(dataUrl: string): ArrayBuffer | null {
@@ -104,9 +80,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Post the schedule message
-    const message = buildSlackBlocks(body);
-    const result = await sendSlackNotification(message);
+    // Post the schedule message via webhook (plain text, no blocks — most reliable)
+    const text = buildSlackText(body);
+    const result = await sendSlackNotification({ text, blocks: [] });
 
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: 502 });
