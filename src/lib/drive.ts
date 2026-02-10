@@ -200,6 +200,44 @@ export async function listVideos(
   }
 }
 
+/** List files shared with the user, filtered by mimeType category */
+export async function listSharedFiles(
+  drive: drive_v3.Drive,
+  mimeCategory: "image" | "video",
+  pageToken?: string
+): Promise<{ ok: boolean; files?: DriveFileInfo[]; nextPageToken?: string; error?: string }> {
+  try {
+    const res = await drive.files.list({
+      q: `sharedWithMe = true and mimeType contains '${mimeCategory}/' and trashed = false`,
+      fields: "nextPageToken, files(id, name, mimeType, thumbnailLink, webViewLink, modifiedTime, size)",
+      pageSize: 20,
+      pageToken: pageToken || undefined,
+      orderBy: "modifiedTime desc",
+    });
+
+    const files: DriveFileInfo[] = (res.data.files || []).map((f) => ({
+      id: f.id!,
+      name: f.name!,
+      mimeType: f.mimeType!,
+      thumbnailLink: f.thumbnailLink || undefined,
+      webViewLink: f.webViewLink || undefined,
+      modifiedTime: f.modifiedTime || undefined,
+      size: f.size || undefined,
+    }));
+
+    return {
+      ok: true,
+      files,
+      nextPageToken: res.data.nextPageToken || undefined,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Failed to list files",
+    };
+  }
+}
+
 const MAX_DOWNLOAD_SIZE = 10 * 1024 * 1024; // 10MB
 
 export async function downloadImage(

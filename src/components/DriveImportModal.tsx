@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { DriveFileInfo, GeneratedContent } from "@/types";
 
+type DriveSource = "mydrive" | "shared";
+
 interface Props {
   companyName: string;
   companyId: string;
@@ -32,7 +34,7 @@ export default function DriveImportModal({ companyName, companyId, content, imag
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Folder browsing state
+  const [source, setSource] = useState<DriveSource>("shared");
   const [folders, setFolders] = useState<{ id: string; name: string }[]>([]);
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
 
@@ -42,6 +44,10 @@ export default function DriveImportModal({ companyName, companyId, content, imag
   const contentKeys = buildContentKeys(content);
 
   const fetchFolders = useCallback(async () => {
+    if (source === "shared") {
+      setFolders([]);
+      return;
+    }
     try {
       const res = await fetch(`/api/drive/list?companyName=${encodeURIComponent(companyName)}&mode=folders`);
       const data = await res.json();
@@ -51,9 +57,10 @@ export default function DriveImportModal({ companyName, companyId, content, imag
     } catch {
       // Ignore - folders are optional
     }
-  }, [companyName]);
+  }, [companyName, source]);
 
-  const fetchFiles = useCallback(async (folder?: string | null, pageToken?: string) => {
+  const fetchFiles = useCallback(async (folder?: string | null, pageToken?: string, currentSource?: DriveSource) => {
+    const src = currentSource ?? source;
     if (pageToken) {
       setLoadingMore(true);
     } else {
@@ -64,8 +71,13 @@ export default function DriveImportModal({ companyName, companyId, content, imag
     setError(null);
 
     try {
-      let url = `/api/drive/list?companyName=${encodeURIComponent(companyName)}`;
-      if (folder) url += `&folder=${encodeURIComponent(folder)}`;
+      let url: string;
+      if (src === "shared") {
+        url = `/api/drive/list?source=shared`;
+      } else {
+        url = `/api/drive/list?companyName=${encodeURIComponent(companyName)}`;
+        if (folder) url += `&folder=${encodeURIComponent(folder)}`;
+      }
       if (pageToken) url += `&pageToken=${encodeURIComponent(pageToken)}`;
 
       const res = await fetch(url);
@@ -88,12 +100,12 @@ export default function DriveImportModal({ companyName, companyId, content, imag
       setLoading(false);
       setLoadingMore(false);
     }
-  }, [companyName]);
+  }, [companyName, source]);
 
   useEffect(() => {
     fetchFolders();
-    fetchFiles(null);
-  }, [fetchFolders, fetchFiles]);
+    fetchFiles(null, undefined, source);
+  }, [fetchFolders, fetchFiles, source]);
 
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
@@ -102,6 +114,13 @@ export default function DriveImportModal({ companyName, companyId, content, imag
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, [onClose]);
+
+  function handleSourceChange(newSource: DriveSource) {
+    setSource(newSource);
+    setSelectedFolder(null);
+    setFolders([]);
+    setSelections({});
+  }
 
   function toggleSelection(fileId: string) {
     setSelections((prev) => {
@@ -190,9 +209,31 @@ export default function DriveImportModal({ companyName, companyId, content, imag
           </button>
         </div>
 
-        {/* Folder selector */}
-        {folders.length > 0 && (
-          <div className="px-6 py-3 border-b border-slate-200 dark:border-slate-700">
+        {/* Source toggle + folder selector */}
+        <div className="px-6 py-3 border-b border-slate-200 dark:border-slate-700 flex items-center gap-4 flex-wrap">
+          <div className="inline-flex rounded-lg border border-slate-300 dark:border-slate-600 overflow-hidden text-sm">
+            <button
+              onClick={() => handleSourceChange("shared")}
+              className={`px-3 py-1.5 font-medium transition-colors ${
+                source === "shared"
+                  ? "bg-sky-600 text-white"
+                  : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
+              }`}
+            >
+              Shared with me
+            </button>
+            <button
+              onClick={() => handleSourceChange("mydrive")}
+              className={`px-3 py-1.5 font-medium transition-colors ${
+                source === "mydrive"
+                  ? "bg-sky-600 text-white"
+                  : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
+              }`}
+            >
+              My Drive
+            </button>
+          </div>
+          {source === "mydrive" && folders.length > 0 && (
             <div className="flex items-center gap-2">
               <label className="text-sm text-slate-600 dark:text-slate-400">Folder:</label>
               <select
@@ -206,8 +247,8 @@ export default function DriveImportModal({ companyName, companyId, content, imag
                 ))}
               </select>
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-6 py-4">
@@ -229,8 +270,12 @@ export default function DriveImportModal({ companyName, companyId, content, imag
               <svg className="w-12 h-12 mx-auto mb-3 text-slate-300 dark:text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
-              <p className="text-sm">No images found in this folder.</p>
-              <p className="text-xs mt-1">Upload images to your Drive folder first, or try a different folder.</p>
+              <p className="text-sm">No images found{source === "shared" ? " shared with you" : " in this folder"}.</p>
+              <p className="text-xs mt-1">
+                {source === "shared"
+                  ? "Ask someone to share images with your Google account, or switch to My Drive."
+                  : "Upload images to your Drive folder first, or try a different folder."}
+              </p>
             </div>
           ) : (
             <>

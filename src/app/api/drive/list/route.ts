@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/auth-helpers";
-import { getDriveClient, DriveAuthError, listImages, listVideos, listFolders, ensureFolder } from "@/lib/drive";
+import { getDriveClient, DriveAuthError, listImages, listVideos, listSharedFiles, listFolders, ensureFolder } from "@/lib/drive";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +16,20 @@ export async function GET(request: NextRequest) {
     const pageToken = searchParams.get("pageToken") || undefined;
     const mode = searchParams.get("mode"); // "folders" to list folders instead of images
     const type = searchParams.get("type"); // "videos" to list videos instead of images
+    const source = searchParams.get("source"); // "shared" to list files shared with user
+
+    // "Shared with me" mode — flat list, no folder navigation
+    if (source === "shared") {
+      const mimeCategory = type === "videos" ? "video" : "image";
+      const result = await listSharedFiles(drive, mimeCategory, pageToken);
+      if (!result.ok) {
+        return NextResponse.json({ error: result.error }, { status: 500 });
+      }
+      return NextResponse.json({
+        files: result.files,
+        nextPageToken: result.nextPageToken,
+      });
+    }
 
     // Use "root" as the base — user's My Drive
     const rootFolderId = "root";
@@ -37,7 +51,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ folders: result.folders });
     }
 
-    // List images in the target folder
+    // List images/videos in the target folder
     let targetFolderId = rootFolderId;
     if (companyName) {
       targetFolderId = await ensureFolder(drive, rootFolderId, companyName);

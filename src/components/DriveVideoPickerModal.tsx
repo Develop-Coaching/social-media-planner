@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { DriveFileInfo } from "@/types";
 
+type DriveSource = "mydrive" | "shared";
+
 interface Props {
   companyName: string;
   onSelect: (video: { fileId: string; webViewLink: string; name: string }) => void;
@@ -16,10 +18,15 @@ export default function DriveVideoPickerModal({ companyName, onSelect, onClose }
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [source, setSource] = useState<DriveSource>("shared");
   const [folders, setFolders] = useState<{ id: string; name: string }[]>([]);
   const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
 
   const fetchFolders = useCallback(async () => {
+    if (source === "shared") {
+      setFolders([]);
+      return;
+    }
     try {
       const res = await fetch(`/api/drive/list?companyName=${encodeURIComponent(companyName)}&mode=folders`);
       const data = await res.json();
@@ -29,9 +36,10 @@ export default function DriveVideoPickerModal({ companyName, onSelect, onClose }
     } catch {
       // Folders are optional
     }
-  }, [companyName]);
+  }, [companyName, source]);
 
-  const fetchFiles = useCallback(async (folder?: string | null, pageToken?: string) => {
+  const fetchFiles = useCallback(async (folder?: string | null, pageToken?: string, currentSource?: DriveSource) => {
+    const src = currentSource ?? source;
     if (pageToken) {
       setLoadingMore(true);
     } else {
@@ -42,8 +50,13 @@ export default function DriveVideoPickerModal({ companyName, onSelect, onClose }
     setError(null);
 
     try {
-      let url = `/api/drive/list?companyName=${encodeURIComponent(companyName)}&type=videos`;
-      if (folder) url += `&folder=${encodeURIComponent(folder)}`;
+      let url: string;
+      if (src === "shared") {
+        url = `/api/drive/list?type=videos&source=shared`;
+      } else {
+        url = `/api/drive/list?companyName=${encodeURIComponent(companyName)}&type=videos`;
+        if (folder) url += `&folder=${encodeURIComponent(folder)}`;
+      }
       if (pageToken) url += `&pageToken=${encodeURIComponent(pageToken)}`;
 
       const res = await fetch(url);
@@ -66,12 +79,12 @@ export default function DriveVideoPickerModal({ companyName, onSelect, onClose }
       setLoading(false);
       setLoadingMore(false);
     }
-  }, [companyName]);
+  }, [companyName, source]);
 
   useEffect(() => {
     fetchFolders();
-    fetchFiles(null);
-  }, [fetchFolders, fetchFiles]);
+    fetchFiles(null, undefined, source);
+  }, [fetchFolders, fetchFiles, source]);
 
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
@@ -80,6 +93,12 @@ export default function DriveVideoPickerModal({ companyName, onSelect, onClose }
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, [onClose]);
+
+  function handleSourceChange(newSource: DriveSource) {
+    setSource(newSource);
+    setSelectedFolder(null);
+    setFolders([]);
+  }
 
   function handleFolderChange(folderName: string | null) {
     setSelectedFolder(folderName);
@@ -121,9 +140,31 @@ export default function DriveVideoPickerModal({ companyName, onSelect, onClose }
           </button>
         </div>
 
-        {/* Folder selector */}
-        {folders.length > 0 && (
-          <div className="px-6 py-3 border-b border-slate-200 dark:border-slate-700">
+        {/* Source toggle + folder selector */}
+        <div className="px-6 py-3 border-b border-slate-200 dark:border-slate-700 flex items-center gap-4 flex-wrap">
+          <div className="inline-flex rounded-lg border border-slate-300 dark:border-slate-600 overflow-hidden text-sm">
+            <button
+              onClick={() => handleSourceChange("shared")}
+              className={`px-3 py-1.5 font-medium transition-colors ${
+                source === "shared"
+                  ? "bg-sky-600 text-white"
+                  : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
+              }`}
+            >
+              Shared with me
+            </button>
+            <button
+              onClick={() => handleSourceChange("mydrive")}
+              className={`px-3 py-1.5 font-medium transition-colors ${
+                source === "mydrive"
+                  ? "bg-sky-600 text-white"
+                  : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
+              }`}
+            >
+              My Drive
+            </button>
+          </div>
+          {source === "mydrive" && folders.length > 0 && (
             <div className="flex items-center gap-2">
               <label className="text-sm text-slate-600 dark:text-slate-400">Folder:</label>
               <select
@@ -137,8 +178,8 @@ export default function DriveVideoPickerModal({ companyName, onSelect, onClose }
                 ))}
               </select>
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-6 py-4">
@@ -160,8 +201,12 @@ export default function DriveVideoPickerModal({ companyName, onSelect, onClose }
               <svg className="w-12 h-12 mx-auto mb-3 text-slate-300 dark:text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
               </svg>
-              <p className="text-sm">No videos found in this folder.</p>
-              <p className="text-xs mt-1">Upload videos to your Drive folder first, or try a different folder.</p>
+              <p className="text-sm">No videos found{source === "shared" ? " shared with you" : " in this folder"}.</p>
+              <p className="text-xs mt-1">
+                {source === "shared"
+                  ? "Ask someone to share a video with your Google account, or switch to My Drive."
+                  : "Upload videos to your Drive folder first, or try a different folder."}
+              </p>
             </div>
           ) : (
             <>
