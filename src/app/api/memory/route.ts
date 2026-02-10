@@ -151,6 +151,8 @@ Output only the extracted/described content, no additional commentary.`,
   return text.trim();
 }
 
+export const maxDuration = 60;
+
 export async function GET(request: NextRequest) {
   try {
     const { userId } = await requireAuth();

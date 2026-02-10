@@ -3,6 +3,8 @@ import { getContextForAI } from "@/lib/memory";
 import { requireAuth, AuthError } from "@/lib/auth-helpers";
 import { getAnthropicClient } from "@/lib/anthropic";
 
+export const maxDuration = 60;
+
 export interface ContentCounts {
   posts: number;
   reels: number;
