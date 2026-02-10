@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/auth-helpers";
 import { sendSlackNotification, uploadAndShareImage } from "@/lib/slack";
 import { getImages } from "@/lib/images";
+import { getCompanyById } from "@/lib/companies";
 
 export const dynamic = "force-dynamic";
 
@@ -82,17 +83,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Look up per-company Slack settings (falls back to env vars)
+    const company = body.companyId ? await getCompanyById(userId, body.companyId) : null;
+
     // Post the schedule message via webhook (plain text only — most reliable)
     const text = buildSlackText(body);
-    const result = await sendSlackNotification({ text });
+    const result = await sendSlackNotification({ text }, company?.slackWebhookUrl);
 
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: 502 });
     }
 
     // Upload images directly to Slack if bot token is configured
-    const botToken = process.env.SLACK_BOT_TOKEN;
-    const channelId = process.env.SLACK_CHANNEL_ID;
+    const botToken = company?.slackBotToken || process.env.SLACK_BOT_TOKEN;
+    const channelId = company?.slackChannelId || process.env.SLACK_CHANNEL_ID;
     let imagesUploaded = 0;
 
     if (botToken && channelId && body.companyId) {

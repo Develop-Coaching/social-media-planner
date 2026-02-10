@@ -51,6 +51,9 @@ export default function Home() {
   const [characters, setCharacters] = useState<Character[]>([]);
   const [charactersLoading, setCharactersLoading] = useState(false);
 
+  // Slack settings UI state
+  const [showAdvancedSlack, setShowAdvancedSlack] = useState(false);
+
   // Google Drive integration
   const [driveStatus, setDriveStatus] = useState<{ enabled: boolean; authenticated: boolean; email?: string; clientId?: string }>({ enabled: false, authenticated: false });
 
@@ -157,6 +160,26 @@ export default function Home() {
     setCharacters([]);
     setPostingDates({});
     setAutosaveRestored(false);
+  }
+
+  async function updateCompanySlack(updates: { slackWebhookUrl?: string; slackEditorWebhookUrl?: string; slackBotToken?: string; slackChannelId?: string }) {
+    if (!selectedCompany) return;
+    try {
+      const res = await fetch("/api/companies", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: selectedCompany.id, ...updates }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setSelectedCompany(updated);
+      } else {
+        const data = await res.json();
+        toast(data.error || "Failed to update Slack settings", "error");
+      }
+    } catch {
+      toast("Failed to update Slack settings", "error");
+    }
   }
 
   async function updateCompanyBrand(updates: { logo?: string; brandColors?: string[] }) {
@@ -935,7 +958,7 @@ export default function Home() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
             Brand Settings
-            {(selectedCompany.logo || (selectedCompany.brandColors && selectedCompany.brandColors.length > 0) || characters.length > 0) && (
+            {(selectedCompany.logo || (selectedCompany.brandColors && selectedCompany.brandColors.length > 0) || characters.length > 0 || selectedCompany.slackWebhookUrl || selectedCompany.slackEditorWebhookUrl) && (
               <span className="w-2 h-2 rounded-full bg-green-500" />
             )}
           </button>
@@ -997,6 +1020,96 @@ export default function Home() {
                   <p className="text-xs text-slate-400">
                     {(selectedCompany.brandColors || []).length}/6 colors. Click a swatch to remove it.
                   </p>
+                </div>
+              </div>
+
+              {/* Slack Integration */}
+              <div className="mt-6 pt-6 border-t border-slate-200 dark:border-slate-700">
+                <h4 className="font-medium text-slate-700 dark:text-slate-300 mb-4">Slack Integration</h4>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">
+                      Content Schedule Webhook URL
+                    </label>
+                    <input
+                      type="url"
+                      defaultValue={selectedCompany.slackWebhookUrl || ""}
+                      onBlur={(e) => {
+                        const val = e.target.value.trim();
+                        if (val !== (selectedCompany.slackWebhookUrl || "")) {
+                          updateCompanySlack({ slackWebhookUrl: val });
+                        }
+                      }}
+                      placeholder="https://hooks.slack.com/services/..."
+                      className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500 focus:border-transparent transition-shadow"
+                    />
+                    <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                      Leave blank to use system defaults.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">
+                      Editor Webhook URL
+                    </label>
+                    <input
+                      type="url"
+                      defaultValue={selectedCompany.slackEditorWebhookUrl || ""}
+                      onBlur={(e) => {
+                        const val = e.target.value.trim();
+                        if (val !== (selectedCompany.slackEditorWebhookUrl || "")) {
+                          updateCompanySlack({ slackEditorWebhookUrl: val });
+                        }
+                      }}
+                      placeholder="https://hooks.slack.com/services/..."
+                      className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500 focus:border-transparent transition-shadow"
+                    />
+                  </div>
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => setShowAdvancedSlack(!showAdvancedSlack)}
+                      className="flex items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
+                    >
+                      <svg className={`w-3.5 h-3.5 transition-transform ${showAdvancedSlack ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                      Advanced: Image upload settings
+                    </button>
+                    {showAdvancedSlack && (
+                      <div className="mt-3 space-y-4 pl-5 border-l-2 border-slate-200 dark:border-slate-700">
+                        <div>
+                          <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Bot Token</label>
+                          <input
+                            type="text"
+                            defaultValue={selectedCompany.slackBotToken || ""}
+                            onBlur={(e) => {
+                              const val = e.target.value.trim();
+                              if (val !== (selectedCompany.slackBotToken || "")) {
+                                updateCompanySlack({ slackBotToken: val });
+                              }
+                            }}
+                            placeholder="xoxb-..."
+                            className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500 focus:border-transparent transition-shadow font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Channel ID</label>
+                          <input
+                            type="text"
+                            defaultValue={selectedCompany.slackChannelId || ""}
+                            onBlur={(e) => {
+                              const val = e.target.value.trim();
+                              if (val !== (selectedCompany.slackChannelId || "")) {
+                                updateCompanySlack({ slackChannelId: val });
+                              }
+                            }}
+                            placeholder="C01234ABCDE"
+                            className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500 focus:border-transparent transition-shadow font-mono"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 

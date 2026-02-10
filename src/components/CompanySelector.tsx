@@ -4,18 +4,16 @@ import { useState, useEffect } from "react";
 import { Company } from "@/types";
 import ThemeToggle from "@/components/ThemeToggle";
 import LogoutButton from "@/components/LogoutButton";
-import { useToast } from "@/components/ToastProvider";
+import CompanySetupWizard from "@/components/CompanySetupWizard";
 
 interface Props {
   onSelect: (company: Company) => void;
 }
 
 export default function CompanySelector({ onSelect }: Props) {
-  const { toast } = useToast();
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
-  const [newName, setNewName] = useState("");
-  const [adding, setAdding] = useState(false);
+  const [showWizard, setShowWizard] = useState(false);
 
   useEffect(() => {
     loadCompanies();
@@ -36,26 +34,10 @@ export default function CompanySelector({ onSelect }: Props) {
     }
   }
 
-  async function handleAdd() {
-    if (!newName.trim()) return;
-    setAdding(true);
-    try {
-      const res = await fetch("/api/companies", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newName.trim() }),
-      });
-      if (res.ok) {
-        const company = await res.json();
-        setCompanies((prev) => [...prev, company]);
-        setNewName("");
-      } else {
-        const data = await res.json();
-        toast(data.error || "Failed to add company", "error");
-      }
-    } finally {
-      setAdding(false);
-    }
+  function handleWizardComplete(company: Company) {
+    setCompanies((prev) => [...prev, company]);
+    setShowWizard(false);
+    onSelect(company);
   }
 
   return (
@@ -82,57 +64,59 @@ export default function CompanySelector({ onSelect }: Props) {
             </svg>
           </div>
         ) : (
-          <>
-            <div className="grid gap-4 sm:grid-cols-2 mb-8">
-              {companies.map((company) => (
-                <button
-                  key={company.id}
-                  onClick={() => onSelect(company)}
-                  className="group relative overflow-hidden rounded-2xl bg-white dark:bg-slate-800 p-8 shadow-lg hover:shadow-xl transition-all duration-300 border border-slate-200 dark:border-slate-700 hover:border-sky-300 dark:hover:border-sky-600"
-                >
-                  <div className="absolute inset-0 bg-sky-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-                  <div className="relative">
-                    <div className="w-14 h-14 rounded-xl bg-sky-600 flex items-center justify-center mb-4 shadow-lg">
-                      <span className="text-white font-bold text-xl">
-                        {company.name.charAt(0)}
-                      </span>
-                    </div>
-                    <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-1">
-                      {company.name}
-                    </h2>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">
-                      Click to manage content
-                    </p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {companies.map((company) => (
+              <button
+                key={company.id}
+                onClick={() => onSelect(company)}
+                className="group relative overflow-hidden rounded-2xl bg-white dark:bg-slate-800 p-8 shadow-lg hover:shadow-xl transition-all duration-300 border border-slate-200 dark:border-slate-700 hover:border-sky-300 dark:hover:border-sky-600"
+              >
+                <div className="absolute inset-0 bg-sky-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                <div className="relative">
+                  <div className="w-14 h-14 rounded-xl bg-sky-600 flex items-center justify-center mb-4 shadow-lg">
+                    <span className="text-white font-bold text-xl">
+                      {company.name.charAt(0)}
+                    </span>
                   </div>
-                </button>
-              ))}
-            </div>
+                  <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-1">
+                    {company.name}
+                  </h2>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    Click to manage content
+                  </p>
+                </div>
+              </button>
+            ))}
 
-            <div className="rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-lg border border-slate-200 dark:border-slate-700">
-              <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-4">
-                Add New Company
-              </h3>
-              <div className="flex gap-3">
-                <input
-                  type="text"
-                  placeholder="Company name"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-                  className="flex-1 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-3 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500 focus:border-transparent transition-shadow"
-                />
-                <button
-                  onClick={handleAdd}
-                  disabled={adding || !newName.trim()}
-                  className="px-6 py-3 rounded-xl bg-sky-600 text-white font-medium hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl"
-                >
-                  {adding ? "Adding..." : "Add"}
-                </button>
+            {/* Add New Company card */}
+            <button
+              onClick={() => setShowWizard(true)}
+              className="group rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-600 hover:border-sky-400 dark:hover:border-sky-500 p-8 transition-all duration-300 hover:bg-sky-50/50 dark:hover:bg-sky-950/20"
+            >
+              <div className="flex flex-col items-center justify-center text-center">
+                <div className="w-14 h-14 rounded-xl bg-slate-100 dark:bg-slate-700 flex items-center justify-center mb-4 group-hover:bg-sky-100 dark:group-hover:bg-sky-900 transition-colors">
+                  <svg className="w-7 h-7 text-slate-400 dark:text-slate-500 group-hover:text-sky-600 dark:group-hover:text-sky-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                </div>
+                <h2 className="text-lg font-semibold text-slate-600 dark:text-slate-400 group-hover:text-sky-600 dark:group-hover:text-sky-400 transition-colors mb-1">
+                  Add New Company
+                </h2>
+                <p className="text-sm text-slate-400 dark:text-slate-500">
+                  Set up name, Slack & branding
+                </p>
               </div>
-            </div>
-          </>
+            </button>
+          </div>
         )}
       </div>
+
+      {showWizard && (
+        <CompanySetupWizard
+          onComplete={handleWizardComplete}
+          onCancel={() => setShowWizard(false)}
+        />
+      )}
     </main>
   );
 }

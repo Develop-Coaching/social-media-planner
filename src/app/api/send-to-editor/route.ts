@@ -3,6 +3,7 @@ import { requireAuth, AuthError } from "@/lib/auth-helpers";
 import { sendSlackNotification } from "@/lib/slack";
 import { createAsanaTask } from "@/lib/asana";
 import { isDriveEnabled, getDriveClient, ensureFolder, DriveAuthError } from "@/lib/drive";
+import { getCompanyById } from "@/lib/companies";
 
 export const dynamic = "force-dynamic";
 
@@ -113,9 +114,12 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Look up per-company Slack settings (falls back to env vars)
+    const company = body.companyId ? await getCompanyById(userId, body.companyId) : null;
+
     // Build Slack message
     const slackBlocks = buildEditorSlackBlocks(body, driveLink);
-    const editingWebhook = process.env.SLACK_SEND_TO_EDITOR_WEBHOOK_URL;
+    const editingWebhook = company?.slackEditorWebhookUrl || process.env.SLACK_SEND_TO_EDITOR_WEBHOOK_URL;
 
     // Run Slack + Asana in parallel (independent)
     const [slackResult, asanaResult] = await Promise.all([

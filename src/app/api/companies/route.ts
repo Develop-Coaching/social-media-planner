@@ -25,7 +25,11 @@ export async function POST(request: NextRequest) {
   try {
     const { userId } = await requireAuth();
     const body = await request.json();
-    const { name } = body as { name?: string };
+    const { name, logo, brandColors, slackWebhookUrl, slackEditorWebhookUrl, slackBotToken, slackChannelId } = body as {
+      name?: string; logo?: string; brandColors?: string[];
+      slackWebhookUrl?: string; slackEditorWebhookUrl?: string;
+      slackBotToken?: string; slackChannelId?: string;
+    };
 
     if (!name || typeof name !== "string" || !name.trim()) {
       return NextResponse.json(
@@ -34,7 +38,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const company = await addCompany(userId, name.trim());
+    // Validate logo size (max ~2MB base64)
+    if (logo && logo.length > 3_000_000) {
+      return NextResponse.json({ error: "Logo too large (max 2MB)" }, { status: 400 });
+    }
+
+    // Validate brand colors (max 6)
+    if (brandColors && brandColors.length > 6) {
+      return NextResponse.json({ error: "Maximum 6 brand colors allowed" }, { status: 400 });
+    }
+
+    const company = await addCompany(userId, name.trim(), {
+      logo, brandColors, slackWebhookUrl, slackEditorWebhookUrl, slackBotToken, slackChannelId,
+    });
     return NextResponse.json(company);
   } catch (e) {
     if (e instanceof AuthError) {
@@ -50,7 +66,11 @@ export async function PUT(request: NextRequest) {
   try {
     const { userId } = await requireAuth();
     const body = await request.json();
-    const { id, ...updates } = body as { id: string; name?: string; logo?: string; brandColors?: string[] };
+    const { id, ...updates } = body as {
+      id: string; name?: string; logo?: string; brandColors?: string[];
+      slackWebhookUrl?: string; slackEditorWebhookUrl?: string;
+      slackBotToken?: string; slackChannelId?: string;
+    };
 
     if (!id) {
       return NextResponse.json({ error: "id is required" }, { status: 400 });
