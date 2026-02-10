@@ -75,10 +75,10 @@ export default function MemoryManager({ companyId }: Props) {
     setSaved(false);
 
     const MAX_SIZES = {
-      text: 5 * 1024 * 1024,    // 5 MB (sent as text, no base64)
-      pdf: 3 * 1024 * 1024,     // 3 MB (~4 MB after base64, within Vercel 4.5 MB limit)
-      image: 3 * 1024 * 1024,   // 3 MB
-      word: 3 * 1024 * 1024,    // 3 MB
+      text: 5 * 1024 * 1024,   // 5 MB
+      pdf: 10 * 1024 * 1024,   // 10 MB
+      image: 5 * 1024 * 1024,  // 5 MB
+      word: 10 * 1024 * 1024,  // 10 MB
     };
 
     const fileArray = Array.from(fileList);
@@ -138,19 +138,38 @@ export default function MemoryManager({ companyId }: Props) {
         setUploadProgress(`Processing ${fileArray.length > 1 ? `${i + 1}/${fileArray.length}: ` : ""}${typeLabel}...`);
 
         try {
-          const buffer = await file.arrayBuffer();
-          const base64 = btoa(
-            new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), "")
-          );
+          // Step 1: Get a signed upload URL from the server
+          const urlRes = await fetch("/api/memory/upload-url", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ fileName: file.name }),
+          });
+          if (!urlRes.ok) {
+            const urlData = await urlRes.json().catch(() => ({}));
+            errors.push(`${file.name}: ${urlData.error || "Failed to get upload URL"}`);
+            continue;
+          }
+          const { signedUrl, storagePath } = await urlRes.json();
 
+          // Step 2: Upload file directly to Supabase Storage (bypasses Vercel body limit)
+          const uploadRes = await fetch(signedUrl, {
+            method: "PUT",
+            headers: { "Content-Type": file.type || "application/octet-stream" },
+            body: file,
+          });
+          if (!uploadRes.ok) {
+            errors.push(`${file.name}: Failed to upload file to storage`);
+            continue;
+          }
+
+          // Step 3: Tell the server to process the uploaded file
           const res = await fetch("/api/memory", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ companyId, name: fileName, fileData: base64, fileType, mimeType: file.type }),
+            body: JSON.stringify({ companyId, name: fileName, storagePath, fileType, mimeType: file.type }),
           });
 
           if (res.ok) {
-            const data = await res.json();
             successCount++;
           } else {
             let errorMsg = `HTTP ${res.status}`;
@@ -158,8 +177,7 @@ export default function MemoryManager({ companyId }: Props) {
               const data = await res.json();
               errorMsg = data.error || errorMsg;
             } catch {
-              if (res.status === 413) errorMsg = "File too large for server (max ~3 MB for documents)";
-              else if (res.status === 504) errorMsg = "Server timed out processing file";
+              if (res.status === 504) errorMsg = "Server timed out processing file";
             }
             errors.push(`${file.name}: ${errorMsg}`);
           }

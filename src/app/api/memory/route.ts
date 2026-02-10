@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getMemory, addToMemory, removeFromMemory } from "@/lib/memory";
 import { requireAuth, AuthError } from "@/lib/auth-helpers";
 import { getAnthropicClient } from "@/lib/anthropic";
+import { supabase } from "@/lib/supabase";
 import mammoth from "mammoth";
+
+const BUCKET = "content-images";
 
 // File size limits in bytes
 const MAX_SIZES = {
@@ -193,10 +196,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (body.fileData && body.fileType) {
-      const { name, fileData, fileType, mimeType } = body as {
+    if ((body.fileData || body.storagePath) && body.fileType) {
+      const { name, fileData, storagePath, fileType, mimeType } = body as {
         name: string;
-        fileData: string;
+        fileData?: string;
+        storagePath?: string;
         fileType: "pdf" | "image" | "word";
         mimeType?: string;
       };
@@ -208,9 +212,30 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      if (!fileData || typeof fileData !== "string") {
+      // Get base64 data either from request body or from Supabase Storage
+      let base64Data: string;
+      if (storagePath) {
+        try {
+          const { data: blob, error: dlError } = await supabase.storage
+            .from(BUCKET)
+            .download(storagePath);
+          if (dlError || !blob) throw new Error("Failed to download file from storage");
+          const arrayBuffer = await blob.arrayBuffer();
+          base64Data = Buffer.from(arrayBuffer).toString("base64");
+          // Clean up temp file
+          await supabase.storage.from(BUCKET).remove([storagePath]);
+        } catch (err) {
+          console.error("Storage download error:", err);
+          return NextResponse.json(
+            { error: "Failed to retrieve uploaded file" },
+            { status: 500 }
+          );
+        }
+      } else if (fileData && typeof fileData === "string") {
+        base64Data = fileData;
+      } else {
         return NextResponse.json(
-          { error: "fileData (base64) is required" },
+          { error: "fileData or storagePath is required" },
           { status: 400 }
         );
       }
@@ -220,10 +245,10 @@ export async function POST(request: NextRequest) {
 
       try {
         if (fileType === "pdf") {
-          extractedText = await extractTextFromPDF(fileData);
+          extractedText = await extractTextFromPDF(base64Data);
           sourceType = "PDF";
         } else if (fileType === "word") {
-          extractedText = await extractTextFromWord(fileData);
+          extractedText = await extractTextFromWord(base64Data);
           sourceType = "Word Document";
         } else if (fileType === "image") {
           if (!mimeType) {
@@ -232,7 +257,7 @@ export async function POST(request: NextRequest) {
               { status: 400 }
             );
           }
-          extractedText = await extractTextFromImage(fileData, mimeType);
+          extractedText = await extractTextFromImage(base64Data, mimeType);
           sourceType = "Image";
         } else {
           return NextResponse.json(
