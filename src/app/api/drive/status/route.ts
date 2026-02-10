@@ -3,6 +3,8 @@ import { requireAuth, AuthError } from "@/lib/auth-helpers";
 import { isDriveEnabled } from "@/lib/drive";
 import { getDriveTokens } from "@/lib/drive-tokens";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   try {
     const enabled = isDriveEnabled();

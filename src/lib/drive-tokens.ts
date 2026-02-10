@@ -1,9 +1,5 @@
-import { promises as fs } from "fs";
-import path from "path";
 import { google } from "googleapis";
-import { sanitizeId, validatePath } from "@/lib/sanitize";
-
-const DATA_DIR = path.join(process.cwd(), "data");
+import { supabase } from "@/lib/supabase";
 
 export interface DriveTokens {
   accessToken: string;
@@ -12,47 +8,38 @@ export interface DriveTokens {
   email: string;
 }
 
-function getUserDir(userId: string): string {
-  if (userId === "default") return DATA_DIR;
-  const dir = path.join(DATA_DIR, sanitizeId(userId));
-  validatePath(dir, DATA_DIR);
-  return dir;
-}
-
-function getTokensFile(userId: string): string {
-  const filePath = path.join(getUserDir(userId), "drive-tokens.json");
-  validatePath(filePath, DATA_DIR);
-  return filePath;
-}
-
-async function ensureUserDir(userId: string) {
-  try {
-    await fs.mkdir(getUserDir(userId), { recursive: true });
-  } catch {
-    // ignore
-  }
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToTokens(row: any): DriveTokens {
+  return {
+    accessToken: row.access_token,
+    refreshToken: row.refresh_token,
+    expiresAt: row.expires_at,
+    email: row.email,
+  };
 }
 
 export async function getDriveTokens(userId: string): Promise<DriveTokens | null> {
-  try {
-    const raw = await fs.readFile(getTokensFile(userId), "utf-8");
-    return JSON.parse(raw) as DriveTokens;
-  } catch {
-    return null;
-  }
+  const { data, error } = await supabase
+    .from("drive_tokens")
+    .select("*")
+    .eq("user_id", userId)
+    .single();
+  if (error || !data) return null;
+  return rowToTokens(data);
 }
 
 export async function saveDriveTokens(userId: string, tokens: DriveTokens): Promise<void> {
-  await ensureUserDir(userId);
-  await fs.writeFile(getTokensFile(userId), JSON.stringify(tokens, null, 2), "utf-8");
+  await supabase.from("drive_tokens").upsert({
+    user_id: userId,
+    access_token: tokens.accessToken,
+    refresh_token: tokens.refreshToken,
+    expires_at: tokens.expiresAt,
+    email: tokens.email,
+  });
 }
 
 export async function clearDriveTokens(userId: string): Promise<void> {
-  try {
-    await fs.unlink(getTokensFile(userId));
-  } catch {
-    // ignore if doesn't exist
-  }
+  await supabase.from("drive_tokens").delete().eq("user_id", userId);
 }
 
 export async function refreshAccessToken(userId: string): Promise<DriveTokens | null> {

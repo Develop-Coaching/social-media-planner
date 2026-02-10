@@ -1,22 +1,4 @@
-import { promises as fs } from "fs";
-import path from "path";
-import { sanitizeId, validatePath } from "@/lib/sanitize";
-
-const DATA_DIR = path.join(process.cwd(), "data");
-
-function getUserDir(userId: string): string {
-  // "default" user (auth disabled) uses flat data/ directory for backwards compat
-  if (userId === "default") return DATA_DIR;
-  const dir = path.join(DATA_DIR, sanitizeId(userId));
-  validatePath(dir, DATA_DIR);
-  return dir;
-}
-
-function getCompaniesFile(userId: string): string {
-  const filePath = path.join(getUserDir(userId), "companies.json");
-  validatePath(filePath, DATA_DIR);
-  return filePath;
-}
+import { supabase } from "@/lib/supabase";
 
 export interface Company {
   id: string;
@@ -29,32 +11,12 @@ export interface CompaniesData {
   companies: Company[];
 }
 
-async function ensureUserDir(userId: string) {
-  try {
-    await fs.mkdir(getUserDir(userId), { recursive: true });
-  } catch {
-    // ignore
-  }
-}
-
-export async function getCompanies(userId: string): Promise<Company[]> {
-  try {
-    await ensureUserDir(userId);
-    const raw = await fs.readFile(getCompaniesFile(userId), "utf-8");
-    const data = JSON.parse(raw) as CompaniesData;
-    return data.companies;
-  } catch {
-    return [];
-  }
-}
-
-async function saveCompanies(userId: string, companies: Company[]): Promise<void> {
-  await ensureUserDir(userId);
-  await fs.writeFile(
-    getCompaniesFile(userId),
-    JSON.stringify({ companies }, null, 2),
-    "utf-8"
-  );
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToCompany(row: any): Company {
+  const company: Company = { id: row.id, name: row.name };
+  if (row.logo) company.logo = row.logo;
+  if (row.brand_colors?.length) company.brandColors = row.brand_colors;
+  return company;
 }
 
 function generateId(name: string): string {
@@ -65,6 +27,15 @@ function generateId(name: string): string {
     || `company-${Date.now()}`;
 }
 
+export async function getCompanies(userId: string): Promise<Company[]> {
+  const { data, error } = await supabase
+    .from("companies")
+    .select("*")
+    .eq("user_id", userId);
+  if (error || !data) return [];
+  return data.map(rowToCompany);
+}
+
 export async function addCompany(userId: string, name: string): Promise<Company> {
   const companies = await getCompanies(userId);
   const id = generateId(name);
@@ -73,26 +44,50 @@ export async function addCompany(userId: string, name: string): Promise<Company>
     throw new Error(`Company with ID "${id}" already exists`);
   }
 
-  const company: Company = { id, name };
-  companies.push(company);
-  await saveCompanies(userId, companies);
-  return company;
+  const { error } = await supabase.from("companies").insert({
+    user_id: userId,
+    id,
+    name,
+  });
+
+  if (error) throw new Error(error.message);
+
+  return { id, name };
 }
 
 export async function updateCompany(userId: string, id: string, updates: Partial<Pick<Company, "name" | "logo" | "brandColors">>): Promise<Company | null> {
-  const companies = await getCompanies(userId);
-  const index = companies.findIndex((c) => c.id === id);
-  if (index === -1) return null;
-  companies[index] = { ...companies[index], ...updates };
-  await saveCompanies(userId, companies);
-  return companies[index];
+  const dbUpdates: Record<string, unknown> = {};
+  if (updates.name !== undefined) dbUpdates.name = updates.name;
+  if (updates.logo !== undefined) dbUpdates.logo = updates.logo;
+  if (updates.brandColors !== undefined) dbUpdates.brand_colors = updates.brandColors;
+
+  const { data, error } = await supabase
+    .from("companies")
+    .update(dbUpdates)
+    .eq("user_id", userId)
+    .eq("id", id)
+    .select("*")
+    .single();
+
+  if (error || !data) return null;
+  return rowToCompany(data);
 }
 
 export async function deleteCompany(userId: string, id: string): Promise<boolean> {
-  const companies = await getCompanies(userId);
-  const index = companies.findIndex((c) => c.id === id);
-  if (index === -1) return false;
-  companies.splice(index, 1);
-  await saveCompanies(userId, companies);
-  return true;
+  // Clean up Storage files before DB delete (cascade only handles table rows)
+  const { data: files } = await supabase.storage
+    .from("content-images")
+    .list(`${userId}/${id}`);
+  if (files?.length) {
+    const paths = files.map((f) => `${userId}/${id}/${f.name}`);
+    await supabase.storage.from("content-images").remove(paths);
+  }
+
+  const { error } = await supabase
+    .from("companies")
+    .delete()
+    .eq("user_id", userId)
+    .eq("id", id);
+
+  return !error;
 }

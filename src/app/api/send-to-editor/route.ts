@@ -16,12 +16,12 @@ interface SendToEditorBody {
 function buildEditorSlackBlocks(
   body: SendToEditorBody,
   driveLink?: string
-): Record<string, unknown> {
+): { text: string; blocks: Record<string, unknown>[] } {
   const blocks: Record<string, unknown>[] = [];
 
   blocks.push({
-    type: "header",
-    text: { type: "plain_text", text: "\ud83c\udfac Reel Ready for Editing", emoji: true },
+    type: "section",
+    text: { type: "mrkdwn", text: "*\ud83c\udfac Reel Ready for Editing*" },
   });
 
   blocks.push({
@@ -65,7 +65,7 @@ function buildEditorSlackBlocks(
     });
   }
 
-  return { blocks };
+  return { text: `\ud83c\udfac Reel ${body.reelIndex + 1} ready for editing \u2014 ${body.companyName}`, blocks };
 }
 
 function buildAsanaNotes(body: SendToEditorBody, driveLink?: string): string {

@@ -1,10 +1,5 @@
-import { promises as fs } from "fs";
-import path from "path";
 import bcrypt from "bcryptjs";
-import { sanitizeId, validatePath } from "@/lib/sanitize";
-
-const DATA_DIR = path.join(process.cwd(), "data");
-const USERS_FILE = path.join(DATA_DIR, "users.json");
+import { supabase } from "@/lib/supabase";
 
 export interface User {
   id: string;
@@ -16,47 +11,52 @@ export interface User {
   createdBy: string | null;
 }
 
-interface UsersData {
-  users: User[];
-}
-
-async function ensureDataDir(dir?: string) {
-  try {
-    await fs.mkdir(dir || DATA_DIR, { recursive: true });
-  } catch {
-    // ignore
-  }
-}
-
-async function readUsers(): Promise<User[]> {
-  try {
-    await ensureDataDir();
-    const raw = await fs.readFile(USERS_FILE, "utf-8");
-    const data = JSON.parse(raw) as UsersData;
-    return data.users;
-  } catch {
-    return [];
-  }
-}
-
-async function writeUsers(users: User[]): Promise<void> {
-  await ensureDataDir();
-  await fs.writeFile(USERS_FILE, JSON.stringify({ users }, null, 2), "utf-8");
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToUser(row: any): User {
+  return {
+    id: row.id,
+    username: row.username,
+    displayName: row.display_name,
+    passwordHash: row.password_hash,
+    role: row.role,
+    createdAt: row.created_at,
+    createdBy: row.created_by,
+  };
 }
 
 export async function getUsers(): Promise<Omit<User, "passwordHash">[]> {
-  const users = await readUsers();
-  return users.map(({ passwordHash: _, ...rest }) => rest);
+  const { data, error } = await supabase
+    .from("users")
+    .select("id, username, display_name, role, created_at, created_by");
+  if (error || !data) return [];
+  return data.map((row) => ({
+    id: row.id,
+    username: row.username,
+    displayName: row.display_name,
+    role: row.role,
+    createdAt: row.created_at,
+    createdBy: row.created_by,
+  }));
 }
 
 export async function getUserByUsername(username: string): Promise<User | null> {
-  const users = await readUsers();
-  return users.find((u) => u.username.toLowerCase() === username.toLowerCase()) || null;
+  const { data, error } = await supabase
+    .from("users")
+    .select("*")
+    .ilike("username", username)
+    .single();
+  if (error || !data) return null;
+  return rowToUser(data);
 }
 
 export async function getUserById(id: string): Promise<User | null> {
-  const users = await readUsers();
-  return users.find((u) => u.id === id) || null;
+  const { data, error } = await supabase
+    .from("users")
+    .select("*")
+    .eq("id", id)
+    .single();
+  if (error || !data) return null;
+  return rowToUser(data);
 }
 
 export async function createUser(
@@ -66,28 +66,28 @@ export async function createUser(
   role: "admin" | "user",
   createdBy: string | null
 ): Promise<Omit<User, "passwordHash">> {
-  const users = await readUsers();
-
-  if (users.some((u) => u.username.toLowerCase() === username.toLowerCase())) {
+  const existing = await getUserByUsername(username);
+  if (existing) {
     throw new Error("Username already exists");
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
-  const user: User = {
-    id: crypto.randomUUID(),
+  const id = crypto.randomUUID();
+  const createdAt = new Date().toISOString();
+
+  const { error } = await supabase.from("users").insert({
+    id,
     username: username.toLowerCase(),
-    displayName,
-    passwordHash,
+    display_name: displayName,
+    password_hash: passwordHash,
     role,
-    createdAt: new Date().toISOString(),
-    createdBy,
-  };
+    created_at: createdAt,
+    created_by: createdBy,
+  });
 
-  users.push(user);
-  await writeUsers(users);
+  if (error) throw new Error(error.message);
 
-  const { passwordHash: _, ...safe } = user;
-  return safe;
+  return { id, username: username.toLowerCase(), displayName, role, createdAt, createdBy };
 }
 
 export async function verifyPassword(username: string, password: string): Promise<User | null> {
@@ -98,82 +98,52 @@ export async function verifyPassword(username: string, password: string): Promis
 }
 
 export async function deleteUser(id: string): Promise<boolean> {
-  const users = await readUsers();
-  const index = users.findIndex((u) => u.id === id);
-  if (index === -1) return false;
-  users.splice(index, 1);
-  await writeUsers(users);
+  // Clean up Storage files before deleting DB rows
+  const { data: companies } = await supabase
+    .from("companies")
+    .select("id")
+    .eq("user_id", id);
 
-  // Clean up user's data directory
-  const safeId = sanitizeId(id);
-  if (safeId) {
-    const userDir = path.join(DATA_DIR, safeId);
-    validatePath(userDir, DATA_DIR);
-    try {
-      await fs.rm(userDir, { recursive: true, force: true });
-    } catch {
-      // Directory may not exist, that's fine
+  if (companies?.length) {
+    for (const company of companies) {
+      const { data: files } = await supabase.storage
+        .from("content-images")
+        .list(`${id}/${company.id}`);
+      if (files?.length) {
+        const paths = files.map((f) => `${id}/${company.id}/${f.name}`);
+        await supabase.storage.from("content-images").remove(paths);
+      }
     }
   }
 
-  return true;
+  // Delete companies (cascades to memory_files, saved_content, custom_tones, images)
+  await supabase.from("companies").delete().eq("user_id", id);
+
+  // Delete drive tokens (separate table, no cascade)
+  await supabase.from("drive_tokens").delete().eq("user_id", id);
+
+  // Delete the user
+  const { error } = await supabase.from("users").delete().eq("id", id);
+  return !error;
 }
 
 export async function changePassword(id: string, newPassword: string): Promise<boolean> {
-  const users = await readUsers();
-  const user = users.find((u) => u.id === id);
-  if (!user) return false;
-  user.passwordHash = await bcrypt.hash(newPassword, 10);
-  await writeUsers(users);
-  return true;
+  const passwordHash = await bcrypt.hash(newPassword, 10);
+  const { error } = await supabase
+    .from("users")
+    .update({ password_hash: passwordHash })
+    .eq("id", id);
+  return !error;
 }
 
 export async function hasAnyUsers(): Promise<boolean> {
-  const users = await readUsers();
-  return users.length > 0;
+  const { count, error } = await supabase
+    .from("users")
+    .select("id", { count: "exact", head: true });
+  if (error) return false;
+  return (count ?? 0) > 0;
 }
 
-/**
- * Migrate existing flat data files into a user's directory.
- * Copies companies.json, memory-*.json, saved-content-*.json, custom-tones-*.json
- * from data/ into data/{userId}/.
- */
 export async function migrateExistingData(userId: string): Promise<number> {
-  const userDir = path.join(DATA_DIR, userId);
-  await ensureDataDir(userDir);
-
-  const patterns = ["companies.json", "memory-", "saved-content-", "custom-tones-"];
-  let migrated = 0;
-
-  try {
-    const files = await fs.readdir(DATA_DIR);
-    for (const file of files) {
-      const isDataFile = patterns.some((p) =>
-        p.endsWith(".json") ? file === p : file.startsWith(p) && file.endsWith(".json")
-      );
-      if (!isDataFile) continue;
-
-      const src = path.join(DATA_DIR, file);
-      const dest = path.join(userDir, file);
-
-      // Only copy regular files, skip directories
-      const stat = await fs.stat(src);
-      if (!stat.isFile()) continue;
-
-      // Don't overwrite if destination already exists
-      try {
-        await fs.access(dest);
-        continue; // already exists
-      } catch {
-        // doesn't exist, safe to copy
-      }
-
-      await fs.copyFile(src, dest);
-      migrated++;
-    }
-  } catch {
-    // data dir may not exist yet
-  }
-
-  return migrated;
+  return 0;
 }

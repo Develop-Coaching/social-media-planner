@@ -1,21 +1,4 @@
-import { promises as fs } from "fs";
-import path from "path";
-import { sanitizeId, validatePath } from "@/lib/sanitize";
-
-const DATA_DIR = path.join(process.cwd(), "data");
-
-function getUserDir(userId: string): string {
-  if (userId === "default") return DATA_DIR;
-  const dir = path.join(DATA_DIR, sanitizeId(userId));
-  validatePath(dir, DATA_DIR);
-  return dir;
-}
-
-function getSavedContentFile(userId: string, companyId: string): string {
-  const filePath = path.join(getUserDir(userId), `saved-content-${sanitizeId(companyId)}.json`);
-  validatePath(filePath, DATA_DIR);
-  return filePath;
-}
+import { supabase } from "@/lib/supabase";
 
 export interface SavedContentItem {
   id: string;
@@ -36,32 +19,26 @@ export interface SavedContentData {
   items: SavedContentItem[];
 }
 
-async function ensureUserDir(userId: string) {
-  try {
-    await fs.mkdir(getUserDir(userId), { recursive: true });
-  } catch {
-    // ignore
-  }
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToItem(row: any): SavedContentItem {
+  return {
+    id: row.id,
+    name: row.name,
+    theme: row.theme,
+    content: row.content,
+    savedAt: row.saved_at,
+  };
 }
 
 export async function getSavedContent(userId: string, companyId: string): Promise<SavedContentItem[]> {
-  try {
-    await ensureUserDir(userId);
-    const raw = await fs.readFile(getSavedContentFile(userId, companyId), "utf-8");
-    const data = JSON.parse(raw) as SavedContentData;
-    return data.items;
-  } catch {
-    return [];
-  }
-}
-
-async function saveSavedContent(userId: string, companyId: string, items: SavedContentItem[]): Promise<void> {
-  await ensureUserDir(userId);
-  await fs.writeFile(
-    getSavedContentFile(userId, companyId),
-    JSON.stringify({ items }, null, 2),
-    "utf-8"
-  );
+  const { data, error } = await supabase
+    .from("saved_content")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("company_id", companyId)
+    .order("saved_at", { ascending: false });
+  if (error || !data) return [];
+  return data.map(rowToItem);
 }
 
 export async function addSavedContent(
@@ -71,26 +48,30 @@ export async function addSavedContent(
   theme: SavedContentItem["theme"],
   content: SavedContentItem["content"]
 ): Promise<SavedContentItem> {
-  const items = await getSavedContent(userId, companyId);
-  const item: SavedContentItem = {
-    id: crypto.randomUUID(),
+  const id = crypto.randomUUID();
+  const savedAt = new Date().toISOString();
+
+  await supabase.from("saved_content").insert({
+    id,
+    user_id: userId,
+    company_id: companyId,
     name,
     theme,
     content,
-    savedAt: new Date().toISOString(),
-  };
-  items.unshift(item);
-  await saveSavedContent(userId, companyId, items);
-  return item;
+    saved_at: savedAt,
+  });
+
+  return { id, name, theme, content, savedAt };
 }
 
 export async function deleteSavedContent(userId: string, companyId: string, id: string): Promise<boolean> {
-  const items = await getSavedContent(userId, companyId);
-  const index = items.findIndex((item) => item.id === id);
-  if (index === -1) return false;
-  items.splice(index, 1);
-  await saveSavedContent(userId, companyId, items);
-  return true;
+  const { error } = await supabase
+    .from("saved_content")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", userId)
+    .eq("company_id", companyId);
+  return !error;
 }
 
 export async function updateSavedContent(
@@ -99,10 +80,11 @@ export async function updateSavedContent(
   id: string,
   content: SavedContentItem["content"]
 ): Promise<boolean> {
-  const items = await getSavedContent(userId, companyId);
-  const index = items.findIndex((item) => item.id === id);
-  if (index === -1) return false;
-  items[index].content = content;
-  await saveSavedContent(userId, companyId, items);
-  return true;
+  const { error } = await supabase
+    .from("saved_content")
+    .update({ content })
+    .eq("id", id)
+    .eq("user_id", userId)
+    .eq("company_id", companyId);
+  return !error;
 }

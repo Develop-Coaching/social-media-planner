@@ -30,8 +30,14 @@ yarn-error.log*
 .env.test.local
 .env.production.local
 
-# data (memory is stored here)
+# data (legacy local storage, now in Supabase)
 /data
+
+# user-specific Claude Code settings
+.claude/settings.local.json
+
+# old reference directory
+/social-media-planner
 
 # typescript
 *.tsbuildinfo

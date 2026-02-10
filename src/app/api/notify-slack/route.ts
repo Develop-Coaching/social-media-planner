@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/auth-helpers";
-import { sendSlackNotification } from "@/lib/slack";
+import { sendSlackNotification, uploadAndShareImage } from "@/lib/slack";
 import { getImages } from "@/lib/images";
-import { signImageParams } from "@/lib/images";
 
 interface ScheduleItem {
   time: string;
@@ -26,13 +25,9 @@ interface SlackPayload {
   days: ScheduleDay[];
 }
 
-function buildSlackBlocks(
-  payload: SlackPayload,
-  imageUrls: Record<string, string>
-) {
+function buildSlackBlocks(payload: SlackPayload) {
   const blocks: Record<string, unknown>[] = [];
 
-  // Use section instead of header (webhooks don't support header blocks)
   blocks.push({
     type: "section",
     text: {
@@ -61,7 +56,6 @@ function buildSlackBlocks(
   for (const day of payload.days) {
     if (day.items.length === 0) continue;
 
-    // Build per-item blocks so each can have an image accessory
     blocks.push({
       type: "section",
       text: { type: "mrkdwn", text: `*\ud83d\udcc5 ${day.dayName}, ${day.date}*` },
@@ -77,26 +71,24 @@ function buildSlackBlocks(
         itemText += `\n    _${truncated}_`;
       }
 
-      const block: Record<string, unknown> = {
+      blocks.push({
         type: "section",
         text: { type: "mrkdwn", text: itemText },
-      };
-
-      // Attach image as accessory thumbnail if available
-      if (item.imageKey && imageUrls[item.imageKey]) {
-        block.accessory = {
-          type: "image",
-          image_url: imageUrls[item.imageKey],
-          alt_text: `${item.type}: ${item.title}`,
-        };
-      }
-
-      blocks.push(block);
+      });
     }
   }
 
-  // text field is required fallback for webhook notifications
-  return { text: `\ud83d\udccb Content Ready for Posting — ${payload.companyName}`, blocks };
+  return {
+    text: `\ud83d\udccb Content Ready for Posting \u2014 ${payload.companyName}`,
+    blocks,
+  };
+}
+
+function dataUrlToArrayBuffer(dataUrl: string): ArrayBuffer | null {
+  const match = dataUrl.match(/^data:[^;]+;base64,(.+)$/);
+  if (!match) return null;
+  const buf = Buffer.from(match[1], "base64");
+  return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
 }
 
 export async function POST(request: NextRequest) {
@@ -112,43 +104,53 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Build signed image URLs if companyId is provided
-    const imageUrls: Record<string, string> = {};
-    if (body.companyId) {
-      const origin = new URL(request.url).origin;
-      const images = await getImages(userId, body.companyId);
-      const expires = Math.floor(Date.now() / 1000) + 3600; // 1 hour
-
-      // Collect all image keys from the schedule
-      for (const day of body.days) {
-        for (const item of day.items) {
-          if (!item.imageKey) continue;
-          // For carousels, check the first slide image
-          const keysToTry =
-            item.imageKey.startsWith("carousel-")
-              ? [`${item.imageKey}-slide-0`, item.imageKey]
-              : [item.imageKey];
-
-          for (const key of keysToTry) {
-            if (images[key]) {
-              const sig = signImageParams(userId, body.companyId, key, expires);
-              imageUrls[item.imageKey] =
-                `${origin}/api/images/serve?uid=${encodeURIComponent(userId)}&cid=${encodeURIComponent(body.companyId)}&key=${encodeURIComponent(key)}&exp=${expires}&sig=${sig}`;
-              break;
-            }
-          }
-        }
-      }
-    }
-
-    const message = buildSlackBlocks(body, imageUrls);
+    // Post the schedule message
+    const message = buildSlackBlocks(body);
     const result = await sendSlackNotification(message);
 
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: 502 });
     }
 
-    return NextResponse.json({ ok: true });
+    // Upload images directly to Slack if bot token is configured
+    const botToken = process.env.SLACK_BOT_TOKEN;
+    const channelId = process.env.SLACK_CHANNEL_ID;
+    let imagesUploaded = 0;
+
+    if (botToken && channelId && body.companyId) {
+      const images = await getImages(userId, body.companyId);
+
+      for (const day of body.days) {
+        for (const item of day.items) {
+          if (!item.imageKey) continue;
+
+          // Find the right image key (carousels use slide-0)
+          const keysToTry =
+            item.imageKey.startsWith("carousel-")
+              ? [`${item.imageKey}-slide-0`, item.imageKey]
+              : [item.imageKey];
+
+          for (const key of keysToTry) {
+            if (!images[key]) continue;
+            const buf = dataUrlToArrayBuffer(images[key]);
+            if (!buf) continue;
+
+            const title = `${day.dayName}, ${day.date} \u2014 ${item.type}: ${item.title}`;
+            await uploadAndShareImage(
+              botToken,
+              channelId,
+              buf,
+              `${key}.png`,
+              title
+            );
+            imagesUploaded++;
+            break;
+          }
+        }
+      }
+    }
+
+    return NextResponse.json({ ok: true, imagesUploaded });
   } catch (e) {
     if (e instanceof AuthError) {
       return NextResponse.json({ error: e.message }, { status: e.status });
