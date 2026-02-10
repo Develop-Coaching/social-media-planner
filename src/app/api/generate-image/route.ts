@@ -28,10 +28,11 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { prompt, aspectRatio = "1:1", referenceImage } = body as {
+    const { prompt, aspectRatio = "1:1", referenceImage, characterReferenceImages } = body as {
       prompt: string;
       aspectRatio?: string;
       referenceImage?: string; // base64 data (no data URL prefix)
+      characterReferenceImages?: { base64: string; mimeType: string }[];
     };
 
     if (!prompt || typeof prompt !== "string") {
@@ -41,14 +42,40 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Build contents: text-only or multimodal (reference image + text)
+    // Build contents: text-only or multimodal (reference images + text)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let contents: any = prompt;
-    if (referenceImage) {
-      contents = [
-        { inlineData: { mimeType: "image/png", data: referenceImage } },
-        { text: `Match the exact visual style, color palette, illustration style, layout, and typography of the reference image above. ${prompt}` },
-      ];
+
+    const hasCharImages = characterReferenceImages && characterReferenceImages.length > 0;
+
+    if (referenceImage || hasCharImages) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const parts: any[] = [];
+
+      // Add character reference images first
+      if (hasCharImages) {
+        for (const img of characterReferenceImages) {
+          parts.push({ inlineData: { mimeType: img.mimeType, data: img.base64 } });
+        }
+      }
+
+      // Add style reference image
+      if (referenceImage) {
+        parts.push({ inlineData: { mimeType: "image/png", data: referenceImage } });
+      }
+
+      // Build text instruction
+      let textPrompt = "";
+      if (hasCharImages) {
+        textPrompt += "The reference images show the characters that should appear. Match their appearance closely. ";
+      }
+      if (referenceImage) {
+        textPrompt += "Match the exact visual style, color palette, illustration style, layout, and typography of the style reference image. ";
+      }
+      textPrompt += prompt;
+
+      parts.push({ text: textPrompt });
+      contents = parts;
     }
 
     const response = await ai.models.generateContent({

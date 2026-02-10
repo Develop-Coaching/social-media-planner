@@ -82,9 +82,24 @@ CREATE TABLE drive_tokens (
   email TEXT NOT NULL
 );
 
+-- 8. Characters (multiple characters per company, with optional reference images)
+-- Character images stored in Storage bucket "content-images" at {userId}/{companyId}/characters/{characterId}.{ext}
+CREATE TABLE characters (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id TEXT NOT NULL,
+  company_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  image_storage_path TEXT,
+  image_mime_type TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  FOREIGN KEY (user_id, company_id) REFERENCES companies(user_id, id) ON DELETE CASCADE
+);
+
 -- Indexes for common query patterns
 CREATE INDEX idx_companies_user ON companies(user_id);
 CREATE INDEX idx_memory_files_company ON memory_files(user_id, company_id);
 CREATE INDEX idx_saved_content_company ON saved_content(user_id, company_id);
 CREATE INDEX idx_custom_tones_company ON custom_tones(user_id, company_id);
 CREATE INDEX idx_images_company ON images(user_id, company_id);
+CREATE INDEX idx_characters_company ON characters(user_id, company_id);

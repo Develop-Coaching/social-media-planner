@@ -48,7 +48,7 @@ export async function PUT(request: NextRequest) {
   try {
     const { userId } = await requireAuth();
     const body = await request.json();
-    const { id, ...updates } = body as { id: string; name?: string; logo?: string; brandColors?: string[]; character?: string };
+    const { id, ...updates } = body as { id: string; name?: string; logo?: string; brandColors?: string[] };
 
     if (!id) {
       return NextResponse.json({ error: "id is required" }, { status: 400 });

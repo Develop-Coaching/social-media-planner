@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel } from "docx";
 import { saveAs } from "file-saver";
-import { GeneratedContent, Theme, ToneStyle, LanguageOption } from "@/types";
+import { GeneratedContent, Theme, ToneStyle, LanguageOption, Character } from "@/types";
 import CopyButton from "@/components/ui/CopyButton";
 import EditButton from "@/components/ui/EditButton";
 import { useToast } from "@/components/ToastProvider";
@@ -170,7 +170,7 @@ interface Props {
   onSaveContentNameChange: (name: string) => void;
   onSaveContent: () => void;
   brandColors?: string[];
-  character?: string;
+  characters: Character[];
   onDeleteImage: (key: string) => void;
   onGenerateCarouselImages: (carouselIndex: number) => void;
   onRemoveItem: (section: "posts" | "reels" | "linkedinArticles" | "carousels" | "quotesForX" | "youtube", index: number) => void;
@@ -204,7 +204,7 @@ export default function ContentResults({
   onSaveContentNameChange,
   onSaveContent,
   brandColors,
-  character,
+  characters,
   onDeleteImage,
   onGenerateCarouselImages,
   onRemoveItem,
@@ -1040,8 +1040,9 @@ export default function ContentResults({
     if (brandColors && brandColors.length > 0) {
       enhanced += `. The brand colors are ${brandColors.join(", ")} — use these as a subtle reference for accents and design elements, but do not fill the entire image with these colors`;
     }
-    if (character) {
-      enhanced += `. ${character}`;
+    if (characters.length > 0) {
+      const charDescs = characters.map((c) => `${c.name}: ${c.description}`).join(". ");
+      enhanced += `. Characters/people to feature: ${charDescs}`;
     }
     return enhanced;
   }

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
-import { Company, Theme, ContentCounts, GeneratedContent, SavedContentItem, ToneStyle, CustomToneStyle, LanguageOption, defaultCounts, toneOptions, languageOptions } from "@/types";
+import { useState, useEffect, useCallback } from "react";
+import { Company, Character, Theme, ContentCounts, GeneratedContent, SavedContentItem, ToneStyle, CustomToneStyle, LanguageOption, defaultCounts, toneOptions, languageOptions } from "@/types";
 import Link from "next/link";
 import CompanySelector from "@/components/CompanySelector";
 import MemoryManager from "@/components/MemoryManager";
@@ -9,6 +9,7 @@ import SavedContentList from "@/components/SavedContentList";
 import ThemeSelector from "@/components/ThemeSelector";
 import ContentGenerator from "@/components/ContentGenerator";
 import ContentResults from "@/components/ContentResults";
+import CharacterManager from "@/components/CharacterManager";
 import ContentCalendar from "@/components/ContentCalendar";
 import ThemeToggle from "@/components/ThemeToggle";
 import LogoutButton from "@/components/LogoutButton";
@@ -47,8 +48,8 @@ export default function Home() {
 
   // Brand settings state
   const [showBrandSettings, setShowBrandSettings] = useState(false);
-  const [characterDraft, setCharacterDraft] = useState("");
-  const characterTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [characters, setCharacters] = useState<Character[]>([]);
+  const [charactersLoading, setCharactersLoading] = useState(false);
 
   // Google Drive integration
   const [driveStatus, setDriveStatus] = useState<{ enabled: boolean; authenticated: boolean; email?: string; clientId?: string }>({ enabled: false, authenticated: false });
@@ -103,9 +104,21 @@ export default function Home() {
     }
   }
 
+  async function loadCharacters(companyId: string) {
+    setCharactersLoading(true);
+    try {
+      const res = await fetch(`/api/characters?companyId=${companyId}`);
+      const data = await res.json();
+      if (res.ok && data.characters) setCharacters(data.characters);
+    } catch {
+      // ignore
+    } finally {
+      setCharactersLoading(false);
+    }
+  }
+
   function handleSelectCompany(company: Company) {
     setSelectedCompany(company);
-    setCharacterDraft(company.character || "");
     setSelectedTheme(null);
     setContent(null);
     setImages({});
@@ -113,6 +126,7 @@ export default function Home() {
     loadSavedContent(company.id);
     loadCustomTones(company.id);
     loadImages(company.id);
+    loadCharacters(company.id);
 
     // Autosave: restore if available
     try {
@@ -140,11 +154,12 @@ export default function Home() {
     setSavedContent([]);
     setCurrentSavedId(null);
     setCustomTones([]);
+    setCharacters([]);
     setPostingDates({});
     setAutosaveRestored(false);
   }
 
-  async function updateCompanyBrand(updates: { logo?: string; brandColors?: string[]; character?: string }) {
+  async function updateCompanyBrand(updates: { logo?: string; brandColors?: string[] }) {
     if (!selectedCompany) return;
     try {
       const res = await fetch("/api/companies", {
@@ -189,6 +204,92 @@ export default function Home() {
   function handleRemoveBrandColor(index: number) {
     const current = selectedCompany?.brandColors || [];
     updateCompanyBrand({ brandColors: current.filter((_, i) => i !== index) });
+  }
+
+  async function handleAddCharacter() {
+    if (!selectedCompany) return;
+    try {
+      const res = await fetch("/api/characters", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId: selectedCompany.id, name: "New Character", description: "" }),
+      });
+      if (res.ok) {
+        const char: Character = await res.json();
+        setCharacters((prev) => [...prev, char]);
+      } else {
+        const data = await res.json();
+        toast(data.error || "Failed to add character", "error");
+      }
+    } catch {
+      toast("Failed to add character", "error");
+    }
+  }
+
+  async function handleUpdateCharacter(characterId: string, updates: { name?: string; description?: string }) {
+    if (!selectedCompany) return;
+    try {
+      const res = await fetch("/api/characters", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId: selectedCompany.id, characterId, ...updates }),
+      });
+      if (res.ok) {
+        const updated: Character = await res.json();
+        setCharacters((prev) => prev.map((c) => (c.id === characterId ? updated : c)));
+      }
+    } catch {
+      // ignore debounced update errors
+    }
+  }
+
+  async function handleDeleteCharacter(characterId: string) {
+    if (!selectedCompany) return;
+    try {
+      const res = await fetch(`/api/characters?companyId=${selectedCompany.id}&characterId=${characterId}`, { method: "DELETE" });
+      if (res.ok) {
+        setCharacters((prev) => prev.filter((c) => c.id !== characterId));
+      }
+    } catch {
+      toast("Failed to delete character", "error");
+    }
+  }
+
+  async function handleUploadCharacterImage(characterId: string, dataUrl: string) {
+    if (!selectedCompany) return;
+    try {
+      const res = await fetch("/api/characters", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId: selectedCompany.id, characterId, image: dataUrl }),
+      });
+      if (res.ok) {
+        const updated: Character = await res.json();
+        setCharacters((prev) => prev.map((c) => (c.id === characterId ? updated : c)));
+      } else {
+        const data = await res.json();
+        toast(data.error || "Failed to upload image", "error");
+      }
+    } catch {
+      toast("Failed to upload image", "error");
+    }
+  }
+
+  async function handleRemoveCharacterImage(characterId: string) {
+    if (!selectedCompany) return;
+    try {
+      const res = await fetch("/api/characters", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId: selectedCompany.id, characterId, image: "" }),
+      });
+      if (res.ok) {
+        const updated: Character = await res.json();
+        setCharacters((prev) => prev.map((c) => (c.id === characterId ? updated : c)));
+      }
+    } catch {
+      toast("Failed to remove image", "error");
+    }
   }
 
   function handleSelectTheme(theme: Theme) {
@@ -322,11 +423,26 @@ export default function Home() {
     }
   }, [selectedCompany, selectedTheme, counts, selectedTone, selectedLanguage, toast]);
 
+  function getCharacterReferenceImages(): { base64: string; mimeType: string }[] {
+    return characters
+      .filter((c) => c.imageUrl && c.imageMimeType)
+      .map((c) => {
+        const match = c.imageUrl!.match(/^data:[^;]+;base64,(.+)$/);
+        return {
+          base64: match ? match[1] : c.imageUrl!,
+          mimeType: c.imageMimeType!,
+        };
+      });
+  }
+
   async function generateImage(key: string, prompt: string, aspectRatio?: string, referenceImage?: string): Promise<string | null> {
     setImageLoading((prev) => new Set(prev).add(key));
     try {
-      const body: Record<string, string> = { prompt, aspectRatio: aspectRatio || "1:1" };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const body: Record<string, any> = { prompt, aspectRatio: aspectRatio || "1:1" };
       if (referenceImage) body.referenceImage = referenceImage;
+      const charImages = getCharacterReferenceImages();
+      if (charImages.length > 0) body.characterReferenceImages = charImages;
       const res = await fetch("/api/generate-image", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -385,13 +501,13 @@ export default function Home() {
 
   function addBrandContext(prompt: string): string {
     const colors = selectedCompany?.brandColors;
-    const character = selectedCompany?.character;
     let enhanced = prompt;
     if (colors && colors.length > 0) {
       enhanced += `. The brand colors are ${colors.join(", ")} — use these as a subtle reference for accents and design elements, but do not fill the entire image with these colors`;
     }
-    if (character) {
-      enhanced += `. ${character}`;
+    if (characters.length > 0) {
+      const charDescs = characters.map((c) => `${c.name}: ${c.description}`).join(". ");
+      enhanced += `. Characters/people to feature: ${charDescs}`;
     }
     return enhanced;
   }
@@ -819,7 +935,7 @@ export default function Home() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
             Brand Settings
-            {(selectedCompany.logo || (selectedCompany.brandColors && selectedCompany.brandColors.length > 0) || selectedCompany.character) && (
+            {(selectedCompany.logo || (selectedCompany.brandColors && selectedCompany.brandColors.length > 0) || characters.length > 0) && (
               <span className="w-2 h-2 rounded-full bg-green-500" />
             )}
           </button>
@@ -884,37 +1000,15 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Character / Avatar Description */}
-              <div className="mt-6 pt-6 border-t border-slate-200 dark:border-slate-700">
-                <h4 className="font-medium text-slate-700 dark:text-slate-300 mb-2">Character / Avatar</h4>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
-                  Describe a recurring character or person for consistent image generation (e.g. &quot;A friendly woman in her 30s with curly brown hair and glasses, wearing casual business attire&quot;).
-                </p>
-                <textarea
-                  placeholder="Describe the character that should appear in generated images..."
-                  value={characterDraft}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setCharacterDraft(val);
-                    if (characterTimerRef.current) clearTimeout(characterTimerRef.current);
-                    characterTimerRef.current = setTimeout(() => updateCompanyBrand({ character: val }), 800);
-                  }}
-                  onBlur={() => {
-                    if (characterTimerRef.current) clearTimeout(characterTimerRef.current);
-                    updateCompanyBrand({ character: characterDraft });
-                  }}
-                  rows={3}
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-3 text-sm text-slate-900 dark:text-slate-100 resize-y focus:ring-2 focus:ring-sky-500 focus:border-transparent transition-shadow"
-                />
-                {characterDraft && (
-                  <button
-                    onClick={() => { setCharacterDraft(""); updateCompanyBrand({ character: "" }); }}
-                    className="mt-2 text-sm text-red-500 hover:text-red-700 dark:hover:text-red-400 font-medium"
-                  >
-                    Remove character
-                  </button>
-                )}
-              </div>
+              <CharacterManager
+                characters={characters}
+                loading={charactersLoading}
+                onAdd={handleAddCharacter}
+                onUpdate={handleUpdateCharacter}
+                onDelete={handleDeleteCharacter}
+                onUploadImage={handleUploadCharacterImage}
+                onRemoveImage={handleRemoveCharacterImage}
+              />
             </div>
           )}
         </section>
@@ -1086,7 +1180,7 @@ export default function Home() {
                   onSaveContentNameChange={setSaveContentName}
                   onSaveContent={handleSaveContent}
                   brandColors={selectedCompany.brandColors}
-                  character={selectedCompany.character}
+                  characters={characters}
                   onDeleteImage={(key) => {
                     setImages((prev) => { const next = { ...prev }; delete next[key]; return next; });
                     if (selectedCompany) {

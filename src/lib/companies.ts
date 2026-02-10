@@ -5,7 +5,6 @@ export interface Company {
   name: string;
   logo?: string;
   brandColors?: string[];
-  character?: string;
 }
 
 export interface CompaniesData {
@@ -17,7 +16,6 @@ function rowToCompany(row: any): Company {
   const company: Company = { id: row.id, name: row.name };
   if (row.logo) company.logo = row.logo;
   if (row.brand_colors?.length) company.brandColors = row.brand_colors;
-  if (row.character) company.character = row.character;
   return company;
 }
 
@@ -57,12 +55,11 @@ export async function addCompany(userId: string, name: string): Promise<Company>
   return { id, name };
 }
 
-export async function updateCompany(userId: string, id: string, updates: Partial<Pick<Company, "name" | "logo" | "brandColors" | "character">>): Promise<Company | null> {
+export async function updateCompany(userId: string, id: string, updates: Partial<Pick<Company, "name" | "logo" | "brandColors">>): Promise<Company | null> {
   const dbUpdates: Record<string, unknown> = {};
   if (updates.name !== undefined) dbUpdates.name = updates.name;
   if (updates.logo !== undefined) dbUpdates.logo = updates.logo;
   if (updates.brandColors !== undefined) dbUpdates.brand_colors = updates.brandColors;
-  if (updates.character !== undefined) dbUpdates.character = updates.character;
 
   const { data, error } = await supabase
     .from("companies")
@@ -84,6 +81,14 @@ export async function deleteCompany(userId: string, id: string): Promise<boolean
   if (files?.length) {
     const paths = files.map((f) => `${userId}/${id}/${f.name}`);
     await supabase.storage.from("content-images").remove(paths);
+  }
+  // Clean up character images subfolder
+  const { data: charFiles } = await supabase.storage
+    .from("content-images")
+    .list(`${userId}/${id}/characters`);
+  if (charFiles?.length) {
+    const charPaths = charFiles.map((f) => `${userId}/${id}/characters/${f.name}`);
+    await supabase.storage.from("content-images").remove(charPaths);
   }
 
   const { error } = await supabase

@@ -1,4 +1,5 @@
-export type Company = { id: string; name: string; logo?: string; brandColors?: string[]; character?: string };
+export type Company = { id: string; name: string; logo?: string; brandColors?: string[] };
+export type Character = { id: string; name: string; description: string; imageUrl?: string; imageMimeType?: string; createdAt: string };
 export type MemoryFile = { id: string; name: string; content: string; addedAt: string };
 export type Theme = { id: string; title: string; description: string };
 export type ContentCounts = {
