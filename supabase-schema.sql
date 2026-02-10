@@ -20,6 +20,7 @@ CREATE TABLE companies (
   name TEXT NOT NULL,
   logo TEXT,
   brand_colors TEXT[],
+  character TEXT,
   PRIMARY KEY (user_id, id)
 );
 

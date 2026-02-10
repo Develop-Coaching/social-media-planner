@@ -5,6 +5,7 @@ export interface Company {
   name: string;
   logo?: string;
   brandColors?: string[];
+  character?: string;
 }
 
 export interface CompaniesData {
@@ -16,6 +17,7 @@ function rowToCompany(row: any): Company {
   const company: Company = { id: row.id, name: row.name };
   if (row.logo) company.logo = row.logo;
   if (row.brand_colors?.length) company.brandColors = row.brand_colors;
+  if (row.character) company.character = row.character;
   return company;
 }
 
@@ -55,11 +57,12 @@ export async function addCompany(userId: string, name: string): Promise<Company>
   return { id, name };
 }
 
-export async function updateCompany(userId: string, id: string, updates: Partial<Pick<Company, "name" | "logo" | "brandColors">>): Promise<Company | null> {
+export async function updateCompany(userId: string, id: string, updates: Partial<Pick<Company, "name" | "logo" | "brandColors" | "character">>): Promise<Company | null> {
   const dbUpdates: Record<string, unknown> = {};
   if (updates.name !== undefined) dbUpdates.name = updates.name;
   if (updates.logo !== undefined) dbUpdates.logo = updates.logo;
   if (updates.brandColors !== undefined) dbUpdates.brand_colors = updates.brandColors;
+  if (updates.character !== undefined) dbUpdates.character = updates.character;
 
   const { data, error } = await supabase
     .from("companies")

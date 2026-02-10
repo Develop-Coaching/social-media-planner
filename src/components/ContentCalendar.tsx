@@ -488,8 +488,8 @@ export default function ContentCalendar({ content, startDate, companyName, compa
     return d;
   });
 
-  // Build a fingerprint from items + weekOffset so we know when to re-distribute
-  const contentFingerprint = items.map((it) => it.id).join(",") + `|${weekOffset}`;
+  // Build a fingerprint from items only — weekOffset excluded so items stay on their assigned days
+  const contentFingerprint = items.map((it) => it.id).join(",");
 
   useEffect(() => {
     if (lastDistributedRef.current !== contentFingerprint) {

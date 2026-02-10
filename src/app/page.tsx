@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Company, Theme, ContentCounts, GeneratedContent, SavedContentItem, ToneStyle, CustomToneStyle, LanguageOption, defaultCounts, toneOptions, languageOptions } from "@/types";
 import Link from "next/link";
 import CompanySelector from "@/components/CompanySelector";
@@ -46,6 +46,8 @@ export default function Home() {
 
   // Brand settings state
   const [showBrandSettings, setShowBrandSettings] = useState(false);
+  const [characterDraft, setCharacterDraft] = useState("");
+  const characterTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Google Drive integration
   const [driveStatus, setDriveStatus] = useState<{ enabled: boolean; authenticated: boolean; email?: string; clientId?: string }>({ enabled: false, authenticated: false });
@@ -101,6 +103,7 @@ export default function Home() {
 
   function handleSelectCompany(company: Company) {
     setSelectedCompany(company);
+    setCharacterDraft(company.character || "");
     setSelectedTheme(null);
     setContent(null);
     setImages({});
@@ -137,7 +140,7 @@ export default function Home() {
     setAutosaveRestored(false);
   }
 
-  async function updateCompanyBrand(updates: { logo?: string; brandColors?: string[] }) {
+  async function updateCompanyBrand(updates: { logo?: string; brandColors?: string[]; character?: string }) {
     if (!selectedCompany) return;
     try {
       const res = await fetch("/api/companies", {
@@ -347,7 +350,7 @@ export default function Home() {
     function buildPrompt(slideIndex: number): string {
       const s = c.slides[slideIndex];
       const prompt = `Create a social media carousel slide image. Overall carousel topic with ${c.slides.length} slides: [${allTitles}]. This slide (${slideIndex + 1} of ${c.slides.length}): "${s.title} - ${s.body}". Visual style for ALL slides: ${c.imagePrompt}. IMPORTANT: Use a consistent layout, typography, illustration style, and color scheme that would look unified across all slides in this carousel. Do not include any logo or watermark.`;
-      return addBrandColors(prompt);
+      return addBrandContext(prompt);
     }
 
     // Step 1: Generate slide 1 first to establish the style
@@ -364,10 +367,17 @@ export default function Home() {
     await Promise.all(remaining);
   }
 
-  function addBrandColors(prompt: string): string {
+  function addBrandContext(prompt: string): string {
     const colors = selectedCompany?.brandColors;
-    if (colors && colors.length > 0) return `${prompt}. Use these brand colors: ${colors.join(", ")}`;
-    return prompt;
+    const character = selectedCompany?.character;
+    let enhanced = prompt;
+    if (colors && colors.length > 0) {
+      enhanced += `. The brand colors are ${colors.join(", ")} — use these as a subtle reference for accents and design elements, but do not fill the entire image with these colors`;
+    }
+    if (character) {
+      enhanced += `. ${character}`;
+    }
+    return enhanced;
   }
 
   async function generateAllImages() {
@@ -377,20 +387,20 @@ export default function Home() {
     const jobs: { key: string; prompt: string; aspectRatio: string }[] = [];
     content.posts.forEach((p, i) => {
       const key = `post-${i}`;
-      if (!images[key]) jobs.push({ key, prompt: addBrandColors(p.imagePrompt), aspectRatio: "1:1" });
+      if (!images[key]) jobs.push({ key, prompt: addBrandContext(p.imagePrompt), aspectRatio: "1:1" });
     });
     // Reels have no image prompts
     content.linkedinArticles.forEach((a, i) => {
       const key = `article-${i}`;
-      if (!images[key]) jobs.push({ key, prompt: addBrandColors(a.imagePrompt), aspectRatio: "16:9" });
+      if (!images[key]) jobs.push({ key, prompt: addBrandContext(a.imagePrompt), aspectRatio: "16:9" });
     });
     content.quotesForX.forEach((q, i) => {
       const key = `quote-${i}`;
-      if (!images[key]) jobs.push({ key, prompt: addBrandColors(q.imagePrompt), aspectRatio: "1:1" });
+      if (!images[key]) jobs.push({ key, prompt: addBrandContext(q.imagePrompt), aspectRatio: "1:1" });
     });
     content.youtube.forEach((y, i) => {
       const key = `yt-${i}`;
-      if (!images[key] && y.thumbnailPrompt) jobs.push({ key, prompt: addBrandColors(y.thumbnailPrompt), aspectRatio: "16:9" });
+      if (!images[key] && y.thumbnailPrompt) jobs.push({ key, prompt: addBrandContext(y.thumbnailPrompt), aspectRatio: "16:9" });
     });
 
     // Process non-carousel jobs with max-3-concurrent queue
@@ -706,7 +716,7 @@ export default function Home() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
             Brand Settings
-            {(selectedCompany.logo || (selectedCompany.brandColors && selectedCompany.brandColors.length > 0)) && (
+            {(selectedCompany.logo || (selectedCompany.brandColors && selectedCompany.brandColors.length > 0) || selectedCompany.character) && (
               <span className="w-2 h-2 rounded-full bg-green-500" />
             )}
           </button>
@@ -769,6 +779,38 @@ export default function Home() {
                     {(selectedCompany.brandColors || []).length}/6 colors. Click a swatch to remove it.
                   </p>
                 </div>
+              </div>
+
+              {/* Character / Avatar Description */}
+              <div className="mt-6 pt-6 border-t border-slate-200 dark:border-slate-700">
+                <h4 className="font-medium text-slate-700 dark:text-slate-300 mb-2">Character / Avatar</h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
+                  Describe a recurring character or person for consistent image generation (e.g. &quot;A friendly woman in her 30s with curly brown hair and glasses, wearing casual business attire&quot;).
+                </p>
+                <textarea
+                  placeholder="Describe the character that should appear in generated images..."
+                  value={characterDraft}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setCharacterDraft(val);
+                    if (characterTimerRef.current) clearTimeout(characterTimerRef.current);
+                    characterTimerRef.current = setTimeout(() => updateCompanyBrand({ character: val }), 800);
+                  }}
+                  onBlur={() => {
+                    if (characterTimerRef.current) clearTimeout(characterTimerRef.current);
+                    updateCompanyBrand({ character: characterDraft });
+                  }}
+                  rows={3}
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-3 text-sm text-slate-900 dark:text-slate-100 resize-y focus:ring-2 focus:ring-sky-500 focus:border-transparent transition-shadow"
+                />
+                {characterDraft && (
+                  <button
+                    onClick={() => { setCharacterDraft(""); updateCompanyBrand({ character: "" }); }}
+                    className="mt-2 text-sm text-red-500 hover:text-red-700 dark:hover:text-red-400 font-medium"
+                  >
+                    Remove character
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -906,6 +948,7 @@ export default function Home() {
                   onSaveContentNameChange={setSaveContentName}
                   onSaveContent={handleSaveContent}
                   brandColors={selectedCompany.brandColors}
+                  character={selectedCompany.character}
                   onDeleteImage={(key) => {
                     setImages((prev) => { const next = { ...prev }; delete next[key]; return next; });
                     if (selectedCompany) {

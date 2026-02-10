@@ -139,6 +139,7 @@ interface Props {
   onSaveContentNameChange: (name: string) => void;
   onSaveContent: () => void;
   brandColors?: string[];
+  character?: string;
   onDeleteImage: (key: string) => void;
   onGenerateCarouselImages: (carouselIndex: number) => void;
   onRemoveItem: (section: "posts" | "reels" | "linkedinArticles" | "carousels" | "quotesForX" | "youtube", index: number) => void;
@@ -169,6 +170,7 @@ export default function ContentResults({
   onSaveContentNameChange,
   onSaveContent,
   brandColors,
+  character,
   onDeleteImage,
   onGenerateCarouselImages,
   onRemoveItem,
@@ -883,7 +885,7 @@ export default function ContentResults({
               onClick={() => {
                 const feedback = imageRegenFeedback.trim();
                 const basePrompt = feedback ? `${prompt}. IMPORTANT CHANGE: ${feedback}` : prompt;
-                onGenerateImage(key, withBrandColors(basePrompt), aspectRatio);
+                onGenerateImage(key, withBrandContext(basePrompt), aspectRatio);
                 setImageRegenKey(null);
                 setImageRegenFeedback("");
               }}
@@ -945,7 +947,7 @@ export default function ContentResults({
           className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-sky-500"
         />
         <button
-          onClick={() => onGenerateImage(key, withBrandColors(prompt), aspectRatio)}
+          onClick={() => onGenerateImage(key, withBrandContext(prompt), aspectRatio)}
           disabled={imageLoading.has(key) || !prompt.trim()}
           className="mt-2 inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-sky-600 text-white text-sm font-medium hover:bg-sky-700 disabled:opacity-50 transition-colors"
         >
@@ -964,11 +966,15 @@ export default function ContentResults({
     return `Create a social media carousel slide image. Overall carousel topic with ${carousel.slides.length} slides: [${allTitles}]. This slide (${slideIndex + 1} of ${carousel.slides.length}): "${s.title} - ${s.body}". Visual style for ALL slides: ${carousel.imagePrompt}. IMPORTANT: Use a consistent layout, typography, illustration style, and color scheme that would look unified across all slides in this carousel. Do not include any logo or watermark.`;
   }
 
-  function withBrandColors(prompt: string): string {
+  function withBrandContext(prompt: string): string {
+    let enhanced = prompt;
     if (brandColors && brandColors.length > 0) {
-      return `${prompt}. Use these brand colors: ${brandColors.join(", ")}`;
+      enhanced += `. The brand colors are ${brandColors.join(", ")} — use these as a subtle reference for accents and design elements, but do not fill the entire image with these colors`;
     }
-    return prompt;
+    if (character) {
+      enhanced += `. ${character}`;
+    }
+    return enhanced;
   }
 
   function freshClass(key: string): string {
@@ -1441,7 +1447,7 @@ export default function ContentResults({
                                   Generating slide {j + 1}...
                                 </div>
                               ) : (
-                                <button onClick={() => onGenerateImage(slideKey, withBrandColors(buildCarouselSlidePrompt(c, j)), "1:1")} className="text-sm text-sky-600 dark:text-sky-400 hover:text-sky-800 dark:hover:text-sky-300 font-medium">
+                                <button onClick={() => onGenerateImage(slideKey, withBrandContext(buildCarouselSlidePrompt(c, j)), "1:1")} className="text-sm text-sky-600 dark:text-sky-400 hover:text-sky-800 dark:hover:text-sky-300 font-medium">
                                   Generate slide image
                                 </button>
                               )}
