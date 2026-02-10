@@ -139,7 +139,7 @@ export async function uploadAndShareImage(
  * Bot API is used separately for image uploads only.
  */
 export async function sendSlackNotification(
-  payload: { text: string; blocks: Record<string, unknown>[] },
+  payload: { text: string; blocks?: Record<string, unknown>[] },
   overrideWebhookUrl?: string
 ): Promise<SlackResult> {
   const { webhookUrl } = getConfig();
@@ -148,11 +148,14 @@ export async function sendSlackNotification(
     return { ok: false, error: "Slack is not configured. Set SLACK_WEBHOOK_URL in your environment variables." };
   }
 
+  // Only send text — blocks cause invalid_blocks_format with webhooks
+  const body: Record<string, unknown> = { text: payload.text };
+
   try {
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(body),
     });
     if (!res.ok) {
       const text = await res.text();

@@ -80,9 +80,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Post the schedule message via webhook (plain text, no blocks — most reliable)
+    // Post the schedule message via webhook (plain text only — most reliable)
     const text = buildSlackText(body);
-    const result = await sendSlackNotification({ text, blocks: [] });
+    const result = await sendSlackNotification({ text });
 
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: 502 });
