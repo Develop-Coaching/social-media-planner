@@ -134,23 +134,18 @@ export async function uploadAndShareImage(
 }
 
 /**
- * Send a Slack notification — prefers Bot API if configured, falls back to webhook.
+ * Send a Slack notification via webhook.
+ * Always uses the webhook for the schedule message (most reliable for block formatting).
+ * Bot API is used separately for image uploads only.
  */
 export async function sendSlackNotification(
   payload: { text: string; blocks: Record<string, unknown>[] },
   overrideWebhookUrl?: string
 ): Promise<SlackResult> {
-  const { botToken, channelId, webhookUrl } = getConfig();
-
-  // Prefer bot API if configured
-  if (botToken && channelId) {
-    return postSlackMessage(botToken, channelId, payload.text, payload.blocks);
-  }
-
-  // Fall back to webhook
+  const { webhookUrl } = getConfig();
   const url = overrideWebhookUrl || webhookUrl;
   if (!url) {
-    return { ok: false, error: "Slack is not configured. Set SLACK_BOT_TOKEN + SLACK_CHANNEL_ID or SLACK_WEBHOOK_URL." };
+    return { ok: false, error: "Slack is not configured. Set SLACK_WEBHOOK_URL in your environment variables." };
   }
 
   try {
