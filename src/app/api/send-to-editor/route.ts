@@ -113,7 +113,7 @@ export async function POST(request: NextRequest) {
 
     // Build Slack message
     const slackBlocks = buildEditorSlackBlocks(body, driveLink);
-    const editingWebhook = process.env.SLACK_EDITING_WEBHOOK_URL;
+    const editingWebhook = process.env.SLACK_SEND_TO_EDITOR_WEBHOOK_URL;
 
     // Run Slack + Asana in parallel (independent)
     const [slackResult, asanaResult] = await Promise.all([
