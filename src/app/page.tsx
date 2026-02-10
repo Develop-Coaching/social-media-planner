@@ -284,16 +284,26 @@ export default function Home() {
       let fullText = "";
       let lastUpdate = 0;
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        fullText += chunk;
-        const now = Date.now();
-        if (now - lastUpdate >= 100) {
-          setStreamingText(fullText);
-          lastUpdate = now;
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value, { stream: true });
+          fullText += chunk;
+          const now = Date.now();
+          if (now - lastUpdate >= 100) {
+            setStreamingText(fullText);
+            lastUpdate = now;
+          }
         }
+        // Flush any remaining bytes from the decoder
+        const remaining = decoder.decode();
+        if (remaining) fullText += remaining;
+      } catch {
+        // Network error during streaming — preserve whatever we received
+        setStreamingText(fullText);
+        toast("Connection lost during generation — partial content shown below", "error");
+        return;
       }
       setStreamingText(fullText);
 
@@ -304,12 +314,13 @@ export default function Home() {
         setStreamingText("");
         toast("Content generated successfully", "success");
       } catch {
-        toast("Failed to parse generated content", "error");
+        // Parse failed — streamingText is preserved so the raw output stays visible
+        toast("Failed to parse generated content — raw output shown below", "error");
       }
     } finally {
       setContentLoading(false);
     }
-  }, [selectedCompany, selectedTheme, counts, selectedTone, toast]);
+  }, [selectedCompany, selectedTheme, counts, selectedTone, selectedLanguage, toast]);
 
   async function generateImage(key: string, prompt: string, aspectRatio?: string, referenceImage?: string): Promise<string | null> {
     setImageLoading((prev) => new Set(prev).add(key));
@@ -975,6 +986,40 @@ export default function Home() {
               Generating content... <ElapsedTimer />
             </h2>
             <pre className="text-xs text-slate-500 dark:text-slate-400 whitespace-pre-wrap max-h-64 overflow-y-auto bg-slate-50 dark:bg-slate-900/50 rounded-xl p-4 font-mono">
+              {streamingText}
+            </pre>
+          </section>
+        )}
+
+        {!contentLoading && !content && streamingText && (
+          <section className="mb-8 rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-lg border border-amber-300 dark:border-amber-700">
+            <h2 className="text-lg font-semibold text-amber-700 dark:text-amber-400 mb-2 flex items-center gap-2">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+              Content could not be processed
+            </h2>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mb-3">
+              The AI response could not be parsed. This can happen with large content batches. You can copy the raw output below or try generating again.
+            </p>
+            <div className="flex gap-2 mb-3">
+              <button
+                onClick={() => { navigator.clipboard.writeText(streamingText); toast("Copied to clipboard", "success"); }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-700 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                Copy raw output
+              </button>
+              <button
+                onClick={() => { setStreamingText(""); }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-slate-500 dark:text-slate-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+              >
+                Dismiss
+              </button>
+            </div>
+            <pre className="text-xs text-slate-500 dark:text-slate-400 whitespace-pre-wrap max-h-96 overflow-y-auto bg-slate-50 dark:bg-slate-900/50 rounded-xl p-4 font-mono">
               {streamingText}
             </pre>
           </section>

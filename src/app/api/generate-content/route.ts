@@ -78,7 +78,7 @@ Respond with a single JSON object with keys: posts, reels, linkedinArticles, car
 
     const stream = anthropic.messages.stream({
       model: "claude-sonnet-4-20250514",
-      max_tokens: 8192,
+      max_tokens: 16384,
       messages: [{ role: "user", content: prompt }],
     });
 
