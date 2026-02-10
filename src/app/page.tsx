@@ -347,10 +347,7 @@ export default function Home() {
       const key = `post-${i}`;
       if (!images[key]) jobs.push({ key, prompt: addBrandColors(p.imagePrompt), aspectRatio: "1:1" });
     });
-    content.reels.forEach((r, i) => {
-      const key = `reel-${i}`;
-      if (!images[key] && r.imagePrompt) jobs.push({ key, prompt: addBrandColors(r.imagePrompt), aspectRatio: "9:16" });
-    });
+    // Reels have no image prompts
     content.linkedinArticles.forEach((a, i) => {
       const key = `article-${i}`;
       if (!images[key]) jobs.push({ key, prompt: addBrandColors(a.imagePrompt), aspectRatio: "16:9" });

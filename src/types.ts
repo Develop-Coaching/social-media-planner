@@ -11,7 +11,7 @@ export type ContentCounts = {
 };
 export type GeneratedContent = {
   posts: { title: string; caption: string; imagePrompt: string }[];
-  reels: { script: string; caption: string; imagePrompt?: string }[];
+  reels: { script: string; caption: string }[];
   linkedinArticles: { title: string; caption: string; body: string; imagePrompt: string }[];
   carousels: { slides: { title: string; body: string }[]; imagePrompt: string }[];
   quotesForX: { quote: string; imagePrompt: string }[];
