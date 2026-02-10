@@ -221,6 +221,10 @@ export default function ContentResults({
   const [driveUploading, setDriveUploading] = useState(false);
   const [showDriveImport, setShowDriveImport] = useState(false);
 
+  // Send to Editor state
+  const [sentToEditor, setSentToEditor] = useState<Set<string>>(new Set());
+  const [sendingToEditor, setSendingToEditor] = useState<Set<string>>(new Set());
+
   // Feature 3: Freshly regenerated items indicator
   const [freshlyRegenerated, setFreshlyRegenerated] = useState<Set<string>>(new Set());
   const freshTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -425,6 +429,50 @@ export default function ContentResults({
     );
   }
 
+  async function handleSendToEditor(reelIndex: number) {
+    const key = `reel-${reelIndex}`;
+    if (sentToEditor.has(key) || sendingToEditor.has(key)) return;
+
+    setSendingToEditor(prev => new Set(prev).add(key));
+    try {
+      const reel = content.reels[reelIndex];
+      const res = await fetch("/api/send-to-editor", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyName,
+          companyId,
+          themeName: theme.title,
+          reelIndex,
+          script: reel.script,
+          caption: reel.caption || "",
+        }),
+      });
+      const data = await res.json();
+
+      if (data.ok) {
+        setSentToEditor(prev => new Set(prev).add(key));
+        const parts: string[] = [];
+        if (data.slack?.ok) parts.push("Slack");
+        if (data.asana?.ok) parts.push("Asana");
+        toast(`Sent to editor via ${parts.join(" & ")}`, "success");
+      } else {
+        const errors: string[] = [];
+        if (data.slack?.error) errors.push(`Slack: ${data.slack.error}`);
+        if (data.asana?.error) errors.push(`Asana: ${data.asana.error}`);
+        toast(errors.join(". ") || "Failed to send to editor", "error");
+      }
+    } catch {
+      toast("Network error sending to editor", "error");
+    } finally {
+      setSendingToEditor(prev => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+    }
+  }
+
   function updatePost(index: number, field: "title" | "caption" | "imagePrompt", value: string) {
     maybePushUndo("posts", `post-${index}-${field}`);
     const newPosts = [...content.posts];
@@ -446,7 +494,7 @@ export default function ContentResults({
     onChange({ ...content, linkedinArticles: newArticles });
   }
 
-  function updateCarousel(index: number, field: "imagePrompt", value: string) {
+  function updateCarousel(index: number, field: "imagePrompt" | "caption", value: string) {
     maybePushUndo("carousels", `carousel-${index}-${field}`);
     const newCarousels = [...content.carousels];
     newCarousels[index] = { ...newCarousels[index], [field]: value };
@@ -569,6 +617,13 @@ export default function ContentResults({
         new Paragraph({ text: `Carousel ${index + 1}`, heading: HeadingLevel.HEADING_2 }),
         new Paragraph({ text: "" }),
       );
+      if (c.caption) {
+        children.push(
+          new Paragraph({ children: [new TextRun({ text: "Caption:", bold: true })] }),
+          new Paragraph({ children: [new TextRun({ text: c.caption })] }),
+          new Paragraph({ text: "" }),
+        );
+      }
       c.slides.forEach((s, j) => {
         children.push(
           new Paragraph({ children: [new TextRun({ text: `Slide ${j + 1}: ${s.title}`, bold: true })] }),
@@ -656,7 +711,7 @@ export default function ContentResults({
     content.reels.forEach((r, i) => rows.push(["Reel", `Reel ${i + 1}`, `${r.caption ? `Caption: ${r.caption}\n\n` : ""}Script: ${r.script}`, ""]));
     content.linkedinArticles.forEach((a) => rows.push(["LinkedIn Article", a.title, `${a.caption ? `Caption: ${a.caption}\n\n` : ""}${a.body}`, a.imagePrompt]));
     content.carousels.forEach((c, i) => {
-      const slideText = c.slides.map((s, j) => `Slide ${j + 1}: ${s.title}\n${s.body}`).join("\n\n");
+      const slideText = (c.caption ? `Caption: ${c.caption}\n\n` : "") + c.slides.map((s, j) => `Slide ${j + 1}: ${s.title}\n${s.body}`).join("\n\n");
       rows.push(["Carousel", `Carousel ${i + 1}`, slideText, c.imagePrompt]);
     });
     content.quotesForX.forEach((q) => rows.push(["Quote (X)", q.quote, q.quote, q.imagePrompt]));
@@ -1108,6 +1163,32 @@ export default function ContentResults({
                     <CopyButton text={`${r.caption || ""}\n\n${r.script}`} label="Copy" />
                     <EditButton isEditing={isEditing} onToggle={() => setEditingKey(isEditing ? null : key)} />
                     {content.reels.length > 1 && <RemoveButton onClick={() => onRemoveItem("reels", i)} />}
+                    <button
+                      onClick={() => handleSendToEditor(i)}
+                      disabled={sendingToEditor.has(key) || sentToEditor.has(key)}
+                      className={`inline-flex items-center gap-1.5 text-sm font-medium transition-colors ${
+                        sentToEditor.has(key)
+                          ? "text-green-600 dark:text-green-400"
+                          : "text-slate-600 dark:text-slate-400 hover:text-violet-600 dark:hover:text-violet-400"
+                      } disabled:opacity-70`}
+                    >
+                      {sendingToEditor.has(key) ? (
+                        <>
+                          <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" /></svg>
+                          Sending...
+                        </>
+                      ) : sentToEditor.has(key) ? (
+                        <>
+                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
+                          Sent
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
+                          Send to Editor
+                        </>
+                      )}
+                    </button>
                   </div>
                 </div>
                 {isEditing ? (
@@ -1224,7 +1305,7 @@ export default function ContentResults({
           {content.carousels.map((c, i) => {
             const key = `carousel-${i}`;
             const isEditing = editingKey === key;
-            const carouselText = c.slides.map((s, j) => `Slide ${j + 1}: ${s.title}\n${s.body}`).join("\n\n");
+            const carouselText = (c.caption ? `Caption:\n${c.caption}\n\n` : "") + c.slides.map((s, j) => `Slide ${j + 1}: ${s.title}\n${s.body}`).join("\n\n");
             const isFresh = freshlyRegenerated.has(key);
             return (
               <div key={i} className={`mb-4 p-5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700 transition-all ${freshClass(key)}`}>
@@ -1237,8 +1318,20 @@ export default function ContentResults({
                     {content.carousels.length > 1 && <RemoveButton onClick={() => onRemoveItem("carousels", i)} />}
                   </div>
                 </div>
+                {/* Carousel caption */}
+                {c.caption && !isEditing && (
+                  <div className="mb-4 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-semibold text-amber-600 dark:text-amber-400 uppercase tracking-wide">Post Caption</span>
+                      <CopyButton text={c.caption} label="Copy caption" />
+                    </div>
+                    <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap">{c.caption}</p>
+                  </div>
+                )}
                 {isEditing ? (
                   <>
+                    <label className="block text-xs text-slate-500 mb-1">Post caption:</label>
+                    <textarea value={c.caption || ""} onChange={(e) => updateCarousel(i, "caption", e.target.value)} rows={3} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm mb-4 focus:ring-2 focus:ring-sky-500" placeholder="Social media caption for this carousel..." />
                     {c.slides.map((s, j) => (
                       <div key={j} className="mb-4 pb-4 border-b border-slate-200 dark:border-slate-700 last:border-0">
                         <label className="block text-xs text-slate-500 mb-1">Slide {j + 1} title:</label>
