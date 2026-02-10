@@ -44,6 +44,7 @@ CREATE TABLE saved_content (
   theme JSONB NOT NULL,
   content JSONB NOT NULL,
   saved_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  status TEXT NOT NULL DEFAULT 'active',
   FOREIGN KEY (user_id, company_id) REFERENCES companies(user_id, id) ON DELETE CASCADE
 );
 

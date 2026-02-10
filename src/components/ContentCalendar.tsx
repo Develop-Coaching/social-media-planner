@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { GeneratedContent } from "@/types";
 
 interface CalendarItem {
@@ -27,6 +27,8 @@ interface Props {
   companyId: string;
   themeName: string;
   images?: Record<string, string>;
+  postingDates?: Record<string, string>;
+  onPostingDateChange?: (itemId: string, date: string | null) => void;
 }
 
 const TYPE_COLORS: Record<string, string> = {
@@ -131,14 +133,43 @@ function getNextMonday(from: Date): Date {
   return d;
 }
 
-function distributeItems(items: CalendarItem[]): CalendarItem[][] {
+function distributeItemsDateAware(
+  items: CalendarItem[],
+  weekDays: Date[],
+  postingDates: Record<string, string>
+): CalendarItem[][] {
   const schedule: CalendarItem[][] = Array.from({ length: 7 }, () => []);
   if (items.length === 0) return schedule;
-  // Spread items evenly across 5 weekdays (Mon-Fri), weekends empty
-  items.forEach((item, i) => {
-    const dayIndex = i % 5;
-    schedule[dayIndex].push(item);
+
+  // Build ISO date → day index map for the current week
+  const dateToDay: Record<string, number> = {};
+  weekDays.forEach((d, i) => {
+    const iso = d.toISOString().slice(0, 10);
+    dateToDay[iso] = i;
   });
+
+  const undated: CalendarItem[] = [];
+
+  // Place items with assigned dates
+  items.forEach((item) => {
+    const assignedDate = postingDates[item.id];
+    if (assignedDate && dateToDay[assignedDate] !== undefined) {
+      schedule[dateToDay[assignedDate]].push(item);
+    } else if (!assignedDate) {
+      undated.push(item);
+    }
+    // Items with a date outside the current week are excluded
+  });
+
+  // Auto-distribute undated items across weekdays (Mon-Fri) round-robin
+  if (undated.length > 0) {
+    let slot = 0;
+    undated.forEach((item) => {
+      schedule[slot % 5].push(item);
+      slot++;
+    });
+  }
+
   return schedule;
 }
 
@@ -467,38 +498,28 @@ function getItemThumbnail(item: CalendarItem, images: Record<string, string>): s
 
 // ---------- Component ----------
 
-export default function ContentCalendar({ content, startDate, companyName, companyId, themeName, images = {} }: Props) {
+export default function ContentCalendar({ content, startDate, companyName, companyId, themeName, images = {}, postingDates = {}, onPostingDateChange }: Props) {
   const [weekOffset, setWeekOffset] = useState(0);
   const [modalItem, setModalItem] = useState<CalendarItem | null>(null);
-  const [schedule, setSchedule] = useState<CalendarItem[][]>(() => []);
   const [dragOverDay, setDragOverDay] = useState<number | null>(null);
   const [slackStatus, setSlackStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [slackSending, setSlackSending] = useState(false);
-
-  // Track which content + weekOffset we last distributed for
-  const lastDistributedRef = useRef<string>("");
 
   const items = useMemo(() => collectItems(content), [content]);
   const monday = getNextMonday(startDate);
   monday.setDate(monday.getDate() + weekOffset * 7);
 
-  const weekDays = Array.from({ length: 7 }, (_, i) => {
+  const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => {
     const d = new Date(monday);
     d.setDate(d.getDate() + i);
     return d;
-  });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [monday.getTime()]);
 
-  // Build a fingerprint from items only — weekOffset excluded so items stay on their assigned days
-  const contentFingerprint = items.map((it) => it.id).join(",");
-
-  useEffect(() => {
-    if (lastDistributedRef.current !== contentFingerprint) {
-      lastDistributedRef.current = contentFingerprint;
-      setSchedule(distributeItems(items));
-      setModalItem(null);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contentFingerprint]);
+  const schedule = useMemo(
+    () => distributeItemsDateAware(items, weekDays, postingDates),
+    [items, weekDays, postingDates]
+  );
 
   const totalItems = items.length;
 
@@ -555,16 +576,13 @@ export default function ContentCalendar({ content, startDate, companyName, compa
       const { fromDay, itemId } = data;
       if (fromDay === toDay) return;
 
-      setSchedule((prev) => {
-        const next = prev.map((dayItems) => [...dayItems]);
-        const sourceIndex = next[fromDay].findIndex((it) => it.id === itemId);
-        if (sourceIndex === -1) return prev;
-        const [moved] = next[fromDay].splice(sourceIndex, 1);
-        next[toDay].push(moved);
-        return next;
-      });
+      // Set the posting date for the dropped item to the target day's ISO date
+      if (onPostingDateChange && weekDays[toDay]) {
+        const isoDate = weekDays[toDay].toISOString().slice(0, 10);
+        onPostingDateChange(itemId, isoDate);
+      }
     },
-    []
+    [onPostingDateChange, weekDays]
   );
 
   // ---------- ICS export ----------

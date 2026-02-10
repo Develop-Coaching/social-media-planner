@@ -4,6 +4,7 @@ import {
   addSavedContent,
   deleteSavedContent,
   updateSavedContent,
+  markCompleted,
   SavedContentItem,
 } from "@/lib/saved-content";
 import { requireAuth, AuthError } from "@/lib/auth-helpers";
@@ -108,6 +109,41 @@ export async function PUT(request: NextRequest) {
     console.error(e);
     return NextResponse.json(
       { error: "Failed to update saved content" },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const { userId } = await requireAuth();
+    const body = await request.json();
+    const { companyId, id } = body as { companyId?: string; id?: string };
+
+    if (!companyId || !id) {
+      return NextResponse.json(
+        { error: "companyId and id are required" },
+        { status: 400 }
+      );
+    }
+
+    const updated = await markCompleted(userId, companyId, id);
+
+    if (!updated) {
+      return NextResponse.json(
+        { error: "Saved content not found" },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (e) {
+    if (e instanceof AuthError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
+    console.error(e);
+    return NextResponse.json(
+      { error: "Failed to mark content as completed" },
       { status: 500 }
     );
   }

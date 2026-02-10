@@ -13,6 +13,7 @@ export interface SavedContentItem {
     youtube: { title: string; script: string; thumbnailPrompt?: string }[];
   };
   savedAt: string;
+  status?: "active" | "completed";
 }
 
 export interface SavedContentData {
@@ -27,6 +28,7 @@ function rowToItem(row: any): SavedContentItem {
     theme: row.theme,
     content: row.content,
     savedAt: row.saved_at,
+    status: row.status || "active",
   };
 }
 
@@ -83,6 +85,20 @@ export async function updateSavedContent(
   const { error } = await supabase
     .from("saved_content")
     .update({ content })
+    .eq("id", id)
+    .eq("user_id", userId)
+    .eq("company_id", companyId);
+  return !error;
+}
+
+export async function markCompleted(
+  userId: string,
+  companyId: string,
+  id: string
+): Promise<boolean> {
+  const { error } = await supabase
+    .from("saved_content")
+    .update({ status: "completed" })
     .eq("id", id)
     .eq("user_id", userId)
     .eq("company_id", companyId);

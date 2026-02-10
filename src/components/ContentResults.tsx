@@ -117,6 +117,37 @@ function RemoveButton({ onClick }: { onClick: () => void }) {
   );
 }
 
+function PostingDatePicker({ itemId, date, onChange }: { itemId: string; date?: string; onChange?: (itemId: string, date: string | null) => void }) {
+  if (!onChange) return null;
+  return (
+    <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
+      <svg className="w-4 h-4 text-slate-400 dark:text-slate-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+      </svg>
+      <input
+        type="date"
+        value={date || ""}
+        onChange={(e) => onChange(itemId, e.target.value || null)}
+        className="text-sm bg-transparent border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1 text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-sky-500 focus:border-transparent"
+      />
+      {date && (
+        <button
+          onClick={() => onChange(itemId, null)}
+          className="text-xs text-slate-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+          title="Clear date"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      )}
+      {!date && (
+        <span className="text-xs text-slate-400 dark:text-slate-500">No posting date</span>
+      )}
+    </div>
+  );
+}
+
 interface Props {
   content: GeneratedContent;
   onChange: (content: GeneratedContent) => void;
@@ -147,6 +178,8 @@ interface Props {
   onDriveAuth?: (code: string) => Promise<boolean>;
   onDriveImport?: (importedImages: Record<string, string>) => void;
   themeName?: string;
+  postingDates?: Record<string, string>;
+  onPostingDateChange?: (itemId: string, date: string | null) => void;
 }
 
 export default function ContentResults({
@@ -179,6 +212,8 @@ export default function ContentResults({
   onDriveAuth,
   onDriveImport,
   themeName,
+  postingDates = {},
+  onPostingDateChange,
 }: Props) {
   const { toast } = useToast();
   const [editingKey, setEditingKey] = useState<string | null>(null);
@@ -1231,6 +1266,7 @@ export default function ContentResults({
                 )}
                 {images[key] && renderImageWithRegenerate(key, p.imagePrompt, `post-${i + 1}.png`)}
                 {renderAlwaysVisiblePrompt(key, p.imagePrompt, (v) => updatePost(i, "imagePrompt", v), undefined, { type: "social media post", text: `${p.title}\n${p.caption}` })}
+                <PostingDatePicker itemId={key} date={postingDates[key]} onChange={onPostingDateChange} />
               </div>
             );
           })}
@@ -1318,6 +1354,7 @@ export default function ContentResults({
                     )}
                   </>
                 )}
+                <PostingDatePicker itemId={key} date={postingDates[key]} onChange={onPostingDateChange} />
               </div>
             );
           })}
@@ -1383,6 +1420,7 @@ export default function ContentResults({
                 )}
                 {images[key] && renderImageWithRegenerate(key, a.imagePrompt, `article-${i + 1}-hero.png`, "16:9")}
                 {renderAlwaysVisiblePrompt(key, a.imagePrompt, (v) => updateArticle(i, "imagePrompt", v), "16:9", { type: "LinkedIn article hero image", text: `${a.title}\n${a.caption}` })}
+                <PostingDatePicker itemId={key} date={postingDates[key]} onChange={onPostingDateChange} />
               </div>
             );
           })}
@@ -1503,6 +1541,7 @@ export default function ContentResults({
                     <p className="text-xs text-slate-500 mt-3 bg-slate-100 dark:bg-slate-800 p-2 rounded-lg">Style: {c.imagePrompt}</p>
                   </>
                 )}
+                <PostingDatePicker itemId={key} date={postingDates[key]} onChange={onPostingDateChange} />
               </div>
             );
           })}
@@ -1555,6 +1594,7 @@ export default function ContentResults({
                 )}
                 {images[key] && renderImageWithRegenerate(key, q.imagePrompt, `quote-${i + 1}.png`, "1:1")}
                 {renderAlwaysVisiblePrompt(key, q.imagePrompt, (v) => updateQuote(i, "imagePrompt", v), "1:1", { type: "quote card", text: q.quote })}
+                <PostingDatePicker itemId={key} date={postingDates[key]} onChange={onPostingDateChange} />
               </div>
             );
           })}
@@ -1609,6 +1649,7 @@ export default function ContentResults({
                 )}
                 {images[key] && renderImageWithRegenerate(key, y.thumbnailPrompt || "", `youtube-${i + 1}-thumbnail.png`, "16:9")}
                 {renderAlwaysVisiblePrompt(key, y.thumbnailPrompt || "", (v) => updateYoutube(i, "thumbnailPrompt", v), "16:9", { type: "YouTube thumbnail", text: `${y.title}\n${y.script.slice(0, 500)}` })}
+                <PostingDatePicker itemId={`youtube-${i}`} date={postingDates[`youtube-${i}`]} onChange={onPostingDateChange} />
               </div>
             );
           })}

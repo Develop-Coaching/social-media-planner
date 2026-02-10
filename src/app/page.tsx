@@ -29,6 +29,7 @@ export default function Home() {
   const [imageLoading, setImageLoading] = useState<Set<string>>(new Set());
   const [streamingText, setStreamingText] = useState("");
   const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
+  const [postingDates, setPostingDates] = useState<Record<string, string>>({});
 
   // Saved content state
   const [savedContent, setSavedContent] = useState<SavedContentItem[]>([]);
@@ -82,6 +83,7 @@ export default function Home() {
     const data = {
       theme: selectedTheme,
       content,
+      postingDates,
       savedAt: Date.now(),
     };
     try {
@@ -89,7 +91,7 @@ export default function Home() {
     } catch {
       // localStorage quota exceeded - silently fail
     }
-  }, [autosaveRestored, selectedCompany, selectedTheme, content]);
+  }, [autosaveRestored, selectedCompany, selectedTheme, content, postingDates]);
 
   async function loadImages(companyId: string) {
     try {
@@ -120,6 +122,7 @@ export default function Home() {
         if (data.content && data.theme) {
           setSelectedTheme(data.theme);
           setContent(data.content);
+          if (data.postingDates) setPostingDates(data.postingDates);
           toast("Restored your previous work", "info");
         }
       }
@@ -137,6 +140,7 @@ export default function Home() {
     setSavedContent([]);
     setCurrentSavedId(null);
     setCustomTones([]);
+    setPostingDates({});
     setAutosaveRestored(false);
   }
 
@@ -251,6 +255,7 @@ export default function Home() {
     setContentLoading(true);
     setContent(null);
     setImages({});
+    setPostingDates({});
     setCurrentSavedId(null);
     setStreamingText("");
     // Clear persisted images for fresh generation
@@ -421,6 +426,15 @@ export default function Home() {
     });
   }
 
+  function handlePostingDateChange(itemId: string, date: string | null) {
+    setPostingDates((prev) => {
+      if (date) return { ...prev, [itemId]: date };
+      const next = { ...prev };
+      delete next[itemId];
+      return next;
+    });
+  }
+
   function handleRemoveItem(section: "posts" | "reels" | "linkedinArticles" | "carousels" | "quotesForX" | "youtube", index: number) {
     if (!content || !selectedCompany) return;
     const arr = content[section] as unknown[];
@@ -493,6 +507,53 @@ export default function Home() {
 
       return next;
     });
+
+    // Re-index posting dates for this section
+    // Posting date keys match calendar item IDs (youtube uses "youtube-" not "yt-")
+    const datePrefixMap: Record<string, string> = {
+      posts: "post",
+      reels: "reel",
+      linkedinArticles: "article",
+      carousels: "carousel",
+      quotesForX: "quote",
+      youtube: "youtube",
+    };
+    const datePrefix = datePrefixMap[section];
+
+    setPostingDates((prev) => {
+      const next: Record<string, string> = {};
+      for (const [k, v] of Object.entries(prev)) {
+        if (section === "carousels") {
+          if (!k.startsWith("carousel-") || k.includes("-slide-")) {
+            next[k] = v;
+          }
+        } else {
+          if (!k.startsWith(`${datePrefix}-`)) {
+            next[k] = v;
+          }
+        }
+      }
+      if (section === "carousels") {
+        let oldIdx = 0;
+        for (let newIdx = 0; newIdx < newArr.length; newIdx++) {
+          if (oldIdx === index) oldIdx++;
+          const oldKey = `carousel-${oldIdx}`;
+          const newKey = `carousel-${newIdx}`;
+          if (prev[oldKey]) next[newKey] = prev[oldKey];
+          oldIdx++;
+        }
+      } else {
+        let oldIdx = 0;
+        for (let newIdx = 0; newIdx < newArr.length; newIdx++) {
+          if (oldIdx === index) oldIdx++;
+          const oldKey = `${datePrefix}-${oldIdx}`;
+          const newKey = `${datePrefix}-${newIdx}`;
+          if (prev[oldKey]) next[newKey] = prev[oldKey];
+          oldIdx++;
+        }
+      }
+      return next;
+    });
   }
 
   function handleDriveImport(importedImages: Record<string, string>) {
@@ -545,7 +606,33 @@ export default function Home() {
     const res = await fetch(`/api/saved-content?companyId=${selectedCompany.id}&id=${id}`, { method: "DELETE" });
     if (res.ok) {
       setSavedContent((prev) => prev.filter((item) => item.id !== id));
-      if (currentSavedId === id) setCurrentSavedId(null);
+      if (currentSavedId === id) {
+        setCurrentSavedId(null);
+        setContent(null);
+        setSelectedTheme(null);
+        setPostingDates({});
+      }
+    }
+  }
+
+  async function handleCompleteSaved(id: string) {
+    if (!selectedCompany) return;
+    const res = await fetch("/api/saved-content", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ companyId: selectedCompany.id, id }),
+    });
+    if (res.ok) {
+      setSavedContent((prev) =>
+        prev.map((item) => (item.id === id ? { ...item, status: "completed" as const } : item))
+      );
+      if (currentSavedId === id) {
+        setCurrentSavedId(null);
+        setContent(null);
+        setSelectedTheme(null);
+        setPostingDates({});
+      }
+      toast("Content marked as completed", "success");
     }
   }
 
@@ -560,7 +647,12 @@ export default function Home() {
     if (deletedIds.length > 0) {
       const deletedSet = new Set(deletedIds);
       setSavedContent((prev) => prev.filter((item) => !deletedSet.has(item.id)));
-      if (currentSavedId && deletedSet.has(currentSavedId)) setCurrentSavedId(null);
+      if (currentSavedId && deletedSet.has(currentSavedId)) {
+        setCurrentSavedId(null);
+        setContent(null);
+        setSelectedTheme(null);
+        setPostingDates({});
+      }
     }
   }
 
@@ -837,6 +929,7 @@ export default function Home() {
               onLoad={handleLoadSaved}
               onDelete={handleDeleteSaved}
               onBulkDelete={handleBulkDeleteSaved}
+              onComplete={handleCompleteSaved}
             />
           )}
         </ErrorBoundary>
@@ -922,7 +1015,7 @@ export default function Home() {
               {viewMode === "calendar" ? (
                 <ErrorBoundary fallbackTitle="Failed to render calendar">
                   <section className="mb-8 rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-lg border border-slate-200 dark:border-slate-700">
-                    <ContentCalendar content={content} startDate={new Date()} companyName={selectedCompany.name} companyId={selectedCompany.id} themeName={selectedTheme?.title || ""} images={images} />
+                    <ContentCalendar content={content} startDate={new Date()} companyName={selectedCompany.name} companyId={selectedCompany.id} themeName={selectedTheme?.title || ""} images={images} postingDates={postingDates} onPostingDateChange={handlePostingDateChange} />
                   </section>
                 </ErrorBoundary>
               ) : (
@@ -961,6 +1054,8 @@ export default function Home() {
                   onDriveAuth={handleDriveAuth}
                   onDriveImport={handleDriveImport}
                   themeName={selectedTheme?.title || ""}
+                  postingDates={postingDates}
+                  onPostingDateChange={handlePostingDateChange}
                 />
               )}
             </>
