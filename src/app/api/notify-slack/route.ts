@@ -3,6 +3,8 @@ import { requireAuth, AuthError } from "@/lib/auth-helpers";
 import { sendSlackNotification, uploadAndShareImage } from "@/lib/slack";
 import { getImages } from "@/lib/images";
 
+export const dynamic = "force-dynamic";
+
 interface ScheduleItem {
   time: string;
   type: string;
@@ -73,7 +75,7 @@ export async function POST(request: NextRequest) {
 
     const body = (await request.json()) as SlackPayload;
 
-    if (!body.companyName || !body.weekLabel || !Array.isArray(body.days)) {
+    if (!body.companyName || !Array.isArray(body.days)) {
       return NextResponse.json(
         { error: "Missing required fields" },
         { status: 400 }
