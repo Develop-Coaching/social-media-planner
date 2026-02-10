@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/auth-helpers";
-import { isDriveConfigured, downloadImage } from "@/lib/drive";
+import { getDriveClient, DriveAuthError, downloadImage } from "@/lib/drive";
 import { saveImage } from "@/lib/images";
 
 interface DownloadBody {
@@ -12,9 +12,7 @@ export async function POST(request: NextRequest) {
   try {
     const { userId } = await requireAuth();
 
-    if (!isDriveConfigured()) {
-      return NextResponse.json({ error: "Google Drive is not configured" }, { status: 400 });
-    }
+    const drive = await getDriveClient(userId);
 
     const body = (await request.json()) as DownloadBody;
 
@@ -27,7 +25,7 @@ export async function POST(request: NextRequest) {
     const errors: string[] = [];
 
     for (const file of body.files) {
-      const result = await downloadImage(file.driveFileId);
+      const result = await downloadImage(drive, file.driveFileId);
       if (result.ok && result.dataUrl) {
         await saveImage(userId, body.companyId, file.targetKey, result.dataUrl);
         images[file.targetKey] = result.dataUrl;
@@ -44,6 +42,9 @@ export async function POST(request: NextRequest) {
       errors: errors.length > 0 ? errors : undefined,
     });
   } catch (e) {
+    if (e instanceof DriveAuthError) {
+      return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
+    }
     if (e instanceof AuthError) {
       return NextResponse.json({ error: e.message }, { status: e.status });
     }

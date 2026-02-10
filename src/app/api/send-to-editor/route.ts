@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/auth-helpers";
 import { sendSlackNotification } from "@/lib/slack";
 import { createAsanaTask } from "@/lib/asana";
-import { isDriveConfigured, ensureFolder } from "@/lib/drive";
+import { isDriveEnabled, getDriveClient, ensureFolder, DriveAuthError } from "@/lib/drive";
 
 interface SendToEditorBody {
   companyName: string;
@@ -82,7 +82,7 @@ function buildAsanaNotes(body: SendToEditorBody, driveLink?: string): string {
 
 export async function POST(request: NextRequest) {
   try {
-    await requireAuth();
+    const { userId } = await requireAuth();
 
     const body = (await request.json()) as SendToEditorBody;
 
@@ -93,18 +93,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Best-effort Drive folder link
+    // Best-effort Drive folder link (only if user has OAuth tokens)
     let driveLink: string | undefined;
-    if (isDriveConfigured() && process.env.GOOGLE_DRIVE_FOLDER_ID) {
+    if (isDriveEnabled()) {
       try {
-        const rootFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
-        const companyFolderId = await ensureFolder(rootFolderId, body.companyName);
+        const drive = await getDriveClient(userId);
+        const companyFolderId = await ensureFolder(drive, "root", body.companyName);
         const themeFolderId = body.themeName
-          ? await ensureFolder(companyFolderId, body.themeName)
+          ? await ensureFolder(drive, companyFolderId, body.themeName)
           : companyFolderId;
         driveLink = `https://drive.google.com/drive/folders/${themeFolderId}`;
-      } catch {
-        // Drive lookup failed -- continue without link
+      } catch (err) {
+        if (!(err instanceof DriveAuthError)) {
+          // Log unexpected errors but continue without link
+          console.error("Drive folder lookup failed:", err);
+        }
       }
     }
 

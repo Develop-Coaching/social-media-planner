@@ -48,7 +48,7 @@ export default function Home() {
   const [showBrandSettings, setShowBrandSettings] = useState(false);
 
   // Google Drive integration
-  const [driveConfigured, setDriveConfigured] = useState(false);
+  const [driveStatus, setDriveStatus] = useState<{ enabled: boolean; authenticated: boolean; email?: string; clientId?: string }>({ enabled: false, authenticated: false });
 
   // Keyboard shortcuts help
   const [showShortcuts, setShowShortcuts] = useState(false);
@@ -63,7 +63,7 @@ export default function Home() {
       .catch(() => {});
     fetch("/api/drive/status")
       .then((res) => res.ok ? res.json() : null)
-      .then((data) => { if (data) setDriveConfigured(data.configured); })
+      .then((data) => { if (data) setDriveStatus(data); })
       .catch(() => {});
   }, []);
 
@@ -501,6 +501,28 @@ export default function Home() {
     toast(`Imported ${Object.keys(importedImages).length} image(s) from Drive`, "success");
   }
 
+  async function handleDriveAuth(code: string) {
+    try {
+      const res = await fetch("/api/drive/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        setDriveStatus((prev) => ({ ...prev, authenticated: true, email: data.email }));
+        toast(`Connected to Google Drive (${data.email})`, "success");
+        return true;
+      } else {
+        toast(data.error || "Failed to connect to Google Drive", "error");
+        return false;
+      }
+    } catch {
+      toast("Failed to connect to Google Drive", "error");
+      return false;
+    }
+  }
+
   function handleLoadSaved(item: SavedContentItem) {
     setSelectedTheme(item.theme);
     setContent(item.content);
@@ -858,7 +880,7 @@ export default function Home() {
               {viewMode === "calendar" ? (
                 <ErrorBoundary fallbackTitle="Failed to render calendar">
                   <section className="mb-8 rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-lg border border-slate-200 dark:border-slate-700">
-                    <ContentCalendar content={content} startDate={new Date()} companyName={selectedCompany.name} companyId={selectedCompany.id} themeName={selectedTheme?.title || ""} images={images} driveConfigured={driveConfigured} />
+                    <ContentCalendar content={content} startDate={new Date()} companyName={selectedCompany.name} companyId={selectedCompany.id} themeName={selectedTheme?.title || ""} images={images} />
                   </section>
                 </ErrorBoundary>
               ) : (
@@ -892,7 +914,8 @@ export default function Home() {
                   }}
                   onGenerateCarouselImages={generateCarouselImages}
                   onRemoveItem={handleRemoveItem}
-                  driveConfigured={driveConfigured}
+                  driveStatus={driveStatus}
+                  onDriveAuth={handleDriveAuth}
                   onDriveImport={handleDriveImport}
                 />
               )}

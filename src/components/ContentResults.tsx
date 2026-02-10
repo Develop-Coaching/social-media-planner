@@ -142,7 +142,8 @@ interface Props {
   onDeleteImage: (key: string) => void;
   onGenerateCarouselImages: (carouselIndex: number) => void;
   onRemoveItem: (section: "posts" | "reels" | "linkedinArticles" | "carousels" | "quotesForX" | "youtube", index: number) => void;
-  driveConfigured?: boolean;
+  driveStatus?: { enabled: boolean; authenticated: boolean; email?: string; clientId?: string };
+  onDriveAuth?: (code: string) => Promise<boolean>;
   onDriveImport?: (importedImages: Record<string, string>) => void;
 }
 
@@ -171,7 +172,8 @@ export default function ContentResults({
   onDeleteImage,
   onGenerateCarouselImages,
   onRemoveItem,
-  driveConfigured,
+  driveStatus,
+  onDriveAuth,
   onDriveImport,
 }: Props) {
   const { toast } = useToast();
@@ -218,8 +220,10 @@ export default function ContentResults({
   const [addingItemType, setAddingItemType] = useState<ContentType | null>(null);
 
   // Drive integration state
-  const [driveUploading, setDriveUploading] = useState(false);
+  const [driveSavingKey, setDriveSavingKey] = useState<string | null>(null);
   const [showDriveImport, setShowDriveImport] = useState(false);
+  const googleCodeClientRef = useRef<{ requestCode: () => void } | null>(null);
+  const pendingDriveUploadRef = useRef<string | null>(null);
 
   // Send to Editor state
   const [sentToEditor, setSentToEditor] = useState<Set<string>>(new Set());
@@ -249,6 +253,51 @@ export default function ContentResults({
       Object.values(timers).forEach(clearTimeout);
     };
   }, []);
+
+  // Initialize Google Identity Services code client for Drive OAuth
+  useEffect(() => {
+    if (!driveStatus?.enabled || !driveStatus.clientId) return;
+    const clientId = driveStatus.clientId;
+
+    function tryInit() {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const g = (window as any).google;
+      if (!g?.accounts?.oauth2?.initCodeClient) return false;
+
+      googleCodeClientRef.current = g.accounts.oauth2.initCodeClient({
+        client_id: clientId,
+        scope: "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email",
+        ux_mode: "popup",
+        callback: async (response: { code?: string; error?: string }) => {
+          if (response.error || !response.code) return;
+          if (onDriveAuth) {
+            const ok = await onDriveAuth(response.code);
+            // If auth succeeded and we had a pending upload, do it now
+            if (ok && pendingDriveUploadRef.current) {
+              const key = pendingDriveUploadRef.current;
+              pendingDriveUploadRef.current = null;
+              handleDriveSave(key);
+            }
+          }
+        },
+      });
+      return true;
+    }
+
+    if (tryInit()) return;
+
+    // GIS script might not be loaded yet; poll briefly
+    const interval = setInterval(() => {
+      if (tryInit()) clearInterval(interval);
+    }, 300);
+    const timeout = setTimeout(() => clearInterval(interval), 10000);
+
+    return () => {
+      clearInterval(interval);
+      clearTimeout(timeout);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [driveStatus?.enabled, driveStatus?.clientId]);
 
   const pushUndo = useCallback((section: SectionKey, snapshot: GeneratedContent[SectionKey]) => {
     const h = historyRef.current[section];
@@ -730,14 +779,18 @@ export default function ContentResults({
     link.click();
   }
 
-  async function handleDriveUpload() {
-    if (!driveConfigured || Object.keys(images).length === 0) return;
-    setDriveUploading(true);
+  async function handleDriveSave(key: string) {
+    if (!driveStatus?.enabled) return;
+
+    // If not authenticated, trigger popup and save the key for later
+    if (!driveStatus.authenticated) {
+      pendingDriveUploadRef.current = key;
+      googleCodeClientRef.current?.requestCode();
+      return;
+    }
+
+    setDriveSavingKey(key);
     try {
-      const imageEntries = Object.keys(images).map((key) => ({
-        key,
-        fileName: `${key}.png`,
-      }));
       const res = await fetch("/api/drive/upload", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -745,22 +798,24 @@ export default function ContentResults({
           companyId,
           companyName,
           folderName: theme.title,
-          images: imageEntries,
+          imageKey: key,
+          fileName: `${key}.png`,
         }),
       });
       const data = await res.json();
       if (res.ok) {
-        toast(`Uploaded ${data.uploaded} image(s) to Google Drive`, "success");
-        if (data.folderLink) {
-          window.open(data.folderLink, "_blank");
-        }
+        toast("Saved to Google Drive", "success");
+      } else if (data.error === "not_authenticated") {
+        // Token expired — trigger re-auth
+        pendingDriveUploadRef.current = key;
+        googleCodeClientRef.current?.requestCode();
       } else {
-        toast(data.error || "Failed to upload to Drive", "error");
+        toast(data.error || "Failed to save to Drive", "error");
       }
     } catch {
-      toast("Failed to upload to Drive", "error");
+      toast("Failed to save to Drive", "error");
     } finally {
-      setDriveUploading(false);
+      setDriveSavingKey(null);
     }
   }
 
@@ -801,6 +856,18 @@ export default function ContentResults({
             </svg>
             Delete
           </button>
+          {driveStatus?.enabled && (
+            <button
+              onClick={() => handleDriveSave(key)}
+              disabled={driveSavingKey === key}
+              className="text-sm text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-300 font-medium inline-flex items-center gap-1 disabled:opacity-50"
+            >
+              <svg className={`w-4 h-4 ${driveSavingKey === key ? "animate-spin" : ""}`} viewBox="0 0 24 24" fill="currentColor">
+                <path d="M7.71 3.5L1.15 15l2.16 3.75h4.73L4.46 12.5l2.17-3.75L7.71 3.5zm4.5 0L5.62 15l2.17 3.75h4.32l2.17-3.75L7.71 3.5h4.5zm4.5 0L10.12 15l2.17 3.75h4.32l6.56-11.5L20.71 3.5h-4z" />
+              </svg>
+              {driveSavingKey === key ? "Saving..." : "Save to Drive"}
+            </button>
+          )}
         </div>
         {showingFeedback && (
           <div className="mt-2 p-3 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
@@ -1000,19 +1067,7 @@ export default function ContentResults({
             </svg>
             CSV
           </button>
-          {driveConfigured && Object.keys(images).length > 0 && (
-            <button
-              onClick={handleDriveUpload}
-              disabled={driveUploading}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border-2 border-green-500 dark:border-green-400 text-green-700 dark:text-green-300 font-medium hover:bg-green-50 dark:hover:bg-green-900/30 disabled:opacity-50 transition-colors text-sm"
-            >
-              <svg className={`w-4 h-4 ${driveUploading ? "animate-spin" : ""}`} viewBox="0 0 24 24" fill="currentColor">
-                <path d="M7.71 3.5L1.15 15l2.16 3.75h4.73L4.46 12.5l2.17-3.75L7.71 3.5zm4.5 0L5.62 15l2.17 3.75h4.32l2.17-3.75L7.71 3.5h4.5zm4.5 0L10.12 15l2.17 3.75h4.32l6.56-11.5L20.71 3.5h-4z" />
-              </svg>
-              {driveUploading ? "Uploading..." : "Save to Drive"}
-            </button>
-          )}
-          {driveConfigured && (
+          {driveStatus?.enabled && (
             <button
               onClick={() => setShowDriveImport(true)}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border-2 border-sky-500 dark:border-sky-400 text-sky-700 dark:text-sky-300 font-medium hover:bg-sky-50 dark:hover:bg-sky-900/30 transition-colors text-sm"

@@ -27,7 +27,6 @@ interface Props {
   companyId: string;
   themeName: string;
   images?: Record<string, string>;
-  driveConfigured?: boolean;
 }
 
 const TYPE_COLORS: Record<string, string> = {
@@ -468,15 +467,13 @@ function getItemThumbnail(item: CalendarItem, images: Record<string, string>): s
 
 // ---------- Component ----------
 
-export default function ContentCalendar({ content, startDate, companyName, companyId, themeName, images = {}, driveConfigured }: Props) {
+export default function ContentCalendar({ content, startDate, companyName, companyId, themeName, images = {} }: Props) {
   const [weekOffset, setWeekOffset] = useState(0);
   const [modalItem, setModalItem] = useState<CalendarItem | null>(null);
   const [schedule, setSchedule] = useState<CalendarItem[][]>(() => []);
   const [dragOverDay, setDragOverDay] = useState<number | null>(null);
   const [slackStatus, setSlackStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [slackSending, setSlackSending] = useState(false);
-  const [driveUploading, setDriveUploading] = useState(false);
-  const [driveStatus, setDriveStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   // Track which content + weekOffset we last distributed for
   const lastDistributedRef = useRef<string>("");
@@ -626,45 +623,6 @@ export default function ContentCalendar({ content, startDate, companyName, compa
     }
   }, [schedule, weekDays, companyName, companyId, themeName]);
 
-  // ---------- Drive upload ----------
-
-  const handleSaveToDrive = useCallback(async () => {
-    if (!driveConfigured || Object.keys(images).length === 0) return;
-    setDriveStatus(null);
-    setDriveUploading(true);
-
-    try {
-      const imageEntries = Object.keys(images).map((key) => ({
-        key,
-        fileName: `${key}.png`,
-      }));
-      const res = await fetch("/api/drive/upload", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          companyId,
-          companyName,
-          folderName: themeName || undefined,
-          images: imageEntries,
-        }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setDriveStatus({ type: "success", message: `Uploaded ${data.uploaded} image(s) to Drive` });
-        if (data.folderLink) {
-          window.open(data.folderLink, "_blank");
-        }
-      } else {
-        setDriveStatus({ type: "error", message: data.error || "Failed to upload" });
-      }
-    } catch {
-      setDriveStatus({ type: "error", message: "Network error" });
-    } finally {
-      setDriveUploading(false);
-      setTimeout(() => setDriveStatus(null), 5000);
-    }
-  }, [driveConfigured, images, companyId, companyName, themeName]);
-
   return (
     <div>
       {/* Detail modal */}
@@ -689,19 +647,6 @@ export default function ContentCalendar({ content, startDate, companyName, compa
           <p className="text-xs text-slate-500 dark:text-slate-400">{totalItems} items across the week</p>
         </div>
         <div className="flex items-center gap-2">
-          {driveConfigured && Object.keys(images).length > 0 && (
-            <button
-              onClick={handleSaveToDrive}
-              disabled={driveUploading}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-green-300 dark:border-green-600 text-green-700 dark:text-green-300 bg-white dark:bg-slate-800 hover:bg-green-50 dark:hover:bg-green-900/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              title="Save images to Google Drive"
-            >
-              <svg className={`w-4 h-4 ${driveUploading ? "animate-spin" : ""}`} viewBox="0 0 24 24" fill="currentColor">
-                <path d="M7.71 3.5L1.15 15l2.16 3.75h4.73L4.46 12.5l2.17-3.75L7.71 3.5zm4.5 0L5.62 15l2.17 3.75h4.32l2.17-3.75L7.71 3.5h4.5zm4.5 0L10.12 15l2.17 3.75h4.32l6.56-11.5L20.71 3.5h-4z" />
-              </svg>
-              {driveUploading ? "Uploading..." : "Save to Drive"}
-            </button>
-          )}
           <button
             onClick={handleSendToSlack}
             disabled={totalItems === 0 || slackSending}
@@ -752,18 +697,6 @@ export default function ContentCalendar({ content, startDate, companyName, compa
           {slackStatus.message}
         </div>
       )}
-      {driveStatus && (
-        <div
-          className={`mb-3 px-4 py-2 rounded-lg text-sm font-medium ${
-            driveStatus.type === "success"
-              ? "bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800"
-              : "bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800"
-          }`}
-        >
-          {driveStatus.message}
-        </div>
-      )}
-
       {/* Calendar grid - weekdays only for more space */}
       <div className="grid grid-cols-5 gap-3">
         {/* Day headers */}
