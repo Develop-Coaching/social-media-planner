@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/auth-helpers";
-import { getDriveClient, DriveAuthError, listImages, listFolders, ensureFolder } from "@/lib/drive";
+import { getDriveClient, DriveAuthError, listImages, listVideos, listFolders, ensureFolder } from "@/lib/drive";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +15,7 @@ export async function GET(request: NextRequest) {
     const folder = searchParams.get("folder");
     const pageToken = searchParams.get("pageToken") || undefined;
     const mode = searchParams.get("mode"); // "folders" to list folders instead of images
+    const type = searchParams.get("type"); // "videos" to list videos instead of images
 
     // Use "root" as the base — user's My Drive
     const rootFolderId = "root";
@@ -45,7 +46,8 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const result = await listImages(drive, targetFolderId, pageToken);
+    const listFn = type === "videos" ? listVideos : listImages;
+    const result = await listFn(drive, targetFolderId, pageToken);
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: 500 });
     }

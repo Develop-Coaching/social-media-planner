@@ -16,7 +16,7 @@ export type ContentCounts = {
 };
 export type GeneratedContent = {
   posts: { title: string; caption: string; imagePrompt: string }[];
-  reels: { script: string; caption: string }[];
+  reels: { script: string; caption: string; rawVideoFileId?: string; rawVideoUrl?: string; rawVideoName?: string; finishedVideoFileId?: string; finishedVideoUrl?: string; finishedVideoName?: string }[];
   linkedinArticles: { title: string; caption: string; body: string; imagePrompt: string }[];
   carousels: { slides: { title: string; body: string }[]; caption: string; imagePrompt: string }[];
   quotesForX: { quote: string; imagePrompt: string }[];

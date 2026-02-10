@@ -9,6 +9,7 @@ import EditButton from "@/components/ui/EditButton";
 import { useToast } from "@/components/ToastProvider";
 import { ElapsedTimer } from "@/components/Skeleton";
 import DriveImportModal from "@/components/DriveImportModal";
+import DriveVideoPickerModal from "@/components/DriveVideoPickerModal";
 
 type ContentType = "post" | "reel" | "linkedinArticle" | "carousel" | "quoteForX" | "youtube";
 
@@ -262,6 +263,7 @@ export default function ContentResults({
   // Drive integration state
   const [driveSavingKey, setDriveSavingKey] = useState<string | null>(null);
   const [showDriveImport, setShowDriveImport] = useState(false);
+  const [videoPickerReel, setVideoPickerReel] = useState<{ index: number; kind: "raw" | "finished" } | null>(null);
   const googleCodeClientRef = useRef<{ requestCode: () => void } | null>(null);
   const pendingDriveUploadRef = useRef<string | null>(null);
 
@@ -573,6 +575,32 @@ export default function ContentResults({
     maybePushUndo("reels", `reel-${index}-${field}`);
     const newReels = [...content.reels];
     newReels[index] = { ...newReels[index], [field]: value };
+    onChange({ ...content, reels: newReels });
+  }
+
+  function linkReelVideo(index: number, kind: "raw" | "finished", video: { fileId: string; webViewLink: string; name: string }) {
+    maybePushUndo("reels", `reel-${index}-video-${kind}`);
+    const newReels = [...content.reels];
+    if (kind === "raw") {
+      newReels[index] = { ...newReels[index], rawVideoFileId: video.fileId, rawVideoUrl: video.webViewLink, rawVideoName: video.name };
+    } else {
+      // Linking finished video clears the raw video reference
+      const { rawVideoFileId, rawVideoUrl, rawVideoName, ...rest } = newReels[index];
+      newReels[index] = { ...rest, finishedVideoFileId: video.fileId, finishedVideoUrl: video.webViewLink, finishedVideoName: video.name };
+    }
+    onChange({ ...content, reels: newReels });
+  }
+
+  function unlinkReelVideo(index: number, kind: "raw" | "finished") {
+    maybePushUndo("reels", `reel-${index}-video-${kind}`);
+    const newReels = [...content.reels];
+    if (kind === "raw") {
+      const { rawVideoFileId, rawVideoUrl, rawVideoName, ...rest } = newReels[index];
+      newReels[index] = rest;
+    } else {
+      const { finishedVideoFileId, finishedVideoUrl, finishedVideoName, ...rest } = newReels[index];
+      newReels[index] = rest;
+    }
     onChange({ ...content, reels: newReels });
   }
 
@@ -1080,6 +1108,18 @@ export default function ContentResults({
         />
       )}
 
+      {/* Drive video picker modal */}
+      {videoPickerReel !== null && (
+        <DriveVideoPickerModal
+          companyName={companyName}
+          onSelect={(video) => {
+            linkReelVideo(videoPickerReel.index, videoPickerReel.kind, video);
+            setVideoPickerReel(null);
+          }}
+          onClose={() => setVideoPickerReel(null)}
+        />
+      )}
+
       {/* Fullscreen image overlay */}
       {fullscreenImage && (
         <div
@@ -1355,6 +1395,101 @@ export default function ContentResults({
                     )}
                   </>
                 )}
+                {/* Raw video — hidden once finished video is linked */}
+                {!r.finishedVideoFileId && (
+                  r.rawVideoFileId ? (
+                    <div className="mt-4 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">Raw Video</p>
+                        <button
+                          onClick={() => unlinkReelVideo(i, "raw")}
+                          className="text-xs text-slate-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                        >
+                          Unlink
+                        </button>
+                      </div>
+                      <div className="rounded-lg overflow-hidden bg-black aspect-video">
+                        <iframe
+                          src={`https://drive.google.com/file/d/${r.rawVideoFileId}/preview`}
+                          className="w-full h-full"
+                          allow="autoplay"
+                          sandbox="allow-scripts allow-same-origin"
+                        />
+                      </div>
+                      <div className="flex items-center justify-between mt-2">
+                        <p className="text-xs text-slate-600 dark:text-slate-400 truncate mr-2">{r.rawVideoName}</p>
+                        <a
+                          href={r.rawVideoUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-300 font-medium flex-shrink-0"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                          </svg>
+                          View on Drive
+                        </a>
+                      </div>
+                    </div>
+                  ) : driveStatus?.enabled && driveStatus?.authenticated ? (
+                    <button
+                      onClick={() => setVideoPickerReel({ index: i, kind: "raw" })}
+                      className="mt-4 inline-flex items-center gap-1.5 text-sm text-amber-600 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-300 font-medium transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                      Link Raw Video
+                    </button>
+                  ) : null
+                )}
+
+                {/* Finished video */}
+                {r.finishedVideoFileId ? (
+                  <div className="mt-4 p-3 rounded-lg bg-violet-50 dark:bg-violet-900/20 border border-violet-200 dark:border-violet-800">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs text-violet-600 dark:text-violet-400 font-medium">Finished Video</p>
+                      <button
+                        onClick={() => unlinkReelVideo(i, "finished")}
+                        className="text-xs text-slate-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                      >
+                        Unlink
+                      </button>
+                    </div>
+                    <div className="rounded-lg overflow-hidden bg-black aspect-video">
+                      <iframe
+                        src={`https://drive.google.com/file/d/${r.finishedVideoFileId}/preview`}
+                        className="w-full h-full"
+                        allow="autoplay"
+                        sandbox="allow-scripts allow-same-origin"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between mt-2">
+                      <p className="text-xs text-slate-600 dark:text-slate-400 truncate mr-2">{r.finishedVideoName}</p>
+                      <a
+                        href={r.finishedVideoUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-violet-600 dark:text-violet-400 hover:text-violet-800 dark:hover:text-violet-300 font-medium flex-shrink-0"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                        View on Drive
+                      </a>
+                    </div>
+                  </div>
+                ) : driveStatus?.enabled && driveStatus?.authenticated ? (
+                  <button
+                    onClick={() => setVideoPickerReel({ index: i, kind: "finished" })}
+                    className="mt-4 inline-flex items-center gap-1.5 text-sm text-violet-600 dark:text-violet-400 hover:text-violet-800 dark:hover:text-violet-300 font-medium transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                    Link Finished Video
+                  </button>
+                ) : null}
                 <PostingDatePicker itemId={key} date={postingDates[key]} onChange={onPostingDateChange} />
               </div>
             );
