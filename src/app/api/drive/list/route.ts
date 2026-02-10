@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/auth-helpers";
 import { getDriveClient, DriveAuthError, listImages, listFolders, ensureFolder } from "@/lib/drive";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: NextRequest) {
   try {
     const { userId } = await requireAuth();
