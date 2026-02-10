@@ -113,15 +113,19 @@ export async function POST(request: NextRequest) {
             const buf = dataUrlToArrayBuffer(images[key]);
             if (!buf) continue;
 
-            const title = `${day.dayName}, ${day.date} \u2014 ${item.type}: ${item.title}`;
-            await uploadAndShareImage(
-              botToken,
-              channelId,
-              buf,
-              `${key}.png`,
-              title
-            );
-            imagesUploaded++;
+            try {
+              const title = `${day.dayName}, ${day.date} \u2014 ${item.type}: ${item.title}`;
+              await uploadAndShareImage(
+                botToken,
+                channelId,
+                buf,
+                `${key}.png`,
+                title
+              );
+              imagesUploaded++;
+            } catch (imgErr) {
+              console.error(`Slack image upload failed for ${key}:`, imgErr);
+            }
             break;
           }
         }
