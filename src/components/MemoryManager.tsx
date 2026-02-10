@@ -75,10 +75,10 @@ export default function MemoryManager({ companyId }: Props) {
     setSaved(false);
 
     const MAX_SIZES = {
-      text: 5 * 1024 * 1024,
-      pdf: 10 * 1024 * 1024,
-      image: 5 * 1024 * 1024,
-      word: 10 * 1024 * 1024,
+      text: 5 * 1024 * 1024,    // 5 MB (sent as text, no base64)
+      pdf: 3 * 1024 * 1024,     // 3 MB (~4 MB after base64, within Vercel 4.5 MB limit)
+      image: 3 * 1024 * 1024,   // 3 MB
+      word: 3 * 1024 * 1024,    // 3 MB
     };
 
     const fileArray = Array.from(fileList);
@@ -149,11 +149,22 @@ export default function MemoryManager({ companyId }: Props) {
             body: JSON.stringify({ companyId, name: fileName, fileData: base64, fileType, mimeType: file.type }),
           });
 
-          const data = await res.json();
-          if (res.ok) successCount++;
-          else errors.push(`${file.name}: ${data.error || "Failed to process"}`);
-        } catch {
-          errors.push(`${file.name}: Upload failed`);
+          if (res.ok) {
+            const data = await res.json();
+            successCount++;
+          } else {
+            let errorMsg = `HTTP ${res.status}`;
+            try {
+              const data = await res.json();
+              errorMsg = data.error || errorMsg;
+            } catch {
+              if (res.status === 413) errorMsg = "File too large for server (max ~3 MB for documents)";
+              else if (res.status === 504) errorMsg = "Server timed out processing file";
+            }
+            errors.push(`${file.name}: ${errorMsg}`);
+          }
+        } catch (err) {
+          errors.push(`${file.name}: ${err instanceof Error ? err.message : "Upload failed"}`);
         }
       }
     }
