@@ -7,6 +7,7 @@ import {
   markCompleted,
   SavedContentItem,
 } from "@/lib/saved-content";
+import { saveAllImages } from "@/lib/images";
 import { requireAuth, AuthError } from "@/lib/auth-helpers";
 
 export const dynamic = "force-dynamic";
@@ -42,11 +43,12 @@ export async function POST(request: NextRequest) {
   try {
     const { userId } = await requireAuth();
     const body = await request.json();
-    const { companyId, name, theme, content } = body as {
+    const { companyId, name, theme, content, images } = body as {
       companyId?: string;
       name?: string;
       theme?: SavedContentItem["theme"];
       content?: SavedContentItem["content"];
+      images?: Record<string, string>;
     };
 
     if (!companyId) {
@@ -64,6 +66,12 @@ export async function POST(request: NextRequest) {
     }
 
     const item = await addSavedContent(userId, companyId, name, theme, content);
+
+    // If images were provided, bulk-save them scoped to the new saved content
+    if (images && Object.keys(images).length > 0) {
+      await saveAllImages(userId, companyId, item.id, images);
+    }
+
     return NextResponse.json(item);
   } catch (e) {
     if (e instanceof AuthError) {

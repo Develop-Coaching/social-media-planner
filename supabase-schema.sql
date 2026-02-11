@@ -50,6 +50,7 @@ CREATE TABLE saved_content (
   content JSONB NOT NULL,
   saved_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   status TEXT NOT NULL DEFAULT 'active',
+  completed_at TIMESTAMPTZ,
   FOREIGN KEY (user_id, company_id) REFERENCES companies(user_id, id) ON DELETE CASCADE
 );
 
@@ -74,8 +75,9 @@ CREATE TABLE images (
   key TEXT NOT NULL,
   storage_path TEXT NOT NULL,
   mime_type TEXT NOT NULL DEFAULT 'image/png',
+  saved_content_id UUID REFERENCES saved_content(id) ON DELETE CASCADE,
   FOREIGN KEY (user_id, company_id) REFERENCES companies(user_id, id) ON DELETE CASCADE,
-  UNIQUE (user_id, company_id, key)
+  UNIQUE (user_id, company_id, saved_content_id, key)
 );
 
 -- 7. Drive tokens (replaces data/{userId}/drive-tokens.json)
@@ -100,6 +102,15 @@ CREATE TABLE characters (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   FOREIGN KEY (user_id, company_id) REFERENCES companies(user_id, id) ON DELETE CASCADE
 );
+
+-- Migration: Add project-scoped images and auto-deletion support
+-- Run these ALTER statements if tables already exist:
+--
+-- ALTER TABLE saved_content ADD COLUMN completed_at TIMESTAMPTZ;
+-- ALTER TABLE images ADD COLUMN saved_content_id UUID REFERENCES saved_content(id) ON DELETE CASCADE;
+-- ALTER TABLE images DROP CONSTRAINT IF EXISTS images_user_id_company_id_key_key;
+-- ALTER TABLE images ADD CONSTRAINT images_user_company_sc_key_unique
+--   UNIQUE(user_id, company_id, saved_content_id, key);
 
 -- Indexes for common query patterns
 CREATE INDEX idx_companies_user ON companies(user_id);

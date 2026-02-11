@@ -30,6 +30,7 @@ export type SavedContentItem = {
   content: GeneratedContent;
   savedAt: string;
   status?: "active" | "completed";
+  completedAt?: string;
 };
 
 export type ToneStyle = {

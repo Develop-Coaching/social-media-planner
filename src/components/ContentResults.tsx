@@ -743,18 +743,19 @@ export default function ContentResults({
       }
 
       if (!fileId) {
-        // Upload succeeded (file is on Drive) but we couldn't read the response.
-        // Ask the server to look up the file we just uploaded.
+        // Upload succeeded (file is on Drive) but CORS blocked reading Google's response.
+        // Ask our server to look up the file by name in the target folder.
         try {
           const lookupRes = await fetch(
-            `/api/drive/list?mode=folders&folderId=${encodeURIComponent(initData.folderId)}&_t=${Date.now()}`
+            `/api/drive/upload-video?folderId=${encodeURIComponent(initData.folderId)}&fileName=${encodeURIComponent(file.name)}`
           );
-          // We can't easily find the exact file, so just link to the folder
-          webViewLink = `https://drive.google.com/drive/folders/${initData.folderId}`;
-          fileId = `folder-${initData.folderId}`;
-          void lookupRes; // not needed, just ensuring fetch completes
+          if (lookupRes.ok) {
+            const lookupData = await lookupRes.json();
+            fileId = lookupData.fileId;
+            webViewLink = lookupData.webViewLink;
+          }
         } catch {
-          // ignore
+          // ignore - will fall through to info toast
         }
       }
 
@@ -1001,6 +1002,7 @@ export default function ContentResults({
         body: JSON.stringify({
           companyName,
           companyId,
+          savedContentId: currentSavedId,
           themeName: themeName || theme.title,
           weekLabel: "",
           days,
@@ -1087,6 +1089,7 @@ export default function ContentResults({
         body: JSON.stringify({
           companyId,
           companyName,
+          savedContentId: currentSavedId,
           targetFolderId,
           imageKey: key,
           fileName: `${key}.png`,
@@ -1162,6 +1165,7 @@ export default function ContentResults({
         body: JSON.stringify({
           companyId,
           companyName,
+          savedContentId: currentSavedId,
           targetFolderId,
           images: allImages,
         }),
@@ -1408,6 +1412,7 @@ export default function ContentResults({
         <DriveImagePickerModal
           companyName={companyName}
           companyId={companyId}
+          savedContentId={currentSavedId}
           targetKey={driveImportForKey}
           onImport={(imported) => {
             onDriveImport(imported);

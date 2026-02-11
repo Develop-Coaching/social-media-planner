@@ -25,6 +25,7 @@ interface Props {
   startDate: Date;
   companyName: string;
   companyId: string;
+  savedContentId?: string | null;
   themeName: string;
   images?: Record<string, string>;
   postingDates?: Record<string, string>;
@@ -498,7 +499,7 @@ function getItemThumbnail(item: CalendarItem, images: Record<string, string>): s
 
 // ---------- Component ----------
 
-export default function ContentCalendar({ content, startDate, companyName, companyId, themeName, images = {}, postingDates = {}, onPostingDateChange }: Props) {
+export default function ContentCalendar({ content, startDate, companyName, companyId, savedContentId, themeName, images = {}, postingDates = {}, onPostingDateChange }: Props) {
   const [weekOffset, setWeekOffset] = useState(0);
   const [modalItem, setModalItem] = useState<CalendarItem | null>(null);
   const [dragOverDay, setDragOverDay] = useState<number | null>(null);
@@ -625,7 +626,7 @@ export default function ContentCalendar({ content, startDate, companyName, compa
       const res = await fetch("/api/notify-slack", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ companyName, companyId, themeName, weekLabel, days }),
+        body: JSON.stringify({ companyName, companyId, savedContentId, themeName, weekLabel, days }),
       });
       const data = await res.json();
       if (res.ok) {

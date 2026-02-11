@@ -6,7 +6,7 @@ import Link from "next/link";
 import CompanySelector from "@/components/CompanySelector";
 import FontPicker from "@/components/FontPicker";
 import MemoryManager from "@/components/MemoryManager";
-import SavedContentList from "@/components/SavedContentList";
+import ProjectDashboard from "@/components/ProjectDashboard";
 import ThemeSelector from "@/components/ThemeSelector";
 import ContentGenerator from "@/components/ContentGenerator";
 import ContentResults from "@/components/ContentResults";
@@ -16,7 +16,7 @@ import ThemeToggle from "@/components/ThemeToggle";
 import LogoutButton from "@/components/LogoutButton";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { useToast } from "@/components/ToastProvider";
-import { SkeletonGenerating, SkeletonSavedItem, ElapsedTimer } from "@/components/Skeleton";
+import { SkeletonGenerating, ElapsedTimer } from "@/components/Skeleton";
 import { buildBrandCssVars, isLightColor } from "@/lib/brand-theme";
 
 function isMobileDevice(): boolean {
@@ -27,6 +27,7 @@ function isMobileDevice(): boolean {
 export default function Home() {
   const { toast } = useToast();
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
+  const [activeView, setActiveView] = useState<"dashboard" | "editor">("dashboard");
   const [selectedTheme, setSelectedTheme] = useState<Theme | null>(null);
   const [counts, setCounts] = useState<ContentCounts>(defaultCounts);
   const [selectedTone, setSelectedTone] = useState<ToneStyle>(toneOptions[0]);
@@ -83,9 +84,8 @@ export default function Home() {
 
   // Autosave: save working state to localStorage when content changes
   useEffect(() => {
-    if (!autosaveRestored) return; // don't overwrite before restore
+    if (!autosaveRestored) return;
     if (!selectedCompany || !content) {
-      // Clear autosave when there's no content
       if (selectedCompany && !content) {
         localStorage.removeItem(`pc-autosave-${selectedCompany.id}`);
       }
@@ -95,6 +95,7 @@ export default function Home() {
       theme: selectedTheme,
       content,
       postingDates,
+      currentSavedId,
       savedAt: Date.now(),
     };
     try {
@@ -102,17 +103,7 @@ export default function Home() {
     } catch {
       // localStorage quota exceeded - silently fail
     }
-  }, [autosaveRestored, selectedCompany, selectedTheme, content, postingDates]);
-
-  async function loadImages(companyId: string) {
-    try {
-      const res = await fetch(`/api/images?companyId=${companyId}`);
-      const data = await res.json();
-      if (res.ok && data.images) setImages(data.images);
-    } catch {
-      // ignore
-    }
-  }
+  }, [autosaveRestored, selectedCompany, selectedTheme, content, postingDates, currentSavedId]);
 
   async function loadCharacters(companyId: string) {
     setCharactersLoading(true);
@@ -133,26 +124,11 @@ export default function Home() {
     setContent(null);
     setImages({});
     setCurrentSavedId(null);
+    setActiveView("dashboard");
+    setPostingDates({});
     loadSavedContent(company.id);
     loadCustomTones(company.id);
-    loadImages(company.id);
     loadCharacters(company.id);
-
-    // Autosave: restore if available
-    try {
-      const saved = localStorage.getItem(`pc-autosave-${company.id}`);
-      if (saved) {
-        const data = JSON.parse(saved);
-        if (data.content && data.theme) {
-          setSelectedTheme(data.theme);
-          setContent(data.content);
-          if (data.postingDates) setPostingDates(data.postingDates);
-          toast("Restored your previous work", "info");
-        }
-      }
-    } catch {
-      // corrupt data, ignore
-    }
     setAutosaveRestored(true);
   }
 
@@ -167,6 +143,60 @@ export default function Home() {
     setCharacters([]);
     setPostingDates({});
     setAutosaveRestored(false);
+    setActiveView("dashboard");
+  }
+
+  function handleBackToProjects() {
+    setSelectedTheme(null);
+    setContent(null);
+    setImages({});
+    setCurrentSavedId(null);
+    setPostingDates({});
+    setStreamingText("");
+    setActiveView("dashboard");
+    // Clear autosave when going back to dashboard
+    if (selectedCompany) {
+      localStorage.removeItem(`pc-autosave-${selectedCompany.id}`);
+    }
+    // Refresh project list
+    if (selectedCompany) {
+      loadSavedContent(selectedCompany.id);
+    }
+  }
+
+  function handleNewProject() {
+    setSelectedTheme(null);
+    setContent(null);
+    setImages({});
+    setCurrentSavedId(null);
+    setPostingDates({});
+    setStreamingText("");
+    setActiveView("editor");
+    setAutosaveRestored(true);
+  }
+
+  async function handleLoadProject(item: SavedContentItem) {
+    if (!selectedCompany) return;
+    setSelectedTheme(item.theme);
+    setContent(item.content);
+    setCurrentSavedId(item.id);
+    setPostingDates({});
+    setStreamingText("");
+    setActiveView("editor");
+    setAutosaveRestored(true);
+
+    // Load images for this specific project
+    try {
+      const res = await fetch(`/api/images?companyId=${selectedCompany.id}&savedContentId=${item.id}`);
+      const data = await res.json();
+      if (res.ok && data.images) {
+        setImages(data.images);
+      } else {
+        setImages({});
+      }
+    } catch {
+      setImages({});
+    }
   }
 
   async function updateCompanySlack(updates: { slackWebhookUrl?: string; slackEditorWebhookUrl?: string; slackBotToken?: string; slackChannelId?: string }) {
@@ -397,12 +427,6 @@ export default function Home() {
     setPostingDates({});
     setCurrentSavedId(null);
     setStreamingText("");
-    // Clear persisted images for fresh generation
-    fetch("/api/images", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ companyId: selectedCompany.id, images: {} }),
-    }).catch(() => {});
     try {
       const mobile = isMobileDevice();
       const url = mobile ? "/api/generate-content?stream=false" : "/api/generate-content";
@@ -496,12 +520,12 @@ export default function Home() {
       if (res.ok && data.imageBase64) {
         const dataUrl = `data:${data.mimeType || "image/png"};base64,${data.imageBase64}`;
         setImages((prev) => ({ ...prev, [key]: dataUrl }));
-        // Persist to server (fire-and-forget)
-        if (selectedCompany) {
+        // Persist to server (fire-and-forget) only if project is already saved
+        if (selectedCompany && currentSavedId) {
           fetch("/api/images", {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ companyId: selectedCompany.id, key, dataUrl }),
+            body: JSON.stringify({ companyId: selectedCompany.id, savedContentId: currentSavedId, key, dataUrl }),
           }).catch(() => {});
         }
         return data.imageBase64;
@@ -669,18 +693,19 @@ export default function Home() {
         }
       }
 
-      // Persist re-indexed images to server
-      fetch("/api/images", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ companyId: selectedCompany.id, images: next }),
-      }).catch(() => {});
+      // Persist re-indexed images to server only if project is saved
+      if (currentSavedId) {
+        fetch("/api/images", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ companyId: selectedCompany.id, savedContentId: currentSavedId, images: next }),
+        }).catch(() => {});
+      }
 
       return next;
     });
 
     // Re-index posting dates for this section
-    // Posting date keys match calendar item IDs (youtube uses "youtube-" not "yt-")
     const datePrefixMap: Record<string, string> = {
       posts: "post",
       reels: "reel",
@@ -730,12 +755,12 @@ export default function Home() {
   function handleDriveImport(importedImages: Record<string, string>) {
     setImages((prev) => {
       const next = { ...prev, ...importedImages };
-      // Persist merged images to server
-      if (selectedCompany) {
+      // Persist merged images to server only if project is saved
+      if (selectedCompany && currentSavedId) {
         fetch("/api/images", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ companyId: selectedCompany.id, images: next }),
+          body: JSON.stringify({ companyId: selectedCompany.id, savedContentId: currentSavedId, images: next }),
         }).catch(() => {});
       }
       return next;
@@ -765,13 +790,6 @@ export default function Home() {
     }
   }
 
-  function handleLoadSaved(item: SavedContentItem) {
-    setSelectedTheme(item.theme);
-    setContent(item.content);
-    setCurrentSavedId(item.id);
-    // Keep current images - they're already loaded from the server for this company
-  }
-
   async function handleDeleteSaved(id: string) {
     if (!selectedCompany) return;
     const res = await fetch(`/api/saved-content?companyId=${selectedCompany.id}&id=${id}`, { method: "DELETE" });
@@ -781,6 +799,7 @@ export default function Home() {
         setCurrentSavedId(null);
         setContent(null);
         setSelectedTheme(null);
+        setImages({});
         setPostingDates({});
       }
     }
@@ -794,16 +813,18 @@ export default function Home() {
       body: JSON.stringify({ companyId: selectedCompany.id, id }),
     });
     if (res.ok) {
+      const now = new Date().toISOString();
       setSavedContent((prev) =>
-        prev.map((item) => (item.id === id ? { ...item, status: "completed" as const } : item))
+        prev.map((item) => (item.id === id ? { ...item, status: "completed" as const, completedAt: now } : item))
       );
       if (currentSavedId === id) {
         setCurrentSavedId(null);
         setContent(null);
         setSelectedTheme(null);
+        setImages({});
         setPostingDates({});
       }
-      toast("Content marked as completed", "success");
+      toast("Project marked as completed", "success");
     }
   }
 
@@ -822,6 +843,7 @@ export default function Home() {
         setCurrentSavedId(null);
         setContent(null);
         setSelectedTheme(null);
+        setImages({});
         setPostingDates({});
       }
     }
@@ -831,10 +853,17 @@ export default function Home() {
     if (!selectedCompany || !content || !selectedTheme || !saveContentName.trim()) return;
     setSavingContent(true);
     try {
+      // Include images in the save payload for new projects
       const res = await fetch("/api/saved-content", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ companyId: selectedCompany.id, name: saveContentName.trim(), theme: selectedTheme, content }),
+        body: JSON.stringify({
+          companyId: selectedCompany.id,
+          name: saveContentName.trim(),
+          theme: selectedTheme,
+          content,
+          images: Object.keys(images).length > 0 ? images : undefined,
+        }),
       });
       if (res.ok) {
         const item = await res.json();
@@ -842,7 +871,7 @@ export default function Home() {
         setCurrentSavedId(item.id);
         setShowSaveDialog(false);
         setSaveContentName("");
-        toast("Content saved successfully", "success");
+        toast("Project saved successfully", "success");
       } else {
         const data = await res.json();
         toast(data.error || "Failed to save content", "error");
@@ -850,7 +879,7 @@ export default function Home() {
     } finally {
       setSavingContent(false);
     }
-  }, [selectedCompany, content, selectedTheme, saveContentName, toast]);
+  }, [selectedCompany, content, selectedTheme, saveContentName, images, toast]);
 
   const handleUpdateSavedContent = useCallback(async () => {
     if (!selectedCompany || !content || !currentSavedId) return;
@@ -863,7 +892,15 @@ export default function Home() {
       });
       if (res.ok) {
         setSavedContent((prev) => prev.map((item) => (item.id === currentSavedId ? { ...item, content } : item)));
-        toast("Content updated successfully", "success");
+        // Also persist current images for this project
+        if (Object.keys(images).length > 0) {
+          fetch("/api/images", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ companyId: selectedCompany.id, savedContentId: currentSavedId, images }),
+          }).catch(() => {});
+        }
+        toast("Project updated successfully", "success");
       } else {
         const data = await res.json();
         toast(data.error || "Failed to update content", "error");
@@ -871,11 +908,12 @@ export default function Home() {
     } finally {
       setSavingContent(false);
     }
-  }, [selectedCompany, content, currentSavedId, toast]);
+  }, [selectedCompany, content, currentSavedId, images, toast]);
 
   // Keyboard shortcuts
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
+      if (activeView !== "editor") return;
       const mod = e.metaKey || e.ctrlKey;
       if (!mod) return;
 
@@ -920,7 +958,7 @@ export default function Home() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [content, selectedCompany, selectedTheme, currentSavedId, contentLoading, handleGenerateContent, handleSaveContent, handleUpdateSavedContent, toast]);
+  }, [activeView, content, selectedCompany, selectedTheme, currentSavedId, contentLoading, handleGenerateContent, handleSaveContent, handleUpdateSavedContent, toast]);
 
   // Brand CSS variables — apply company colors to CSS custom properties
   useEffect(() => {
@@ -978,18 +1016,79 @@ export default function Home() {
     return <CompanySelector onSelect={handleSelectCompany} />;
   }
 
+  // Dashboard view — show project list
+  if (activeView === "dashboard") {
+    return (
+      <main className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-primary-light dark:from-slate-900 dark:to-brand-primary-light">
+        <header className="bg-brand-primary">
+          <div className={`max-w-4xl mx-auto px-6 py-6 ${headerTextLight ? "text-slate-900" : "text-white"}`}>
+            <button
+              onClick={handleBackToCompanies}
+              className={`flex items-center gap-2 mb-4 transition-colors ${headerTextLight ? "text-slate-700 hover:text-slate-900" : "text-white/80 hover:text-white"}`}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              Back to companies
+            </button>
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-3xl font-bold">{selectedCompany.name}</h1>
+                <p className={`mt-1 ${headerTextLight ? "text-slate-600" : "text-white/80"}`}>Select a project or create a new one</p>
+              </div>
+              <div className="flex items-center gap-2">
+                {currentUser && (
+                  <span className={`text-sm hidden sm:inline ${headerTextLight ? "text-slate-600" : "text-white/80"}`}>
+                    {currentUser.displayName}
+                  </span>
+                )}
+                {currentUser?.role === "admin" && (
+                  <Link
+                    href="/admin"
+                    className={`p-2 rounded-lg hover:bg-white/10 transition-colors ${headerTextLight ? "text-slate-600 hover:text-slate-900" : "text-white/80 hover:text-white"}`}
+                    title="User management"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                    </svg>
+                  </Link>
+                )}
+                <ThemeToggle />
+                <LogoutButton />
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <ErrorBoundary fallbackTitle="Failed to load project dashboard">
+          <ProjectDashboard
+            items={savedContent}
+            loading={savedContentLoading}
+            companyName={selectedCompany.name}
+            onNewProject={handleNewProject}
+            onLoadProject={handleLoadProject}
+            onDelete={handleDeleteSaved}
+            onBulkDelete={handleBulkDeleteSaved}
+            onComplete={handleCompleteSaved}
+          />
+        </ErrorBoundary>
+      </main>
+    );
+  }
+
+  // Editor view
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-primary-light dark:from-slate-900 dark:to-brand-primary-light">
       <header className="bg-brand-primary">
         <div className={`max-w-4xl mx-auto px-6 py-6 ${headerTextLight ? "text-slate-900" : "text-white"}`}>
           <button
-            onClick={handleBackToCompanies}
+            onClick={handleBackToProjects}
             className={`flex items-center gap-2 mb-4 transition-colors ${headerTextLight ? "text-slate-700 hover:text-slate-900" : "text-white/80 hover:text-white"}`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
-            Back to companies
+            Back to projects
           </button>
           <div className="flex items-center justify-between">
             <div>
@@ -1234,30 +1333,6 @@ export default function Home() {
 
         <MemoryManager companyId={selectedCompany.id} />
 
-        <ErrorBoundary fallbackTitle="Failed to load saved content">
-          {savedContentLoading ? (
-            <section className="mb-8 rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-lg border border-slate-200 dark:border-slate-700">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-6 h-6 rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
-                <div className="h-6 w-40 rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
-              </div>
-              <div className="space-y-3">
-                <SkeletonSavedItem />
-                <SkeletonSavedItem />
-              </div>
-            </section>
-          ) : (
-            <SavedContentList
-              items={savedContent}
-              currentSavedId={currentSavedId}
-              onLoad={handleLoadSaved}
-              onDelete={handleDeleteSaved}
-              onBulkDelete={handleBulkDeleteSaved}
-              onComplete={handleCompleteSaved}
-            />
-          )}
-        </ErrorBoundary>
-
         <ErrorBoundary fallbackTitle="Failed to load theme selector">
           <ThemeSelector
             companyId={selectedCompany.id}
@@ -1373,7 +1448,7 @@ export default function Home() {
               {viewMode === "calendar" ? (
                 <ErrorBoundary fallbackTitle="Failed to render calendar">
                   <section className="mb-8 rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-lg border border-slate-200 dark:border-slate-700">
-                    <ContentCalendar content={content} startDate={new Date()} companyName={selectedCompany.name} companyId={selectedCompany.id} themeName={selectedTheme?.title || ""} images={images} postingDates={postingDates} onPostingDateChange={handlePostingDateChange} />
+                    <ContentCalendar content={content} startDate={new Date()} companyName={selectedCompany.name} companyId={selectedCompany.id} savedContentId={currentSavedId} themeName={selectedTheme?.title || ""} images={images} postingDates={postingDates} onPostingDateChange={handlePostingDateChange} />
                   </section>
                 </ErrorBoundary>
               ) : (
@@ -1402,8 +1477,8 @@ export default function Home() {
                   characters={characters}
                   onDeleteImage={(key) => {
                     setImages((prev) => { const next = { ...prev }; delete next[key]; return next; });
-                    if (selectedCompany) {
-                      fetch(`/api/images?companyId=${selectedCompany.id}&key=${encodeURIComponent(key)}`, { method: "DELETE" }).catch(() => {});
+                    if (selectedCompany && currentSavedId) {
+                      fetch(`/api/images?companyId=${selectedCompany.id}&savedContentId=${currentSavedId}&key=${encodeURIComponent(key)}`, { method: "DELETE" }).catch(() => {});
                     }
                   }}
                   onGenerateCarouselImages={generateCarouselImages}

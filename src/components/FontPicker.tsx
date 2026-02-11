@@ -15,7 +15,7 @@ const POPULAR_FONTS = [
 
 interface Props {
   value: string;
-  onChange: (font: string) => void;
+  onChange: (font: string) => void | Promise<void>;
 }
 
 export default function FontPicker({ value, onChange }: Props) {
@@ -86,14 +86,16 @@ export default function FontPicker({ value, onChange }: Props) {
     }, 150);
   }
 
-  function handleApply() {
-    onChange(draft);
+  async function handleApply() {
+    await onChange(draft);
+    window.location.reload();
   }
 
-  function handleClear() {
+  async function handleClear() {
     setQuery("");
     setDraft("");
-    onChange("");
+    await onChange("");
+    window.location.reload();
   }
 
   return (

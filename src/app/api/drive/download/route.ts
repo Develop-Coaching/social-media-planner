@@ -7,6 +7,7 @@ export const dynamic = "force-dynamic";
 
 interface DownloadBody {
   companyId: string;
+  savedContentId?: string | null;
   files: { driveFileId: string; targetKey: string }[];
 }
 
@@ -29,7 +30,10 @@ export async function POST(request: NextRequest) {
     for (const file of body.files) {
       const result = await downloadImage(drive, file.driveFileId);
       if (result.ok && result.dataUrl) {
-        await saveImage(userId, body.companyId, file.targetKey, result.dataUrl);
+        // Only persist to storage if project is already saved
+        if (body.savedContentId) {
+          await saveImage(userId, body.companyId, body.savedContentId, file.targetKey, result.dataUrl);
+        }
         images[file.targetKey] = result.dataUrl;
         imported++;
       } else {

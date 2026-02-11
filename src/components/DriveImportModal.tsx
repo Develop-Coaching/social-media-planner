@@ -8,6 +8,7 @@ type DriveSource = "mydrive" | "shared";
 interface Props {
   companyName: string;
   companyId: string;
+  savedContentId: string | null;
   content: GeneratedContent;
   images: Record<string, string>;
   onImport: (importedImages: Record<string, string>) => void;
@@ -26,7 +27,7 @@ function buildContentKeys(content: GeneratedContent): { key: string; label: stri
   return keys;
 }
 
-export default function DriveImportModal({ companyName, companyId, content, images, onImport, onClose }: Props) {
+export default function DriveImportModal({ companyName, companyId, savedContentId, content, images, onImport, onClose }: Props) {
   const [files, setFiles] = useState<DriveFileInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [nextPageToken, setNextPageToken] = useState<string | undefined>();
@@ -153,6 +154,7 @@ export default function DriveImportModal({ companyName, companyId, content, imag
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           companyId,
+          savedContentId,
           files: entries.map(([driveFileId, targetKey]) => ({ driveFileId, targetKey })),
         }),
       });

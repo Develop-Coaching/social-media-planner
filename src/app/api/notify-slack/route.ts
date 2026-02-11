@@ -27,6 +27,7 @@ interface SlackPayload {
   themeName: string;
   weekLabel: string;
   companyId: string;
+  savedContentId?: string;
   days: ScheduleDay[];
   driveEnabled?: boolean;
 }
@@ -116,7 +117,7 @@ export async function POST(request: NextRequest) {
     if (body.driveEnabled && body.companyId && imageKeys.length > 0) {
       try {
         const drive = await getDriveClient(userId);
-        const images = await getImages(userId, body.companyId);
+        const images = await getImages(userId, body.companyId, body.savedContentId || "");
         const companyFolder = await ensureFolder(drive, "root", body.companyName);
         const folderName = body.themeName || "Content";
         const targetFolder = await ensureFolder(drive, companyFolder, folderName);
@@ -162,7 +163,7 @@ export async function POST(request: NextRequest) {
       const channelId = company?.slackChannelId || process.env.SLACK_CHANNEL_ID;
 
       if (botToken && channelId && body.companyId && imageKeys.length > 0) {
-        const images = await getImages(userId, body.companyId);
+        const images = await getImages(userId, body.companyId, body.savedContentId || "");
 
         for (const imageKey of imageKeys) {
           const keysToTry = imageKey.startsWith("carousel-")

@@ -1,11 +1,49 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/auth-helpers";
-import { getDriveClient, DriveAuthError, ensureFolder } from "@/lib/drive";
+import { getDriveClient, DriveAuthError, ensureFolder, findFileByName } from "@/lib/drive";
 import { getDriveTokens, refreshAccessToken } from "@/lib/drive-tokens";
 
 export const dynamic = "force-dynamic";
 
 const MAX_VIDEO_SIZE = 900 * 1024 * 1024; // 900MB
+
+/**
+ * Looks up a recently uploaded file by name in a folder.
+ * Called after the browser finishes a resumable upload to get the file ID.
+ */
+export async function GET(request: NextRequest) {
+  try {
+    const { userId } = await requireAuth();
+    const drive = await getDriveClient(userId);
+
+    const { searchParams } = new URL(request.url);
+    const folderId = searchParams.get("folderId");
+    const fileName = searchParams.get("fileName");
+
+    if (!folderId || !fileName) {
+      return NextResponse.json(
+        { error: "Missing folderId or fileName" },
+        { status: 400 }
+      );
+    }
+
+    const file = await findFileByName(drive, folderId, fileName);
+    if (!file) {
+      return NextResponse.json({ error: "File not found" }, { status: 404 });
+    }
+
+    return NextResponse.json({ ok: true, fileId: file.id, webViewLink: file.webViewLink });
+  } catch (e) {
+    if (e instanceof DriveAuthError) {
+      return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
+    }
+    if (e instanceof AuthError) {
+      return NextResponse.json({ error: e.message }, { status: (e as AuthError & { status: number }).status });
+    }
+    console.error("Drive file lookup error:", e);
+    return NextResponse.json({ error: "Lookup failed" }, { status: 500 });
+  }
+}
 
 /**
  * Creates a Google Drive resumable upload session.

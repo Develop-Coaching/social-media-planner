@@ -3,8 +3,8 @@ import { supabase } from "@/lib/supabase";
 
 const BUCKET = "content-images";
 
-function storagePath(userId: string, companyId: string, key: string): string {
-  return `${userId}/${companyId}/${key}.png`;
+function storagePath(userId: string, companyId: string, savedContentId: string, key: string): string {
+  return `${userId}/${companyId}/${savedContentId}/${key}.png`;
 }
 
 function parseDataUrl(dataUrl: string): { mime: string; buffer: Buffer } {
@@ -15,12 +15,13 @@ function parseDataUrl(dataUrl: string): { mime: string; buffer: Buffer } {
   return { mime: match[1], buffer: Buffer.from(match[2], "base64") };
 }
 
-export async function getImages(userId: string, companyId: string): Promise<Record<string, string>> {
+export async function getImages(userId: string, companyId: string, savedContentId: string): Promise<Record<string, string>> {
   const { data: rows, error } = await supabase
     .from("images")
     .select("key, storage_path, mime_type")
     .eq("user_id", userId)
-    .eq("company_id", companyId);
+    .eq("company_id", companyId)
+    .eq("saved_content_id", savedContentId);
 
   if (error || !rows?.length) return {};
 
@@ -38,30 +39,32 @@ export async function getImages(userId: string, companyId: string): Promise<Reco
   return result;
 }
 
-export async function saveAllImages(userId: string, companyId: string, images: Record<string, string>): Promise<void> {
-  // Delete all existing images for this company from Storage
+export async function saveAllImages(userId: string, companyId: string, savedContentId: string, images: Record<string, string>): Promise<void> {
+  // Delete all existing images for this saved content from Storage
   const { data: existing } = await supabase
     .from("images")
     .select("storage_path")
     .eq("user_id", userId)
-    .eq("company_id", companyId);
+    .eq("company_id", companyId)
+    .eq("saved_content_id", savedContentId);
 
   if (existing?.length) {
     const paths = existing.map((r) => r.storage_path);
     await supabase.storage.from(BUCKET).remove(paths);
   }
 
-  // Delete all DB rows
+  // Delete all DB rows for this saved content
   await supabase
     .from("images")
     .delete()
     .eq("user_id", userId)
-    .eq("company_id", companyId);
+    .eq("company_id", companyId)
+    .eq("saved_content_id", savedContentId);
 
   // Upload each image
   const entries = Object.entries(images);
   for (const [key, dataUrl] of entries) {
-    const path = storagePath(userId, companyId, key);
+    const path = storagePath(userId, companyId, savedContentId, key);
     const { mime, buffer } = parseDataUrl(dataUrl);
 
     await supabase.storage.from(BUCKET).upload(path, buffer, {
@@ -72,6 +75,7 @@ export async function saveAllImages(userId: string, companyId: string, images: R
     await supabase.from("images").insert({
       user_id: userId,
       company_id: companyId,
+      saved_content_id: savedContentId,
       key,
       storage_path: path,
       mime_type: mime,
@@ -79,8 +83,8 @@ export async function saveAllImages(userId: string, companyId: string, images: R
   }
 }
 
-export async function saveImage(userId: string, companyId: string, key: string, dataUrl: string): Promise<void> {
-  const path = storagePath(userId, companyId, key);
+export async function saveImage(userId: string, companyId: string, savedContentId: string, key: string, dataUrl: string): Promise<void> {
+  const path = storagePath(userId, companyId, savedContentId, key);
   const { mime, buffer } = parseDataUrl(dataUrl);
 
   await supabase.storage.from(BUCKET).upload(path, buffer, {
@@ -91,21 +95,44 @@ export async function saveImage(userId: string, companyId: string, key: string, 
   await supabase.from("images").upsert({
     user_id: userId,
     company_id: companyId,
+    saved_content_id: savedContentId,
     key,
     storage_path: path,
     mime_type: mime,
-  }, { onConflict: "user_id,company_id,key" });
+  }, { onConflict: "user_id,company_id,saved_content_id,key" });
 }
 
-export async function deleteImage(userId: string, companyId: string, key: string): Promise<void> {
-  const path = storagePath(userId, companyId, key);
+export async function deleteImage(userId: string, companyId: string, savedContentId: string, key: string): Promise<void> {
+  const path = storagePath(userId, companyId, savedContentId, key);
   await supabase.storage.from(BUCKET).remove([path]);
   await supabase
     .from("images")
     .delete()
     .eq("user_id", userId)
     .eq("company_id", companyId)
+    .eq("saved_content_id", savedContentId)
     .eq("key", key);
+}
+
+export async function deleteAllImagesForSavedContent(userId: string, companyId: string, savedContentId: string): Promise<void> {
+  const { data: existing } = await supabase
+    .from("images")
+    .select("storage_path")
+    .eq("user_id", userId)
+    .eq("company_id", companyId)
+    .eq("saved_content_id", savedContentId);
+
+  if (existing?.length) {
+    const paths = existing.map((r) => r.storage_path);
+    await supabase.storage.from(BUCKET).remove(paths);
+  }
+
+  await supabase
+    .from("images")
+    .delete()
+    .eq("user_id", userId)
+    .eq("company_id", companyId)
+    .eq("saved_content_id", savedContentId);
 }
 
 export function signImageParams(

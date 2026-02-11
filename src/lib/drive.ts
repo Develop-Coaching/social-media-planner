@@ -248,6 +248,29 @@ export async function listSharedFiles(
   }
 }
 
+/** Find a file by name in a folder (most recently modified first) */
+export async function findFileByName(
+  drive: drive_v3.Drive,
+  folderId: string,
+  fileName: string
+): Promise<{ id: string; webViewLink?: string } | null> {
+  try {
+    const res = await drive.files.list({
+      q: `'${folderId}' in parents and name = '${fileName.replace(/'/g, "\\'")}' and trashed = false`,
+      fields: "files(id, webViewLink)",
+      pageSize: 1,
+      orderBy: "modifiedTime desc",
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
+    });
+    const file = res.data.files?.[0];
+    if (!file) return null;
+    return { id: file.id!, webViewLink: file.webViewLink || undefined };
+  } catch {
+    return null;
+  }
+}
+
 /** Upload a raw buffer (e.g. video file) to a Drive folder */
 export async function uploadFile(
   drive: drive_v3.Drive,

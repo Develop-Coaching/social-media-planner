@@ -13,12 +13,13 @@ interface FolderInfo {
 interface Props {
   companyName: string;
   companyId: string;
+  savedContentId: string | null;
   targetKey: string;
   onImport: (importedImages: Record<string, string>) => void;
   onClose: () => void;
 }
 
-export default function DriveImagePickerModal({ companyId, targetKey, onImport, onClose }: Props) {
+export default function DriveImagePickerModal({ companyId, savedContentId, targetKey, onImport, onClose }: Props) {
   const [files, setFiles] = useState<DriveFileInfo[]>([]);
   const [folders, setFolders] = useState<FolderInfo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -135,6 +136,7 @@ export default function DriveImagePickerModal({ companyId, targetKey, onImport, 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           companyId,
+          savedContentId,
           files: [{ driveFileId: file.id, targetKey }],
         }),
       });

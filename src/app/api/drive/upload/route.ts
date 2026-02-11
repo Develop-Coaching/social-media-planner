@@ -8,6 +8,7 @@ export const dynamic = "force-dynamic";
 interface UploadBody {
   companyId: string;
   companyName: string;
+  savedContentId?: string;
   folderName?: string;
   targetFolderId?: string; // upload directly to a specific Drive folder
   imageKey?: string;      // single-image upload
@@ -38,7 +39,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Read all images from server storage
-    const storedImages = await getImages(userId, body.companyId);
+    const storedImages = await getImages(userId, body.companyId, body.savedContentId || "");
 
     // Determine target folder: explicit ID, or auto-create Company/Theme structure
     const companyFolderId = body.targetFolderId || await (async () => {

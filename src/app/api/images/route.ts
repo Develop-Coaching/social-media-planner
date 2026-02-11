@@ -10,12 +10,13 @@ export async function GET(request: NextRequest) {
     const { userId } = await requireAuth();
     const { searchParams } = new URL(request.url);
     const companyId = searchParams.get("companyId");
+    const savedContentId = searchParams.get("savedContentId");
 
-    if (!companyId) {
-      return NextResponse.json({ error: "companyId is required" }, { status: 400 });
+    if (!companyId || !savedContentId) {
+      return NextResponse.json({ error: "companyId and savedContentId are required" }, { status: 400 });
     }
 
-    const images = await getImages(userId, companyId);
+    const images = await getImages(userId, companyId, savedContentId);
     return NextResponse.json({ images });
   } catch (e) {
     if (e instanceof AuthError) {
@@ -30,17 +31,18 @@ export async function PUT(request: NextRequest) {
   try {
     const { userId } = await requireAuth();
     const body = await request.json();
-    const { companyId, key, dataUrl } = body as {
+    const { companyId, savedContentId, key, dataUrl } = body as {
       companyId?: string;
+      savedContentId?: string;
       key?: string;
       dataUrl?: string;
     };
 
-    if (!companyId || !key || !dataUrl) {
-      return NextResponse.json({ error: "companyId, key, and dataUrl are required" }, { status: 400 });
+    if (!companyId || !savedContentId || !key || !dataUrl) {
+      return NextResponse.json({ error: "companyId, savedContentId, key, and dataUrl are required" }, { status: 400 });
     }
 
-    await saveImage(userId, companyId, key, dataUrl);
+    await saveImage(userId, companyId, savedContentId, key, dataUrl);
     return NextResponse.json({ success: true });
   } catch (e) {
     if (e instanceof AuthError) {
@@ -55,16 +57,17 @@ export async function POST(request: NextRequest) {
   try {
     const { userId } = await requireAuth();
     const body = await request.json();
-    const { companyId, images } = body as {
+    const { companyId, savedContentId, images } = body as {
       companyId?: string;
+      savedContentId?: string;
       images?: Record<string, string>;
     };
 
-    if (!companyId || !images) {
-      return NextResponse.json({ error: "companyId and images are required" }, { status: 400 });
+    if (!companyId || !savedContentId || !images) {
+      return NextResponse.json({ error: "companyId, savedContentId, and images are required" }, { status: 400 });
     }
 
-    await saveAllImages(userId, companyId, images);
+    await saveAllImages(userId, companyId, savedContentId, images);
     return NextResponse.json({ success: true });
   } catch (e) {
     if (e instanceof AuthError) {
@@ -80,13 +83,14 @@ export async function DELETE(request: NextRequest) {
     const { userId } = await requireAuth();
     const { searchParams } = new URL(request.url);
     const companyId = searchParams.get("companyId");
+    const savedContentId = searchParams.get("savedContentId");
     const key = searchParams.get("key");
 
-    if (!companyId || !key) {
-      return NextResponse.json({ error: "companyId and key are required" }, { status: 400 });
+    if (!companyId || !savedContentId || !key) {
+      return NextResponse.json({ error: "companyId, savedContentId, and key are required" }, { status: 400 });
     }
 
-    await deleteImage(userId, companyId, key);
+    await deleteImage(userId, companyId, savedContentId, key);
     return NextResponse.json({ success: true });
   } catch (e) {
     if (e instanceof AuthError) {

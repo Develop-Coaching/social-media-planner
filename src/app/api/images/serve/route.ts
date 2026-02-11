@@ -7,11 +7,12 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const uid = searchParams.get("uid");
   const cid = searchParams.get("cid");
+  const scid = searchParams.get("scid");
   const key = searchParams.get("key");
   const exp = searchParams.get("exp");
   const sig = searchParams.get("sig");
 
-  if (!uid || !cid || !key || !exp || !sig) {
+  if (!uid || !cid || !scid || !key || !exp || !sig) {
     return NextResponse.json({ error: "Missing parameters" }, { status: 400 });
   }
 
@@ -25,7 +26,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 403 });
   }
 
-  const images = await getImages(uid, cid);
+  const images = await getImages(uid, cid, scid);
   const dataUrl = images[key];
   if (!dataUrl) {
     return NextResponse.json({ error: "Image not found" }, { status: 404 });
