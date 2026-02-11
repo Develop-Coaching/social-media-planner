@@ -1229,6 +1229,21 @@ export default function ContentResults({
         />
       )}
 
+      {/* Hidden file input for video upload */}
+      <input
+        ref={videoFileInputRef}
+        type="file"
+        accept="video/*"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file && videoUploadReelIndexRef.current !== null) {
+            handleUploadRawVideo(videoUploadReelIndexRef.current, file);
+          }
+          e.target.value = "";
+        }}
+      />
+
       {/* Fullscreen image overlay */}
       {fullscreenImage && (
         <div
@@ -1642,15 +1657,21 @@ export default function ContentResults({
                       </a>
                     </div>
                   </div>
-                ) : driveStatus?.enabled && driveStatus?.authenticated ? (
+                ) : driveStatus?.enabled ? (
                   <button
-                    onClick={() => setVideoPickerReel({ index: i, kind: "finished" })}
+                    onClick={() => {
+                      if (!driveStatus?.authenticated) {
+                        googleCodeClientRef.current?.requestCode();
+                        return;
+                      }
+                      setVideoPickerReel({ index: i, kind: "finished" });
+                    }}
                     className="mt-4 inline-flex items-center gap-1.5 text-sm text-violet-600 dark:text-violet-400 hover:text-violet-800 dark:hover:text-violet-300 font-medium transition-colors"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                     </svg>
-                    Link Finished Video
+                    Link Finished Video from Drive
                   </button>
                 ) : null}
                 <PostingDatePicker itemId={key} date={postingDates[key]} onChange={onPostingDateChange} />

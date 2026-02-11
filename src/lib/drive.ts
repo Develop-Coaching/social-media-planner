@@ -238,6 +238,43 @@ export async function listSharedFiles(
   }
 }
 
+/** Upload a raw buffer (e.g. video file) to a Drive folder */
+export async function uploadFile(
+  drive: drive_v3.Drive,
+  folderId: string,
+  fileName: string,
+  buffer: Buffer,
+  mimeType: string
+): Promise<{ ok: boolean; fileId?: string; webViewLink?: string; error?: string }> {
+  try {
+    const { Readable } = await import("stream");
+    const stream = Readable.from(buffer);
+
+    const file = await drive.files.create({
+      requestBody: {
+        name: fileName,
+        parents: [folderId],
+      },
+      media: {
+        mimeType,
+        body: stream,
+      },
+      fields: "id, webViewLink",
+    });
+
+    return {
+      ok: true,
+      fileId: file.data.id!,
+      webViewLink: file.data.webViewLink || undefined,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Upload failed",
+    };
+  }
+}
+
 const MAX_DOWNLOAD_SIZE = 10 * 1024 * 1024; // 10MB
 
 export async function downloadImage(
