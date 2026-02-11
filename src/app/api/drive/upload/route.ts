@@ -83,6 +83,13 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    if (uploaded === 0) {
+      return NextResponse.json({
+        error: errors[0] || "Failed to upload image",
+        errors,
+      }, { status: 500 });
+    }
+
     const folderLink = `https://drive.google.com/drive/folders/${companyFolderId}`;
 
     return NextResponse.json({

@@ -1,4 +1,5 @@
 import { google, drive_v3 } from "googleapis";
+import { Readable } from "stream";
 import { getDriveTokens, refreshAccessToken } from "@/lib/drive-tokens";
 
 /** Check if OAuth client ID is configured (server-side only) */
@@ -91,7 +92,6 @@ export async function uploadImage(
     const mimeType = match[1];
     const buffer = Buffer.from(match[2], "base64");
 
-    const { Readable } = await import("stream");
     const stream = Readable.from(buffer);
 
     const file = await drive.files.create({
@@ -257,7 +257,6 @@ export async function uploadFile(
   mimeType: string
 ): Promise<{ ok: boolean; fileId?: string; webViewLink?: string; error?: string }> {
   try {
-    const { Readable } = await import("stream");
     const stream = Readable.from(buffer);
 
     const file = await drive.files.create({
