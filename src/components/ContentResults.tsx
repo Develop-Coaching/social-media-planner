@@ -264,6 +264,9 @@ export default function ContentResults({
   const [driveSavingKey, setDriveSavingKey] = useState<string | null>(null);
   const [driveImportForKey, setDriveImportForKey] = useState<string | null>(null);
   const [videoPickerReel, setVideoPickerReel] = useState<{ index: number; kind: "raw" | "finished" } | null>(null);
+  const [uploadingVideoReel, setUploadingVideoReel] = useState<number | null>(null);
+  const videoFileInputRef = useRef<HTMLInputElement | null>(null);
+  const videoUploadReelIndexRef = useRef<number | null>(null);
   const googleCodeClientRef = useRef<{ requestCode: () => void } | null>(null);
   const pendingDriveUploadRef = useRef<string | null>(null);
 
@@ -537,6 +540,7 @@ export default function ContentResults({
           companyId,
           themeName: theme.title,
           reelIndex,
+          reelTitle: reel.title || "",
           script: reel.script,
           caption: reel.caption || "",
         }),
@@ -581,6 +585,7 @@ export default function ContentResults({
           companyId,
           themeName: theme.title,
           reelIndex,
+          reelTitle: reel.title || "",
           script: reel.script,
           caption: reel.caption || "",
           target: "filming",
@@ -618,7 +623,7 @@ export default function ContentResults({
     onChange({ ...content, posts: newPosts });
   }
 
-  function updateReel(index: number, field: "script" | "caption", value: string) {
+  function updateReel(index: number, field: "title" | "script" | "caption", value: string) {
     maybePushUndo("reels", `reel-${index}-${field}`);
     const newReels = [...content.reels];
     newReels[index] = { ...newReels[index], [field]: value };
@@ -649,6 +654,40 @@ export default function ContentResults({
       newReels[index] = rest;
     }
     onChange({ ...content, reels: newReels });
+  }
+
+  async function handleUploadRawVideo(reelIndex: number, file: File) {
+    setUploadingVideoReel(reelIndex);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("companyName", companyName);
+      formData.append("folderName", theme.title || "Reels");
+
+      const res = await fetch("/api/drive/upload-video", { method: "POST", body: formData });
+      const data = await res.json();
+
+      if (!res.ok) {
+        if (data.error === "not_authenticated") {
+          pendingDriveUploadRef.current = `video-upload-${reelIndex}`;
+          googleCodeClientRef.current?.requestCode();
+        } else {
+          toast(data.error || "Failed to upload video", "error");
+        }
+        return;
+      }
+
+      linkReelVideo(reelIndex, "raw", {
+        fileId: data.fileId,
+        webViewLink: data.webViewLink,
+        name: data.name,
+      });
+      toast("Raw video uploaded to Drive", "success");
+    } catch {
+      toast("Failed to upload video", "error");
+    } finally {
+      setUploadingVideoReel(null);
+    }
   }
 
   function updateArticle(index: number, field: "title" | "caption" | "body" | "imagePrompt", value: string) {
@@ -717,7 +756,7 @@ export default function ContentResults({
     ];
     content.reels.forEach((reel, index) => {
       children.push(
-        new Paragraph({ text: `Reel ${index + 1}`, heading: HeadingLevel.HEADING_2 }),
+        new Paragraph({ text: reel.title || `Reel ${index + 1}`, heading: HeadingLevel.HEADING_2 }),
         new Paragraph({ text: "" }),
       );
       if (reel.caption) {
@@ -903,7 +942,7 @@ export default function ContentResults({
   function downloadCSV() {
     const rows: string[][] = [["Type", "Title", "Content", "Image Prompt"]];
     content.posts.forEach((p) => rows.push(["Post", p.title, p.caption, p.imagePrompt]));
-    content.reels.forEach((r, i) => rows.push(["Reel", `Reel ${i + 1}`, `${r.caption ? `Caption: ${r.caption}\n\n` : ""}Script: ${r.script}`, ""]));
+    content.reels.forEach((r, i) => rows.push(["Reel", r.title || `Reel ${i + 1}`, `${r.caption ? `Caption: ${r.caption}\n\n` : ""}Script: ${r.script}`, ""]));
     content.linkedinArticles.forEach((a) => rows.push(["LinkedIn Article", a.title, `${a.caption ? `Caption: ${a.caption}\n\n` : ""}${a.body}`, a.imagePrompt]));
     content.carousels.forEach((c, i) => {
       const slideText = (c.caption ? `Caption: ${c.caption}\n\n` : "") + c.slides.map((s, j) => `Slide ${j + 1}: ${s.title}\n${s.body}`).join("\n\n");
@@ -1397,11 +1436,14 @@ export default function ContentResults({
             const isFresh = freshlyRegenerated.has(key);
             return (
               <div key={i} className={`mb-4 p-5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700 transition-all ${freshClass(key)}`}>
+                {r.title && !isEditing && (
+                  <h4 className="font-semibold text-slate-800 dark:text-slate-200 mb-2">{r.title}</h4>
+                )}
                 <div className="flex items-center justify-between mb-3">
                   {renderFreshBadge(key)}
                   <div className={`flex items-center gap-3 ${isFresh ? "" : "ml-auto"}`}>
                     <RegenerateButton loading={regeneratingKey === key} onClick={() => handleRegenerate(key, "reel", r, (item) => { const newReels = [...content.reels]; newReels[i] = item; onChange({ ...content, reels: newReels }); }, "reels")} />
-                    <CopyButton text={`${r.caption || ""}\n\n${r.script}`} label="Copy" />
+                    <CopyButton text={`${r.title ? r.title + "\n\n" : ""}${r.caption || ""}\n\n${r.script}`} label="Copy" />
                     <EditButton isEditing={isEditing} onToggle={() => setEditingKey(isEditing ? null : key)} />
                     {content.reels.length > 1 && <RemoveButton onClick={() => onRemoveItem("reels", i)} />}
                     <button
@@ -1460,6 +1502,8 @@ export default function ContentResults({
                 </div>
                 {isEditing ? (
                   <>
+                    <label className="block text-xs text-slate-500 mb-1">Title:</label>
+                    <input value={r.title || ""} onChange={(e) => updateReel(i, "title", e.target.value)} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-3 focus:ring-2 focus:ring-sky-500 font-semibold" placeholder="Short description of the reel..." />
                     <label className="block text-xs text-slate-500 mb-1">Script (spoken words):</label>
                     <textarea value={r.script} onChange={(e) => updateReel(i, "script", e.target.value)} rows={8} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-1 focus:ring-2 focus:ring-sky-500" />
                     <div className="mb-3"><WordCount text={r.script} label="Script" /></div>
@@ -1516,16 +1560,50 @@ export default function ContentResults({
                         </a>
                       </div>
                     </div>
-                  ) : driveStatus?.enabled && driveStatus?.authenticated ? (
-                    <button
-                      onClick={() => setVideoPickerReel({ index: i, kind: "raw" })}
-                      className="mt-4 inline-flex items-center gap-1.5 text-sm text-amber-600 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-300 font-medium transition-colors"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                      </svg>
-                      Link Raw Video
-                    </button>
+                  ) : driveStatus?.enabled ? (
+                    <div className="mt-4 flex items-center gap-3 flex-wrap">
+                      <button
+                        onClick={() => {
+                          if (!driveStatus?.authenticated) {
+                            googleCodeClientRef.current?.requestCode();
+                            return;
+                          }
+                          setVideoPickerReel({ index: i, kind: "raw" });
+                        }}
+                        className="inline-flex items-center gap-1.5 text-sm text-amber-600 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-300 font-medium transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                        Link Raw Video from Drive
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (!driveStatus?.authenticated) {
+                            googleCodeClientRef.current?.requestCode();
+                            return;
+                          }
+                          videoUploadReelIndexRef.current = i;
+                          videoFileInputRef.current?.click();
+                        }}
+                        disabled={uploadingVideoReel === i}
+                        className="inline-flex items-center gap-1.5 text-sm text-amber-600 dark:text-amber-400 hover:text-amber-800 dark:hover:text-amber-300 font-medium transition-colors disabled:opacity-50"
+                      >
+                        {uploadingVideoReel === i ? (
+                          <>
+                            <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" /></svg>
+                            Uploading...
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                            </svg>
+                            Upload Raw Video to Drive
+                          </>
+                        )}
+                      </button>
+                    </div>
                   ) : null
                 )}
 

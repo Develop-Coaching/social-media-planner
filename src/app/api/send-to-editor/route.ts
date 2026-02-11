@@ -22,16 +22,16 @@ const TARGET_CONFIG: Record<Target, {
     asanaProjectEnvVar: "ASANA_PROJECT_ID",
     asanaAssigneeEnvVar: "ASANA_EDITOR_USER_ID",
     slackHeading: "*\ud83c\udfac Reel Ready for Editing*",
-    slackFallback: (b) => `\ud83c\udfac Reel ${b.reelIndex + 1} ready for editing \u2014 ${b.companyName}`,
-    asanaTaskName: (b) => `Edit Reel ${b.reelIndex + 1} - ${b.companyName}${b.themeName ? ` - ${b.themeName}` : ""}`,
+    slackFallback: (b) => `\ud83c\udfac ${b.reelTitle || `Reel ${b.reelIndex + 1}`} ready for editing \u2014 ${b.companyName}`,
+    asanaTaskName: (b) => `Edit: ${b.reelTitle || `Reel ${b.reelIndex + 1}`} - ${b.companyName}${b.themeName ? ` - ${b.themeName}` : ""}`,
   },
   filming: {
     slackEnvVar: "SLACK_SEND_FOR_FILMING_WEBHOOK_URL",
     asanaProjectEnvVar: "ASANA_FILMING_PROJECT_ID",
     asanaAssigneeEnvVar: "ASANA_FILMING_USER_ID",
     slackHeading: "*\ud83c\udfac Reel Ready for Filming*",
-    slackFallback: (b) => `\ud83c\udfac Reel ${b.reelIndex + 1} ready for filming \u2014 ${b.companyName}`,
-    asanaTaskName: (b) => `Film Reel ${b.reelIndex + 1} - ${b.companyName}${b.themeName ? ` - ${b.themeName}` : ""}`,
+    slackFallback: (b) => `\ud83c\udfac ${b.reelTitle || `Reel ${b.reelIndex + 1}`} ready for filming \u2014 ${b.companyName}`,
+    asanaTaskName: (b) => `Film: ${b.reelTitle || `Reel ${b.reelIndex + 1}`} - ${b.companyName}${b.themeName ? ` - ${b.themeName}` : ""}`,
   },
 };
 
@@ -40,6 +40,7 @@ interface SendBody {
   companyId: string;
   themeName: string;
   reelIndex: number;
+  reelTitle?: string;
   script: string;
   caption: string;
   target?: Target;
@@ -77,7 +78,7 @@ function buildSlackBlocks(
     type: "section",
     text: {
       type: "mrkdwn",
-      text: `*Reel ${body.reelIndex + 1} \u2014 Script:*\n${scriptText}`,
+      text: `*${body.reelTitle || `Reel ${body.reelIndex + 1}`} \u2014 Script:*\n${scriptText}`,
     },
   });
 
@@ -102,7 +103,9 @@ function buildSlackBlocks(
 }
 
 function buildAsanaNotes(body: SendBody, driveLink?: string): string {
-  let notes = `Company: ${body.companyName}\nTheme: ${body.themeName || "N/A"}\n\n`;
+  let notes = "";
+  if (body.reelTitle) notes += `Reel: ${body.reelTitle}\n`;
+  notes += `Company: ${body.companyName}\nTheme: ${body.themeName || "N/A"}\n\n`;
   notes += `--- SCRIPT ---\n${body.script}\n\n`;
   if (body.caption) {
     notes += `--- CAPTION ---\n${body.caption}\n\n`;
