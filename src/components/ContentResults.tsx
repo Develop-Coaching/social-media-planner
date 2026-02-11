@@ -273,6 +273,7 @@ export default function ContentResults({
   const [driveImportForKey, setDriveImportForKey] = useState<string | null>(null);
   const [videoPickerReel, setVideoPickerReel] = useState<{ index: number; kind: "raw" | "finished" } | null>(null);
   const [uploadingVideoReel, setUploadingVideoReel] = useState<number | null>(null);
+  const [pendingVideoUpload, setPendingVideoUpload] = useState<{ reelIndex: number; file: File } | null>(null);
   const videoFileInputRef = useRef<HTMLInputElement | null>(null);
   const videoUploadReelIndexRef = useRef<number | null>(null);
   const googleCodeClientRef = useRef<{ requestCode: () => void } | null>(null);
@@ -681,13 +682,16 @@ export default function ContentResults({
     onChange({ ...content, reels: newReels });
   }
 
-  async function handleUploadRawVideo(reelIndex: number, file: File) {
+  async function handleUploadRawVideo(reelIndex: number, file: File, targetFolderId?: string) {
     setUploadingVideoReel(reelIndex);
     try {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("companyName", companyName);
       formData.append("folderName", theme.title || "Reels");
+      if (targetFolderId) {
+        formData.append("targetFolderId", targetFolderId);
+      }
 
       const res = await fetch("/api/drive/upload-video", { method: "POST", body: formData });
       const data = await res.json();
@@ -1309,11 +1313,23 @@ export default function ContentResults({
         onChange={(e) => {
           const file = e.target.files?.[0];
           if (file && videoUploadReelIndexRef.current !== null) {
-            handleUploadRawVideo(videoUploadReelIndexRef.current, file);
+            setPendingVideoUpload({ reelIndex: videoUploadReelIndexRef.current, file });
           }
           e.target.value = "";
         }}
       />
+
+      {/* Drive folder picker for video upload */}
+      {pendingVideoUpload && (
+        <DriveFolderPickerModal
+          onSelect={(folderId) => {
+            const { reelIndex, file } = pendingVideoUpload;
+            setPendingVideoUpload(null);
+            handleUploadRawVideo(reelIndex, file, folderId);
+          }}
+          onClose={() => setPendingVideoUpload(null)}
+        />
+      )}
 
       {/* Fullscreen image overlay */}
       {fullscreenImage && (

@@ -15,6 +15,7 @@ export async function POST(request: NextRequest) {
     const file = formData.get("file") as File | null;
     const companyName = formData.get("companyName") as string | null;
     const folderName = formData.get("folderName") as string | null;
+    const explicitFolderId = formData.get("targetFolderId") as string | null;
 
     if (!file || !companyName) {
       return NextResponse.json({ error: "Missing file or companyName" }, { status: 400 });
@@ -31,11 +32,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create folder structure: CompanyName / (optional folderName) /
-    const companyFolderId = await ensureFolder(drive, "root", companyName);
-    const targetFolderId = folderName
-      ? await ensureFolder(drive, companyFolderId, folderName)
-      : companyFolderId;
+    // Use explicit folder ID if provided, otherwise auto-create structure
+    let targetFolderId: string;
+    if (explicitFolderId) {
+      targetFolderId = explicitFolderId;
+    } else {
+      const companyFolderId = await ensureFolder(drive, "root", companyName);
+      targetFolderId = folderName
+        ? await ensureFolder(drive, companyFolderId, folderName)
+        : companyFolderId;
+    }
 
     const buffer = Buffer.from(await file.arrayBuffer());
     const result = await uploadFile(drive, targetFolderId, file.name, buffer, file.type);
