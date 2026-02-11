@@ -164,7 +164,7 @@ export default function DriveFolderPickerModal({ onSelect, onClose }: Props) {
               onClick={() => handleSourceChange("shared")}
               className={`px-3 py-1.5 font-medium transition-colors ${
                 source === "shared"
-                  ? "bg-sky-600 text-white"
+                  ? "bg-brand-primary text-white"
                   : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
               }`}
             >
@@ -174,7 +174,7 @@ export default function DriveFolderPickerModal({ onSelect, onClose }: Props) {
               onClick={() => handleSourceChange("mydrive")}
               className={`px-3 py-1.5 font-medium transition-colors ${
                 source === "mydrive"
-                  ? "bg-sky-600 text-white"
+                  ? "bg-brand-primary text-white"
                   : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
               }`}
             >
@@ -187,7 +187,7 @@ export default function DriveFolderPickerModal({ onSelect, onClose }: Props) {
         <div className="px-6 py-2 border-b border-slate-200 dark:border-slate-700 flex items-center gap-1 flex-wrap text-sm">
           <button
             onClick={() => navigateTo(-1)}
-            className={`hover:text-sky-600 dark:hover:text-sky-400 transition-colors ${
+            className={`hover:text-brand-primary transition-colors ${
               path.length === 0
                 ? "text-slate-800 dark:text-slate-200 font-medium"
                 : "text-slate-500 dark:text-slate-400"
@@ -200,7 +200,7 @@ export default function DriveFolderPickerModal({ onSelect, onClose }: Props) {
               <span className="text-slate-400">/</span>
               <button
                 onClick={() => navigateTo(idx)}
-                className={`hover:text-sky-600 dark:hover:text-sky-400 transition-colors ${
+                className={`hover:text-brand-primary transition-colors ${
                   idx === path.length - 1
                     ? "text-slate-800 dark:text-slate-200 font-medium"
                     : "text-slate-500 dark:text-slate-400"
@@ -233,12 +233,12 @@ export default function DriveFolderPickerModal({ onSelect, onClose }: Props) {
                 onKeyDown={(e) => { if (e.key === "Enter") handleCreateFolder(); }}
                 placeholder="Folder name"
                 autoFocus
-                className="flex-1 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-1.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500 focus:outline-none"
+                className="flex-1 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-1.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none"
               />
               <button
                 onClick={handleCreateFolder}
                 disabled={creatingFolder || !newFolderName.trim()}
-                className="px-3 py-1.5 rounded-lg bg-sky-600 text-white text-sm font-medium hover:bg-sky-700 transition-colors disabled:opacity-50"
+                className="px-3 py-1.5 rounded-lg bg-brand-primary text-white text-sm font-medium hover:bg-brand-primary-hover transition-colors disabled:opacity-50"
               >
                 {creatingFolder ? "Creating..." : "Create"}
               </button>
@@ -255,7 +255,7 @@ export default function DriveFolderPickerModal({ onSelect, onClose }: Props) {
 
           {loading ? (
             <div className="flex items-center justify-center py-12">
-              <svg className="animate-spin h-8 w-8 text-sky-600" viewBox="0 0 24 24">
+              <svg className="animate-spin h-8 w-8 text-brand-primary" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
               </svg>

@@ -105,7 +105,7 @@ export default function SavedContentList({ items, currentSavedId, onLoad, onDele
   return (
     <section className="mb-8 rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-lg border border-slate-200 dark:border-slate-700">
       <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-200 mb-4 flex items-center gap-3">
-        <svg className="w-6 h-6 text-sky-600 dark:text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-6 h-6 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
         </svg>
         Saved Content ({activeItems.length})
@@ -121,7 +121,7 @@ export default function SavedContentList({ items, currentSavedId, onLoad, onDele
           placeholder="Search saved content..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 pl-10 pr-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:ring-2 focus:ring-sky-500 focus:border-transparent transition-shadow"
+          className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 pl-10 pr-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-shadow"
         />
       </div>
 
@@ -133,7 +133,7 @@ export default function SavedContentList({ items, currentSavedId, onLoad, onDele
               type="checkbox"
               checked={allFilteredSelected}
               onChange={toggleSelectAll}
-              className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-sky-600 focus:ring-sky-500 dark:bg-slate-900 dark:checked:bg-sky-600"
+              className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-brand-primary focus:ring-brand-primary dark:bg-slate-900 dark:checked:bg-brand-primary"
             />
             <span className="text-sm text-slate-600 dark:text-slate-400 font-medium">
               Select all{searchQuery.trim() ? " filtered" : ""}
@@ -194,7 +194,7 @@ export default function SavedContentList({ items, currentSavedId, onLoad, onDele
             key={item.id}
             className={`flex items-center gap-3 p-4 rounded-xl border-2 transition-all ${
               currentSavedId === item.id
-                ? "border-sky-500 bg-sky-50 dark:bg-sky-900/20"
+                ? "border-brand-primary bg-brand-primary-light"
                 : "border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50"
             }`}
           >
@@ -202,7 +202,7 @@ export default function SavedContentList({ items, currentSavedId, onLoad, onDele
               type="checkbox"
               checked={selectedIds.has(item.id)}
               onChange={() => toggleSelect(item.id)}
-              className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-sky-600 focus:ring-sky-500 dark:bg-slate-900 dark:checked:bg-sky-600 flex-shrink-0"
+              className="w-4 h-4 rounded border-slate-300 dark:border-slate-600 text-brand-primary focus:ring-brand-primary dark:bg-slate-900 dark:checked:bg-brand-primary flex-shrink-0"
             />
             <div className="flex-1 min-w-0">
               <p className="font-medium text-slate-800 dark:text-slate-200 truncate">{item.name}</p>
@@ -213,7 +213,7 @@ export default function SavedContentList({ items, currentSavedId, onLoad, onDele
             <div className="flex items-center gap-2 ml-4">
               <button
                 onClick={() => onLoad(item)}
-                className="px-3 py-1.5 rounded-lg bg-sky-100 dark:bg-sky-900/50 text-sky-700 dark:text-sky-300 text-sm font-medium hover:bg-sky-200 dark:hover:bg-sky-900 transition-colors"
+                className="px-3 py-1.5 rounded-lg bg-brand-primary-light text-brand-primary text-sm font-medium hover:bg-brand-primary-hover transition-colors"
               >
                 Load
               </button>
@@ -277,7 +277,7 @@ export default function SavedContentList({ items, currentSavedId, onLoad, onDele
                   <div className="flex items-center gap-2 ml-4">
                     <button
                       onClick={() => onLoad(item)}
-                      className="px-3 py-1.5 rounded-lg bg-sky-100 dark:bg-sky-900/50 text-sky-700 dark:text-sky-300 text-sm font-medium hover:bg-sky-200 dark:hover:bg-sky-900 transition-colors"
+                      className="px-3 py-1.5 rounded-lg bg-brand-primary-light text-brand-primary text-sm font-medium hover:bg-brand-primary-hover transition-colors"
                     >
                       Load
                     </button>

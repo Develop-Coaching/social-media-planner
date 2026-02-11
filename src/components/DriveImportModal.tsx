@@ -216,7 +216,7 @@ export default function DriveImportModal({ companyName, companyId, content, imag
               onClick={() => handleSourceChange("shared")}
               className={`px-3 py-1.5 font-medium transition-colors ${
                 source === "shared"
-                  ? "bg-sky-600 text-white"
+                  ? "bg-brand-primary text-white"
                   : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
               }`}
             >
@@ -226,7 +226,7 @@ export default function DriveImportModal({ companyName, companyId, content, imag
               onClick={() => handleSourceChange("mydrive")}
               className={`px-3 py-1.5 font-medium transition-colors ${
                 source === "mydrive"
-                  ? "bg-sky-600 text-white"
+                  ? "bg-brand-primary text-white"
                   : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
               }`}
             >
@@ -260,7 +260,7 @@ export default function DriveImportModal({ companyName, companyId, content, imag
 
           {loading ? (
             <div className="flex items-center justify-center py-12">
-              <svg className="animate-spin h-8 w-8 text-sky-600" viewBox="0 0 24 24">
+              <svg className="animate-spin h-8 w-8 text-brand-primary" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
               </svg>
@@ -287,7 +287,7 @@ export default function DriveImportModal({ companyName, companyId, content, imag
                       key={file.id}
                       className={`rounded-xl border-2 overflow-hidden cursor-pointer transition-all ${
                         isSelected
-                          ? "border-sky-500 dark:border-sky-400 ring-2 ring-sky-200 dark:ring-sky-800"
+                          ? "border-brand-primary ring-2 ring-brand-primary/20"
                           : "border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600"
                       }`}
                       onClick={() => toggleSelection(file.id)}
@@ -331,7 +331,7 @@ export default function DriveImportModal({ companyName, companyId, content, imag
                       {/* Selection indicator */}
                       {isSelected && (
                         <div className="absolute top-2 right-2">
-                          <div className="w-6 h-6 rounded-full bg-sky-500 text-white flex items-center justify-center">
+                          <div className="w-6 h-6 rounded-full bg-brand-primary text-white flex items-center justify-center">
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                             </svg>
@@ -381,7 +381,7 @@ export default function DriveImportModal({ companyName, companyId, content, imag
             <button
               onClick={handleImport}
               disabled={importing || selectedCount === 0}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-sky-600 text-white font-medium hover:bg-sky-700 disabled:opacity-50 transition-colors text-sm"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-primary text-white font-medium hover:bg-brand-primary-hover disabled:opacity-50 transition-colors text-sm"
             >
               {importing ? (
                 <>

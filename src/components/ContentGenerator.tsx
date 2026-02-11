@@ -96,11 +96,11 @@ export default function ContentGenerator({ selectedTheme, counts, onCountsChange
   return (
     <section className="mb-8 rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-lg border border-slate-200 dark:border-slate-700">
       <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-200 mb-2 flex items-center gap-3">
-        <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-sky-100 dark:bg-sky-900/50 text-sky-600 dark:text-sky-400 text-sm font-bold">3</span>
+        <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-brand-primary-light text-brand-primary text-sm font-bold">3</span>
         How much content?
       </h2>
       <p className="text-sm text-slate-500 dark:text-slate-400 mb-4 ml-11">
-        Theme: <strong className="text-sky-600 dark:text-sky-400">{selectedTheme.title}</strong>
+        Theme: <strong className="text-brand-primary">{selectedTheme.title}</strong>
       </p>
       <div className="ml-11">
         {/* Content template presets */}
@@ -113,8 +113,8 @@ export default function ContentGenerator({ selectedTheme, counts, onCountsChange
                 onClick={() => onCountsChange({ ...preset.counts })}
                 className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all border ${
                   activePresetId === preset.id
-                    ? "bg-sky-600 text-white border-sky-600 shadow-md"
-                    : "bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-600 hover:border-sky-400 dark:hover:border-sky-500 hover:text-sky-600 dark:hover:text-sky-400"
+                    ? "bg-brand-primary text-white border-brand-primary shadow-md"
+                    : "bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-600 hover:border-brand-primary hover:text-brand-primary"
                 }`}
               >
                 {preset.label}
@@ -135,7 +135,7 @@ export default function ContentGenerator({ selectedTheme, counts, onCountsChange
                 max={20}
                 value={counts[key]}
                 onChange={(e) => onCountsChange({ ...counts, [key]: Math.max(0, parseInt(e.target.value, 10) || 0) })}
-                className="rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-3 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500 focus:border-transparent transition-shadow"
+                className="rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-3 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-shadow"
               />
             </label>
           ))}
@@ -150,8 +150,8 @@ export default function ContentGenerator({ selectedTheme, counts, onCountsChange
                 onClick={() => onToneChange(tone)}
                 className={`px-3 py-2 rounded-xl text-sm font-medium transition-all border ${
                   selectedTone.id === tone.id
-                    ? "bg-sky-600 text-white border-sky-600 shadow-md"
-                    : "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600 hover:border-sky-400 dark:hover:border-sky-500"
+                    ? "bg-brand-primary text-white border-brand-primary shadow-md"
+                    : "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600 hover:border-brand-primary"
                 }`}
                 title={tone.description}
               >
@@ -206,8 +206,8 @@ export default function ContentGenerator({ selectedTheme, counts, onCountsChange
                 onClick={() => onLanguageChange(lang)}
                 className={`px-3 py-2 rounded-xl text-sm font-medium transition-all border ${
                   selectedLanguage.id === lang.id
-                    ? "bg-sky-600 text-white border-sky-600 shadow-md"
-                    : "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600 hover:border-sky-400 dark:hover:border-sky-500"
+                    ? "bg-brand-primary text-white border-brand-primary shadow-md"
+                    : "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600 hover:border-brand-primary"
                 }`}
               >
                 {lang.label}
@@ -299,7 +299,7 @@ export default function ContentGenerator({ selectedTheme, counts, onCountsChange
         <button
           onClick={onGenerate}
           disabled={loading}
-          className="rounded-xl bg-sky-600 text-white px-6 py-3 font-medium hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg"
+          className="rounded-xl bg-brand-primary text-white px-6 py-3 font-medium hover:bg-brand-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg"
         >
           {loading ? (
             <span className="inline-flex items-center gap-2">

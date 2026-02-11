@@ -5,6 +5,7 @@ export interface Company {
   name: string;
   logo?: string;
   brandColors?: string[];
+  fontFamily?: string;
   slackWebhookUrl?: string;
   slackEditorWebhookUrl?: string;
   slackBotToken?: string;
@@ -24,6 +25,7 @@ function rowToCompany(row: any): Company {
   if (row.slack_editor_webhook_url) company.slackEditorWebhookUrl = row.slack_editor_webhook_url;
   if (row.slack_bot_token) company.slackBotToken = row.slack_bot_token;
   if (row.slack_channel_id) company.slackChannelId = row.slack_channel_id;
+  if (row.font_family) company.fontFamily = row.font_family;
   return company;
 }
 
@@ -47,6 +49,7 @@ export async function getCompanies(userId: string): Promise<Company[]> {
 export interface AddCompanyOptions {
   logo?: string;
   brandColors?: string[];
+  fontFamily?: string;
   slackWebhookUrl?: string;
   slackEditorWebhookUrl?: string;
   slackBotToken?: string;
@@ -65,6 +68,7 @@ export async function addCompany(userId: string, name: string, options?: AddComp
   const row: Record<string, any> = { user_id: userId, id, name };
   if (options?.logo) row.logo = options.logo;
   if (options?.brandColors?.length) row.brand_colors = options.brandColors;
+  if (options?.fontFamily) row.font_family = options.fontFamily;
   if (options?.slackWebhookUrl) row.slack_webhook_url = options.slackWebhookUrl;
   if (options?.slackEditorWebhookUrl) row.slack_editor_webhook_url = options.slackEditorWebhookUrl;
   if (options?.slackBotToken) row.slack_bot_token = options.slackBotToken;
@@ -77,11 +81,12 @@ export async function addCompany(userId: string, name: string, options?: AddComp
   return rowToCompany(data);
 }
 
-export async function updateCompany(userId: string, id: string, updates: Partial<Pick<Company, "name" | "logo" | "brandColors" | "slackWebhookUrl" | "slackEditorWebhookUrl" | "slackBotToken" | "slackChannelId">>): Promise<Company | null> {
+export async function updateCompany(userId: string, id: string, updates: Partial<Pick<Company, "name" | "logo" | "brandColors" | "fontFamily" | "slackWebhookUrl" | "slackEditorWebhookUrl" | "slackBotToken" | "slackChannelId">>): Promise<Company | null> {
   const dbUpdates: Record<string, unknown> = {};
   if (updates.name !== undefined) dbUpdates.name = updates.name;
   if (updates.logo !== undefined) dbUpdates.logo = updates.logo;
   if (updates.brandColors !== undefined) dbUpdates.brand_colors = updates.brandColors;
+  if (updates.fontFamily !== undefined) dbUpdates.font_family = updates.fontFamily;
   if (updates.slackWebhookUrl !== undefined) dbUpdates.slack_webhook_url = updates.slackWebhookUrl;
   if (updates.slackEditorWebhookUrl !== undefined) dbUpdates.slack_editor_webhook_url = updates.slackEditorWebhookUrl;
   if (updates.slackBotToken !== undefined) dbUpdates.slack_bot_token = updates.slackBotToken;

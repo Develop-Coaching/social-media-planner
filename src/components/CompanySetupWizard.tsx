@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Company } from "@/types";
+import FontPicker from "@/components/FontPicker";
 
 interface Props {
   onComplete: (company: Company) => void;
@@ -28,6 +29,7 @@ export default function CompanySetupWizard({ onComplete, onCancel }: Props) {
   // Step 3: Brand
   const [logo, setLogo] = useState("");
   const [brandColors, setBrandColors] = useState<string[]>([]);
+  const [fontFamily, setFontFamily] = useState("");
 
   function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -59,6 +61,7 @@ export default function CompanySetupWizard({ onComplete, onCancel }: Props) {
       const payload: Record<string, any> = { name: name.trim() };
       if (logo) payload.logo = logo;
       if (brandColors.length) payload.brandColors = brandColors;
+      if (fontFamily.trim()) payload.fontFamily = fontFamily.trim();
       if (slackWebhookUrl.trim()) payload.slackWebhookUrl = slackWebhookUrl.trim();
       if (slackEditorWebhookUrl.trim()) payload.slackEditorWebhookUrl = slackEditorWebhookUrl.trim();
       if (slackBotToken.trim()) payload.slackBotToken = slackBotToken.trim();
@@ -97,9 +100,9 @@ export default function CompanySetupWizard({ onComplete, onCancel }: Props) {
                 disabled={i > step}
                 className={`w-8 h-8 rounded-full text-sm font-semibold flex items-center justify-center transition-all ${
                   i === step
-                    ? "bg-sky-600 text-white shadow-lg"
+                    ? "bg-brand-primary text-white shadow-lg"
                     : i < step
-                    ? "bg-sky-100 dark:bg-sky-900 text-sky-600 dark:text-sky-400 cursor-pointer hover:bg-sky-200 dark:hover:bg-sky-800"
+                    ? "bg-brand-primary-light text-brand-primary cursor-pointer hover:bg-brand-primary/20"
                     : "bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500"
                 }`}
               >
@@ -112,7 +115,7 @@ export default function CompanySetupWizard({ onComplete, onCancel }: Props) {
                 )}
               </button>
               {i < STEPS.length - 1 && (
-                <div className={`w-8 h-0.5 ${i < step ? "bg-sky-400" : "bg-slate-200 dark:bg-slate-700"}`} />
+                <div className={`w-8 h-0.5 ${i < step ? "bg-brand-primary" : "bg-slate-200 dark:bg-slate-700"}`} />
               )}
             </div>
           ))}
@@ -138,7 +141,7 @@ export default function CompanySetupWizard({ onComplete, onCancel }: Props) {
                 onKeyDown={(e) => { if (e.key === "Enter" && canNext) setStep(1); }}
                 placeholder="e.g. Acme Corp"
                 autoFocus
-                className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-3 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500 focus:border-transparent transition-shadow text-lg"
+                className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-3 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-shadow text-lg"
               />
             </div>
           )}
@@ -163,7 +166,7 @@ export default function CompanySetupWizard({ onComplete, onCancel }: Props) {
                     value={slackWebhookUrl}
                     onChange={(e) => setSlackWebhookUrl(e.target.value)}
                     placeholder="https://hooks.slack.com/services/..."
-                    className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500 focus:border-transparent transition-shadow"
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-shadow"
                   />
                   <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
                     Receives the weekly content schedule when you click &ldquo;Send to Slack&rdquo;.
@@ -179,7 +182,7 @@ export default function CompanySetupWizard({ onComplete, onCancel }: Props) {
                     value={slackEditorWebhookUrl}
                     onChange={(e) => setSlackEditorWebhookUrl(e.target.value)}
                     placeholder="https://hooks.slack.com/services/..."
-                    className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500 focus:border-transparent transition-shadow"
+                    className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-shadow"
                   />
                   <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
                     Receives reel scripts when you click &ldquo;Send to Editor&rdquo;.
@@ -208,7 +211,7 @@ export default function CompanySetupWizard({ onComplete, onCancel }: Props) {
                           value={slackBotToken}
                           onChange={(e) => setSlackBotToken(e.target.value)}
                           placeholder="xoxb-..."
-                          className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500 focus:border-transparent transition-shadow font-mono"
+                          className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-shadow font-mono"
                         />
                         <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
                           Required for uploading images to Slack. Create a Slack app with <code className="bg-slate-100 dark:bg-slate-700 px-1 rounded">files:write</code> and <code className="bg-slate-100 dark:bg-slate-700 px-1 rounded">chat:write</code> scopes.
@@ -223,7 +226,7 @@ export default function CompanySetupWizard({ onComplete, onCancel }: Props) {
                           value={slackChannelId}
                           onChange={(e) => setSlackChannelId(e.target.value)}
                           placeholder="C01234ABCDE"
-                          className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500 focus:border-transparent transition-shadow font-mono"
+                          className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-shadow font-mono"
                         />
                         <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
                           Right-click a channel in Slack &rarr; &ldquo;View channel details&rdquo; &rarr; copy the Channel ID at the bottom.
@@ -233,8 +236,8 @@ export default function CompanySetupWizard({ onComplete, onCancel }: Props) {
                   )}
                 </div>
 
-                <div className="rounded-lg bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800 p-3">
-                  <p className="text-xs text-sky-700 dark:text-sky-300">
+                <div className="rounded-lg bg-brand-primary-light border border-brand-primary p-3">
+                  <p className="text-xs text-brand-primary">
                     <strong>How to create a Slack webhook:</strong> Go to{" "}
                     <span className="font-mono">api.slack.com/apps</span> &rarr; Create New App &rarr; Incoming Webhooks &rarr; Activate &rarr; Add New Webhook to Workspace &rarr; choose the channel &rarr; copy the URL.
                   </p>
@@ -294,7 +297,7 @@ export default function CompanySetupWizard({ onComplete, onCancel }: Props) {
                       />
                     ))}
                     {brandColors.length < 6 && (
-                      <label className="w-8 h-8 rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center cursor-pointer hover:border-sky-400 dark:hover:border-sky-500 transition-colors">
+                      <label className="w-8 h-8 rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center cursor-pointer hover:border-brand-primary transition-colors">
                         <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                         </svg>
@@ -310,6 +313,9 @@ export default function CompanySetupWizard({ onComplete, onCancel }: Props) {
                     {brandColors.length}/6 colors. Click a swatch to remove it.
                   </p>
                 </div>
+
+                {/* Font Family */}
+                <FontPicker value={fontFamily} onChange={setFontFamily} />
               </div>
             </div>
           )}
@@ -381,6 +387,11 @@ export default function CompanySetupWizard({ onComplete, onCancel }: Props) {
                       <span className="text-sm text-slate-400 dark:text-slate-500 italic">No colors</span>
                     )}
                   </div>
+                  {fontFamily && (
+                    <p className="text-sm text-slate-700 dark:text-slate-300 mt-2">
+                      <span className="text-slate-500 dark:text-slate-400">Font:</span> {fontFamily}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -423,7 +434,7 @@ export default function CompanySetupWizard({ onComplete, onCancel }: Props) {
                 <button
                   onClick={() => setStep(step + 1)}
                   disabled={!canNext}
-                  className="px-6 py-2.5 rounded-xl bg-sky-600 text-white text-sm font-medium hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl"
+                  className="px-6 py-2.5 rounded-xl bg-brand-primary text-white text-sm font-medium hover:bg-brand-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl"
                 >
                   Next
                 </button>
@@ -431,7 +442,7 @@ export default function CompanySetupWizard({ onComplete, onCancel }: Props) {
                 <button
                   onClick={handleCreate}
                   disabled={creating}
-                  className="px-6 py-2.5 rounded-xl bg-sky-600 text-white text-sm font-medium hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl"
+                  className="px-6 py-2.5 rounded-xl bg-brand-primary text-white text-sm font-medium hover:bg-brand-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl"
                 >
                   {creating ? "Creating..." : "Create Company"}
                 </button>

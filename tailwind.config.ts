@@ -9,8 +9,16 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      colors: {
+        brand: {
+          primary: "var(--brand-primary)",
+          "primary-hover": "var(--brand-primary-hover)",
+          "primary-light": "var(--brand-primary-light)",
+          accent: "var(--brand-accent)",
+        },
+      },
       fontFamily: {
-        sans: ["var(--font-geist-sans)", "system-ui", "sans-serif"],
+        sans: ["var(--brand-font)", "system-ui", "sans-serif"],
         mono: ["var(--font-geist-mono)", "monospace"],
       },
     },

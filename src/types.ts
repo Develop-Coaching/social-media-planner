@@ -1,5 +1,6 @@
 export type Company = {
   id: string; name: string; logo?: string; brandColors?: string[];
+  fontFamily?: string;
   slackWebhookUrl?: string; slackEditorWebhookUrl?: string;
   slackBotToken?: string; slackChannelId?: string;
 };

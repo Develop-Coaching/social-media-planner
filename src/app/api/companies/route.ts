@@ -25,8 +25,8 @@ export async function POST(request: NextRequest) {
   try {
     const { userId } = await requireAuth();
     const body = await request.json();
-    const { name, logo, brandColors, slackWebhookUrl, slackEditorWebhookUrl, slackBotToken, slackChannelId } = body as {
-      name?: string; logo?: string; brandColors?: string[];
+    const { name, logo, brandColors, fontFamily, slackWebhookUrl, slackEditorWebhookUrl, slackBotToken, slackChannelId } = body as {
+      name?: string; logo?: string; brandColors?: string[]; fontFamily?: string;
       slackWebhookUrl?: string; slackEditorWebhookUrl?: string;
       slackBotToken?: string; slackChannelId?: string;
     };
@@ -48,8 +48,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Maximum 6 brand colors allowed" }, { status: 400 });
     }
 
+    // Validate font family
+    if (fontFamily !== undefined && (typeof fontFamily !== "string" || fontFamily.length > 100)) {
+      return NextResponse.json({ error: "Invalid font family" }, { status: 400 });
+    }
+
     const company = await addCompany(userId, name.trim(), {
-      logo, brandColors, slackWebhookUrl, slackEditorWebhookUrl, slackBotToken, slackChannelId,
+      logo, brandColors, fontFamily, slackWebhookUrl, slackEditorWebhookUrl, slackBotToken, slackChannelId,
     });
     return NextResponse.json(company);
   } catch (e) {
@@ -67,7 +72,7 @@ export async function PUT(request: NextRequest) {
     const { userId } = await requireAuth();
     const body = await request.json();
     const { id, ...updates } = body as {
-      id: string; name?: string; logo?: string; brandColors?: string[];
+      id: string; name?: string; logo?: string; brandColors?: string[]; fontFamily?: string;
       slackWebhookUrl?: string; slackEditorWebhookUrl?: string;
       slackBotToken?: string; slackChannelId?: string;
     };
@@ -84,6 +89,11 @@ export async function PUT(request: NextRequest) {
     // Validate brand colors (max 6)
     if (updates.brandColors && updates.brandColors.length > 6) {
       return NextResponse.json({ error: "Maximum 6 brand colors allowed" }, { status: 400 });
+    }
+
+    // Validate font family
+    if (updates.fontFamily !== undefined && (typeof updates.fontFamily !== "string" || updates.fontFamily.length > 100)) {
+      return NextResponse.json({ error: "Invalid font family" }, { status: 400 });
     }
 
     const updated = await updateCompany(userId, id, updates);

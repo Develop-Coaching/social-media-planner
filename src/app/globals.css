@@ -7,6 +7,13 @@
   --background: #f8fafc;
   --accent: #6366f1;
   --muted: #64748b;
+
+  /* Brand theme defaults (sky blue) */
+  --brand-primary: #0284c7;
+  --brand-primary-hover: #0369a1;
+  --brand-primary-light: #f0f9ff;
+  --brand-accent: #0284c7;
+  --brand-font: var(--font-geist-sans), system-ui, sans-serif;
 }
 
 .dark {
@@ -14,6 +21,12 @@
   --background: #0f172a;
   --accent: #818cf8;
   --muted: #94a3b8;
+
+  /* Brand theme dark mode defaults */
+  --brand-primary: #38bdf8;
+  --brand-primary-hover: #7dd3fc;
+  --brand-primary-light: rgba(14,165,233,0.1);
+  --brand-accent: #38bdf8;
 }
 
 body {
@@ -63,13 +76,13 @@ button, a, input, textarea {
 
 /* Focus ring styling */
 *:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--brand-primary);
   outline-offset: 2px;
 }
 
 /* Gradient text helper */
 .gradient-text {
-  background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+  background: linear-gradient(135deg, var(--brand-primary) 0%, var(--brand-accent) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -82,18 +95,18 @@ button, a, input, textarea {
 
 .card-hover:hover {
   transform: translateY(-2px);
-  box-shadow: 0 10px 40px -10px rgba(99, 102, 241, 0.2);
+  box-shadow: 0 10px 40px -10px color-mix(in srgb, var(--brand-primary) 20%, transparent);
 }
 
 /* Button gradient */
 .btn-gradient {
-  background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+  background: linear-gradient(135deg, var(--brand-primary) 0%, var(--brand-accent) 100%);
   transition: all 0.2s ease;
 }
 
 .btn-gradient:hover {
-  background: linear-gradient(135deg, #4f46e5 0%, #9333ea 100%);
-  box-shadow: 0 4px 20px -4px rgba(99, 102, 241, 0.5);
+  filter: brightness(0.9);
+  box-shadow: 0 4px 20px -4px color-mix(in srgb, var(--brand-primary) 50%, transparent);
 }
 
 /* Animate spin for loading states */
@@ -122,5 +135,5 @@ button, a, input, textarea {
 
 /* Selection color */
 ::selection {
-  background: rgba(99, 102, 241, 0.3);
+  background: color-mix(in srgb, var(--brand-primary) 30%, transparent);
 }

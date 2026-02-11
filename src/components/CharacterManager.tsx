@@ -99,7 +99,7 @@ function CharacterCard({
           ) : (
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="w-20 h-20 rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 hover:border-sky-400 dark:hover:border-sky-500 hover:text-sky-500 transition-colors"
+              className="w-20 h-20 rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-600 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 hover:border-brand-primary hover:text-brand-primary transition-colors"
               title="Upload reference image"
             >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -131,7 +131,7 @@ function CharacterCard({
               if (name !== character.name) onUpdate(character.id, { name });
             }}
             placeholder="Character name"
-            className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1.5 text-sm text-slate-900 dark:text-slate-100 font-medium focus:ring-2 focus:ring-sky-500 focus:border-transparent transition-shadow"
+            className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1.5 text-sm text-slate-900 dark:text-slate-100 font-medium focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-shadow"
           />
           <textarea
             value={description}
@@ -145,7 +145,7 @@ function CharacterCard({
             }}
             placeholder="Describe this character's appearance for image generation..."
             rows={2}
-            className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 resize-y focus:ring-2 focus:ring-sky-500 focus:border-transparent transition-shadow"
+            className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 resize-y focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-shadow"
           />
         </div>
 
@@ -187,7 +187,7 @@ export default function CharacterManager({ characters, loading, onAdd, onUpdate,
         </div>
         <button
           onClick={onAdd}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-600 text-white text-sm font-medium hover:bg-sky-700 transition-colors"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-primary text-white text-sm font-medium hover:bg-brand-primary-hover transition-colors"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />

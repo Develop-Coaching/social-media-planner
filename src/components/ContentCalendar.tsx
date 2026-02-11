@@ -737,7 +737,7 @@ export default function ContentCalendar({ content, startDate, companyName, compa
             onDrop={(e) => handleDrop(e, dayIndex)}
             className={`min-h-[160px] rounded-xl border p-2.5 transition-colors ${
               dragOverDay === dayIndex
-                ? "bg-sky-50 dark:bg-sky-900/30 border-sky-300 dark:border-sky-600 ring-2 ring-sky-200 dark:ring-sky-700"
+                ? "bg-brand-primary-light border-brand-primary ring-2 ring-brand-primary/20"
                 : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
             }`}
           >

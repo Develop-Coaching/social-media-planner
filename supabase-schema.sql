@@ -25,6 +25,7 @@ CREATE TABLE companies (
   slack_editor_webhook_url TEXT,
   slack_bot_token TEXT,
   slack_channel_id TEXT,
+  font_family TEXT,
   PRIMARY KEY (user_id, id)
 );
 

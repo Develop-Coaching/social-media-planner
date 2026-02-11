@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Company, Character, Theme, ContentCounts, GeneratedContent, SavedContentItem, ToneStyle, CustomToneStyle, LanguageOption, defaultCounts, toneOptions, languageOptions } from "@/types";
 import Link from "next/link";
 import CompanySelector from "@/components/CompanySelector";
+import FontPicker from "@/components/FontPicker";
 import MemoryManager from "@/components/MemoryManager";
 import SavedContentList from "@/components/SavedContentList";
 import ThemeSelector from "@/components/ThemeSelector";
@@ -16,6 +17,7 @@ import LogoutButton from "@/components/LogoutButton";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { useToast } from "@/components/ToastProvider";
 import { SkeletonGenerating, SkeletonSavedItem, ElapsedTimer } from "@/components/Skeleton";
+import { buildBrandCssVars, isLightColor } from "@/lib/brand-theme";
 
 function isMobileDevice(): boolean {
   if (typeof navigator === "undefined") return false;
@@ -187,7 +189,7 @@ export default function Home() {
     }
   }
 
-  async function updateCompanyBrand(updates: { logo?: string; brandColors?: string[] }) {
+  async function updateCompanyBrand(updates: { logo?: string; brandColors?: string[]; fontFamily?: string }) {
     if (!selectedCompany) return;
     try {
       const res = await fetch("/api/companies", {
@@ -912,17 +914,69 @@ export default function Home() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [content, selectedCompany, selectedTheme, currentSavedId, contentLoading, handleGenerateContent, handleSaveContent, handleUpdateSavedContent, toast]);
 
+  // Brand CSS variables — apply company colors to CSS custom properties
+  useEffect(() => {
+    if (!selectedCompany) return;
+    const { light, dark } = buildBrandCssVars(selectedCompany.brandColors, selectedCompany.fontFamily);
+
+    // Set light-mode vars on :root
+    const root = document.documentElement;
+    for (const [key, val] of Object.entries(light)) {
+      root.style.setProperty(key, val);
+    }
+
+    // Inject/update dark-mode overrides via <style> tag
+    const styleId = "brand-dark-vars";
+    let styleEl = document.getElementById(styleId) as HTMLStyleElement | null;
+    if (!styleEl) {
+      styleEl = document.createElement("style");
+      styleEl.id = styleId;
+      document.head.appendChild(styleEl);
+    }
+    const darkCss = Object.entries(dark).map(([k, v]) => `  ${k}: ${v};`).join("\n");
+    styleEl.textContent = `.dark {\n${darkCss}\n}`;
+
+    return () => {
+      for (const key of Object.keys(light)) {
+        root.style.removeProperty(key);
+      }
+      if (styleEl) styleEl.textContent = "";
+    };
+  }, [selectedCompany?.brandColors, selectedCompany?.fontFamily, selectedCompany]);
+
+  // Google Font loader
+  useEffect(() => {
+    const fontFamily = selectedCompany?.fontFamily;
+    const linkId = "brand-google-font";
+    if (!fontFamily) {
+      const existing = document.getElementById(linkId);
+      if (existing) existing.remove();
+      return;
+    }
+    let link = document.getElementById(linkId) as HTMLLinkElement | null;
+    if (!link) {
+      link = document.createElement("link");
+      link.id = linkId;
+      link.rel = "stylesheet";
+      document.head.appendChild(link);
+    }
+    link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(fontFamily)}:wght@300;400;500;600;700&display=swap`;
+  }, [selectedCompany?.fontFamily]);
+
+  // Compute header text contrast
+  const headerTextLight = selectedCompany?.brandColors?.[0] ? isLightColor(selectedCompany.brandColors[0]) : false;
+
   if (!selectedCompany) {
     return <CompanySelector onSelect={handleSelectCompany} />;
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-50 to-sky-50 dark:from-slate-900 dark:to-sky-950">
-      <header className="bg-sky-600 text-white">
-        <div className="max-w-4xl mx-auto px-6 py-6">
+    <main className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-primary-light dark:from-slate-900 dark:to-brand-primary-light">
+      <header className="bg-brand-primary">
+        <div className={`max-w-4xl mx-auto px-6 py-6 ${headerTextLight ? "text-slate-900" : "text-white"}`}>
           <button
             onClick={handleBackToCompanies}
-            className="flex items-center gap-2 text-sky-100 hover:text-white mb-4 transition-colors"
+            className={`flex items-center gap-2 mb-4 transition-colors ${headerTextLight ? "text-slate-700 hover:text-slate-900" : "text-white/80 hover:text-white"}`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -932,18 +986,18 @@ export default function Home() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold">{selectedCompany.name}</h1>
-              <p className="text-sky-100 mt-1">Content themes from your memory - scripts, captions, articles & images</p>
+              <p className={`mt-1 ${headerTextLight ? "text-slate-600" : "text-white/80"}`}>Content themes from your memory - scripts, captions, articles & images</p>
             </div>
             <div className="flex items-center gap-2">
               {currentUser && (
-                <span className="text-sm text-sky-100 hidden sm:inline">
+                <span className={`text-sm hidden sm:inline ${headerTextLight ? "text-slate-600" : "text-white/80"}`}>
                   {currentUser.displayName}
                 </span>
               )}
               {currentUser?.role === "admin" && (
                 <Link
                   href="/admin"
-                  className="p-2 rounded-lg text-sky-100 hover:text-white hover:bg-white/10 transition-colors"
+                  className={`p-2 rounded-lg hover:bg-white/10 transition-colors ${headerTextLight ? "text-slate-600 hover:text-slate-900" : "text-white/80 hover:text-white"}`}
                   title="User management"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -969,7 +1023,7 @@ export default function Home() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
             Brand Settings
-            {(selectedCompany.logo || (selectedCompany.brandColors && selectedCompany.brandColors.length > 0) || characters.length > 0 || selectedCompany.slackWebhookUrl || selectedCompany.slackEditorWebhookUrl) && (
+            {(selectedCompany.logo || (selectedCompany.brandColors && selectedCompany.brandColors.length > 0) || selectedCompany.fontFamily || characters.length > 0 || selectedCompany.slackWebhookUrl || selectedCompany.slackEditorWebhookUrl) && (
               <span className="w-2 h-2 rounded-full bg-green-500" />
             )}
           </button>
@@ -1016,7 +1070,7 @@ export default function Home() {
                       />
                     ))}
                     {(selectedCompany.brandColors || []).length < 6 && (
-                      <label className="w-8 h-8 rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center cursor-pointer hover:border-sky-400 dark:hover:border-sky-500 transition-colors">
+                      <label className="w-8 h-8 rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center cursor-pointer hover:border-brand-primary transition-colors">
                         <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                         </svg>
@@ -1032,6 +1086,14 @@ export default function Home() {
                     {(selectedCompany.brandColors || []).length}/6 colors. Click a swatch to remove it.
                   </p>
                 </div>
+              </div>
+
+              {/* Font Family */}
+              <div className="mt-6">
+                <FontPicker
+                  value={selectedCompany.fontFamily || ""}
+                  onChange={(font) => updateCompanyBrand({ fontFamily: font })}
+                />
               </div>
 
               {/* Slack Integration */}
@@ -1052,7 +1114,7 @@ export default function Home() {
                         }
                       }}
                       placeholder="https://hooks.slack.com/services/..."
-                      className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500 focus:border-transparent transition-shadow"
+                      className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-shadow"
                     />
                     <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
                       Leave blank to use system defaults.
@@ -1072,7 +1134,7 @@ export default function Home() {
                         }
                       }}
                       placeholder="https://hooks.slack.com/services/..."
-                      className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500 focus:border-transparent transition-shadow"
+                      className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-shadow"
                     />
                   </div>
                   <div>
@@ -1100,7 +1162,7 @@ export default function Home() {
                               }
                             }}
                             placeholder="xoxb-..."
-                            className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500 focus:border-transparent transition-shadow font-mono"
+                            className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-shadow font-mono"
                           />
                         </div>
                         <div>
@@ -1115,7 +1177,7 @@ export default function Home() {
                               }
                             }}
                             placeholder="C01234ABCDE"
-                            className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500 focus:border-transparent transition-shadow font-mono"
+                            className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-shadow font-mono"
                           />
                         </div>
                       </div>
@@ -1197,7 +1259,7 @@ export default function Home() {
         {contentLoading && streamingText && (
           <section className="mb-8 rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-lg border border-slate-200 dark:border-slate-700">
             <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-200 mb-4 flex items-center gap-3">
-              <svg className="animate-spin h-5 w-5 text-sky-600" viewBox="0 0 24 24">
+              <svg className="animate-spin h-5 w-5 text-brand-primary" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
               </svg>
@@ -1251,8 +1313,8 @@ export default function Home() {
                   onClick={() => setViewMode("list")}
                   className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all border ${
                     viewMode === "list"
-                      ? "bg-sky-600 text-white border-sky-600 shadow-md"
-                      : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600 hover:border-sky-400"
+                      ? "bg-brand-primary text-white border-brand-primary shadow-md"
+                      : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600 hover:border-brand-primary"
                   }`}
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1264,8 +1326,8 @@ export default function Home() {
                   onClick={() => setViewMode("calendar")}
                   className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all border ${
                     viewMode === "calendar"
-                      ? "bg-sky-600 text-white border-sky-600 shadow-md"
-                      : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600 hover:border-sky-400"
+                      ? "bg-brand-primary text-white border-brand-primary shadow-md"
+                      : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600 hover:border-brand-primary"
                   }`}
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

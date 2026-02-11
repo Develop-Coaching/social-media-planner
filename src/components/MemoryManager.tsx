@@ -244,7 +244,7 @@ export default function MemoryManager({ companyId }: Props) {
   return (
     <section className="mb-8 rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-lg border border-slate-200 dark:border-slate-700">
       <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-200 mb-2 flex items-center gap-3">
-        <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-sky-100 dark:bg-sky-900/50 text-sky-600 dark:text-sky-400 text-sm font-bold">1</span>
+        <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-brand-primary-light text-brand-primary text-sm font-bold">1</span>
         Add to memory
       </h2>
       <p className="text-sm text-slate-500 dark:text-slate-400 mb-4 ml-11">
@@ -259,17 +259,17 @@ export default function MemoryManager({ companyId }: Props) {
           onDrop={handleDrop}
           className={`relative mb-3 rounded-xl border-2 border-dashed p-6 text-center transition-all ${
             isDragOver
-              ? "border-sky-500 bg-sky-50 dark:bg-sky-900/20"
+              ? "border-brand-primary bg-brand-primary-light"
               : "border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/30 hover:border-slate-400 dark:hover:border-slate-500"
           }`}
         >
           {isDragOver && (
-            <div className="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-sky-50/90 dark:bg-sky-900/80">
+            <div className="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-brand-primary-light">
               <div className="flex flex-col items-center gap-2">
-                <svg className="w-10 h-10 text-sky-500 dark:text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-10 h-10 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                 </svg>
-                <p className="text-lg font-semibold text-sky-600 dark:text-sky-300">Drop files here</p>
+                <p className="text-lg font-semibold text-brand-primary">Drop files here</p>
               </div>
             </div>
           )}
@@ -281,7 +281,7 @@ export default function MemoryManager({ companyId }: Props) {
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="text-sky-600 dark:text-sky-400 font-medium hover:underline"
+              className="text-brand-primary font-medium hover:underline"
             >
               browse
             </button>
@@ -304,7 +304,7 @@ export default function MemoryManager({ companyId }: Props) {
           />
         </div>
         {uploadProgress && (
-          <p className="text-sm text-sky-600 dark:text-sky-400 mt-2 flex items-center gap-2">
+          <p className="text-sm text-brand-primary mt-2 flex items-center gap-2">
             <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
@@ -320,19 +320,19 @@ export default function MemoryManager({ companyId }: Props) {
           placeholder="Name (e.g. Brand guidelines)"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-3 text-slate-900 dark:text-slate-100 mb-3 focus:ring-2 focus:ring-sky-500 focus:border-transparent transition-shadow"
+          className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-3 text-slate-900 dark:text-slate-100 mb-3 focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-shadow"
         />
         <textarea
           placeholder="Paste your context here..."
           value={content}
           onChange={(e) => setContent(e.target.value)}
           rows={4}
-          className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-3 text-slate-900 dark:text-slate-100 resize-y focus:ring-2 focus:ring-sky-500 focus:border-transparent transition-shadow"
+          className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-3 text-slate-900 dark:text-slate-100 resize-y focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-shadow"
         />
         <button
           onClick={handleSave}
           disabled={saving || !name.trim() || !content.trim()}
-          className="mt-3 rounded-xl bg-sky-600 text-white px-6 py-3 font-medium hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg"
+          className="mt-3 rounded-xl bg-brand-primary text-white px-6 py-3 font-medium hover:bg-brand-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg"
         >
           {saving ? "Saving..." : "Save to memory"}
         </button>
