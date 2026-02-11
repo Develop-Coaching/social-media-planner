@@ -87,7 +87,7 @@ function UndoRedoButtons({
         onClick={onUndo}
         disabled={!canUndo}
         title="Undo"
-        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-sky-600 dark:hover:text-sky-400 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-brand-primary hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
       >
         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a5 5 0 015 5v2M3 10l4-4m-4 4l4 4" />
@@ -98,7 +98,7 @@ function UndoRedoButtons({
         onClick={onRedo}
         disabled={!canRedo}
         title="Redo"
-        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-sky-600 dark:hover:text-sky-400 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-400 hover:text-brand-primary hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
       >
         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 10H11a5 5 0 00-5 5v2m15-7l-4-4m4 4l-4 4" />
@@ -135,7 +135,7 @@ function PostingDatePicker({ itemId, date, onChange }: { itemId: string; date?: 
         type="date"
         value={date || ""}
         onChange={(e) => onChange(itemId, e.target.value || null)}
-        className="text-sm bg-transparent border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1 text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-sky-500 focus:border-transparent"
+        className="text-sm bg-transparent border border-slate-300 dark:border-slate-600 rounded-lg px-2 py-1 text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-brand-primary focus:border-transparent"
       />
       {date && (
         <button
@@ -530,7 +530,7 @@ export default function ContentResults({
       <button
         onClick={() => handleAddItem(contentType, section)}
         disabled={isAdding || addingItemType !== null}
-        className="mt-2 w-full py-3 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:border-sky-400 dark:hover:border-sky-500 hover:text-sky-600 dark:hover:text-sky-400 font-medium text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
+        className="mt-2 w-full py-3 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:border-brand-primary hover:text-brand-primary font-medium text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
       >
         {isAdding ? (
           <>
@@ -1029,8 +1029,10 @@ export default function ContentResults({
       const data = await res.json();
       if (res.ok) {
         toast("Saved to Google Drive", "success");
-        if (data.folderLink) {
-          setDriveLinks((prev) => ({ ...prev, [key]: data.folderLink }));
+        // Prefer direct file link, fall back to folder link
+        const link = data.fileLink || data.folderLink;
+        if (link) {
+          setDriveLinks((prev) => ({ ...prev, [key]: link }));
         }
       } else if (data.error === "not_authenticated") {
         pendingDriveUploadRef.current = key;
@@ -1051,7 +1053,7 @@ export default function ContentResults({
       <div className="mt-3">
         <img src={images[key]} alt="" className="rounded-xl max-h-64 object-cover shadow-md cursor-pointer hover:opacity-90 transition-opacity" onClick={() => setFullscreenImage(images[key])} />
         <div className="flex items-center gap-3 mt-2">
-          <button onClick={() => downloadImage(images[key], filename)} className="text-sm text-sky-600 dark:text-sky-400 hover:text-sky-800 dark:hover:text-sky-300 font-medium inline-flex items-center gap-1">
+          <button onClick={() => downloadImage(images[key], filename)} className="text-sm text-brand-primary hover:text-brand-primary-hover font-medium inline-flex items-center gap-1">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
             Download
           </button>
@@ -1129,7 +1131,7 @@ export default function ContentResults({
               value={imageRegenFeedback}
               onChange={(e) => setImageRegenFeedback(e.target.value)}
               placeholder="e.g. Make it brighter, less text, more minimalist..."
-              className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-sky-500 mb-2"
+              className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-brand-primary mb-2"
             />
             <button
               onClick={() => {
@@ -1139,7 +1141,7 @@ export default function ContentResults({
                 setImageRegenKey(null);
                 setImageRegenFeedback("");
               }}
-              className="px-4 py-1.5 rounded-lg bg-sky-600 text-white text-sm font-medium hover:bg-sky-700 transition-colors"
+              className="px-4 py-1.5 rounded-lg bg-brand-primary text-white text-sm font-medium hover:bg-brand-primary-hover transition-colors"
             >
               Regenerate
             </button>
@@ -1194,13 +1196,13 @@ export default function ContentResults({
           value={prompt}
           onChange={(e) => onPromptChange(e.target.value)}
           rows={2}
-          className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-sky-500"
+          className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-brand-primary"
         />
         <div className="flex items-center gap-2 mt-2">
           <button
             onClick={() => onGenerateImage(key, withBrandContext(prompt), aspectRatio)}
             disabled={imageLoading.has(key) || !prompt.trim()}
-            className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-sky-600 text-white text-sm font-medium hover:bg-sky-700 disabled:opacity-50 transition-colors"
+            className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-brand-primary text-white text-sm font-medium hover:bg-brand-primary-hover disabled:opacity-50 transition-colors"
           >
             <svg className={`w-4 h-4 ${imageLoading.has(key) ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -1348,7 +1350,7 @@ export default function ContentResults({
             <button
               onClick={onGenerateAllImages}
               disabled={imageLoading.size > 0}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-sky-600 text-white font-medium hover:bg-sky-700 disabled:opacity-50 transition-colors text-sm"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-brand-primary text-white font-medium hover:bg-brand-primary-hover disabled:opacity-50 transition-colors text-sm"
             >
               <svg className={`w-4 h-4 ${imageLoading.size > 0 ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -1411,7 +1413,7 @@ export default function ContentResults({
       </div>
 
       {showSaveDialog && (
-        <div className="mb-6 p-4 rounded-xl bg-sky-50 dark:bg-sky-900/20 border border-sky-200 dark:border-sky-800">
+        <div className="mb-6 p-4 rounded-xl bg-brand-primary-light border border-brand-primary">
           <h3 className="font-medium text-slate-800 dark:text-slate-200 mb-3">Save this content</h3>
           <div className="flex gap-3">
             <input
@@ -1420,12 +1422,12 @@ export default function ContentResults({
               value={saveContentName}
               onChange={(e) => onSaveContentNameChange(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && onSaveContent()}
-              className="flex-1 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500"
+              className="flex-1 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary"
             />
             <button
               onClick={onSaveContent}
               disabled={savingContent || !saveContentName.trim()}
-              className="px-4 py-2 rounded-lg bg-sky-600 text-white font-medium hover:bg-sky-700 disabled:opacity-50 transition-colors"
+              className="px-4 py-2 rounded-lg bg-brand-primary text-white font-medium hover:bg-brand-primary-hover disabled:opacity-50 transition-colors"
             >
               {savingContent ? "Saving..." : "Save"}
             </button>
@@ -1452,7 +1454,7 @@ export default function ContentResults({
                 onRedo={() => handleRedo("posts")}
               />
             </div>
-            <button onClick={() => downloadSectionAsWord(buildPostsParagraphs, "posts.docx")} className="text-sm text-sky-600 dark:text-sky-400 hover:text-sky-800 dark:hover:text-sky-300 font-medium">
+            <button onClick={() => downloadSectionAsWord(buildPostsParagraphs, "posts.docx")} className="text-sm text-brand-primary hover:text-brand-primary-hover font-medium">
               Download as Word
             </button>
           </div>
@@ -1474,14 +1476,14 @@ export default function ContentResults({
                 {isEditing ? (
                   <>
                     <label className="block text-xs text-slate-500 mb-1">Title:</label>
-                    <input type="text" value={p.title} onChange={(e) => updatePost(i, "title", e.target.value)} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-3 font-semibold focus:ring-2 focus:ring-sky-500" />
+                    <input type="text" value={p.title} onChange={(e) => updatePost(i, "title", e.target.value)} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-3 font-semibold focus:ring-2 focus:ring-brand-primary" />
                     <label className="block text-xs text-slate-500 mb-1">Caption:</label>
-                    <textarea value={p.caption} onChange={(e) => updatePost(i, "caption", e.target.value)} rows={6} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-1 focus:ring-2 focus:ring-sky-500" />
+                    <textarea value={p.caption} onChange={(e) => updatePost(i, "caption", e.target.value)} rows={6} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-1 focus:ring-2 focus:ring-brand-primary" />
                     <div className="flex gap-3 mb-3"><CharCount text={p.caption} limit={2200} label="IG" /> <CharCount text={p.caption} limit={3000} label="LinkedIn" /></div>
                   </>
                 ) : (
                   <>
-                    <h4 className="font-semibold text-sky-600 dark:text-sky-400 mb-2">{p.title}</h4>
+                    <h4 className="font-semibold text-brand-primary mb-2">{p.title}</h4>
                     <p className="text-slate-800 dark:text-slate-200 whitespace-pre-wrap">{p.caption}</p>
                     <div className="flex gap-3 mt-1"><CharCount text={p.caption} limit={2200} label="IG" /> <CharCount text={p.caption} limit={3000} label="LinkedIn" /></div>
                   </>
@@ -1509,7 +1511,7 @@ export default function ContentResults({
                 onRedo={() => handleRedo("reels")}
               />
             </div>
-            <button onClick={() => downloadSectionAsWord(buildReelsParagraphs, "reel-scripts.docx")} className="text-sm text-sky-600 dark:text-sky-400 hover:text-sky-800 dark:hover:text-sky-300 font-medium">
+            <button onClick={() => downloadSectionAsWord(buildReelsParagraphs, "reel-scripts.docx")} className="text-sm text-brand-primary hover:text-brand-primary-hover font-medium">
               Download as Word
             </button>
           </div>
@@ -1586,12 +1588,12 @@ export default function ContentResults({
                 {isEditing ? (
                   <>
                     <label className="block text-xs text-slate-500 mb-1">Title:</label>
-                    <input value={r.title || ""} onChange={(e) => updateReel(i, "title", e.target.value)} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-3 focus:ring-2 focus:ring-sky-500 font-semibold" placeholder="Short description of the reel..." />
+                    <input value={r.title || ""} onChange={(e) => updateReel(i, "title", e.target.value)} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-3 focus:ring-2 focus:ring-brand-primary font-semibold" placeholder="Short description of the reel..." />
                     <label className="block text-xs text-slate-500 mb-1">Script (spoken words):</label>
-                    <textarea value={r.script} onChange={(e) => updateReel(i, "script", e.target.value)} rows={8} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-1 focus:ring-2 focus:ring-sky-500" />
+                    <textarea value={r.script} onChange={(e) => updateReel(i, "script", e.target.value)} rows={8} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-1 focus:ring-2 focus:ring-brand-primary" />
                     <div className="mb-3"><WordCount text={r.script} label="Script" /></div>
                     <label className="block text-xs text-slate-500 mb-1">Caption (posted with the reel):</label>
-                    <textarea value={r.caption || ""} onChange={(e) => updateReel(i, "caption", e.target.value)} rows={4} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-1 focus:ring-2 focus:ring-sky-500" />
+                    <textarea value={r.caption || ""} onChange={(e) => updateReel(i, "caption", e.target.value)} rows={4} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-1 focus:ring-2 focus:ring-brand-primary" />
                     <div className="flex gap-3 mb-3"><CharCount text={r.caption || ""} limit={2200} label="IG" /></div>
                   </>
                 ) : (
@@ -1599,8 +1601,8 @@ export default function ContentResults({
                     <p className="text-slate-800 dark:text-slate-200 whitespace-pre-wrap">{r.script}</p>
                     <div className="mt-1"><WordCount text={r.script} label="Script" /></div>
                     {(r.caption || "") && (
-                      <div className="mt-3 p-3 rounded-lg bg-sky-50 dark:bg-sky-900/20 border border-sky-100 dark:border-sky-800">
-                        <p className="text-xs text-sky-600 dark:text-sky-400 font-medium mb-1">Caption:</p>
+                      <div className="mt-3 p-3 rounded-lg bg-brand-primary-light border border-brand-primary">
+                        <p className="text-xs text-brand-primary font-medium mb-1">Caption:</p>
                         <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap">{r.caption}</p>
                         <div className="mt-1"><CharCount text={r.caption || ""} limit={2200} label="IG" /></div>
                       </div>
@@ -1763,7 +1765,7 @@ export default function ContentResults({
                 onRedo={() => handleRedo("linkedinArticles")}
               />
             </div>
-            <button onClick={() => downloadSectionAsWord(buildArticlesParagraphs, "linkedin-articles.docx")} className="text-sm text-sky-600 dark:text-sky-400 hover:text-sky-800 dark:hover:text-sky-300 font-medium">
+            <button onClick={() => downloadSectionAsWord(buildArticlesParagraphs, "linkedin-articles.docx")} className="text-sm text-brand-primary hover:text-brand-primary-hover font-medium">
               Download as Word
             </button>
           </div>
@@ -1785,20 +1787,20 @@ export default function ContentResults({
                 {isEditing ? (
                   <>
                     <label className="block text-xs text-slate-500 mb-1">Title:</label>
-                    <input type="text" value={a.title} onChange={(e) => updateArticle(i, "title", e.target.value)} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-3 font-semibold focus:ring-2 focus:ring-sky-500" />
+                    <input type="text" value={a.title} onChange={(e) => updateArticle(i, "title", e.target.value)} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-3 font-semibold focus:ring-2 focus:ring-brand-primary" />
                     <label className="block text-xs text-slate-500 mb-1">LinkedIn post caption (teaser):</label>
-                    <textarea value={a.caption} onChange={(e) => updateArticle(i, "caption", e.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-1 text-sm focus:ring-2 focus:ring-sky-500" />
+                    <textarea value={a.caption} onChange={(e) => updateArticle(i, "caption", e.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-1 text-sm focus:ring-2 focus:ring-brand-primary" />
                     <div className="mb-3"><CharCount text={a.caption} limit={3000} label="LinkedIn" /></div>
                     <label className="block text-xs text-slate-500 mb-1">Article body:</label>
-                    <textarea value={a.body} onChange={(e) => updateArticle(i, "body", e.target.value)} rows={12} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-1 text-sm focus:ring-2 focus:ring-sky-500" />
+                    <textarea value={a.body} onChange={(e) => updateArticle(i, "body", e.target.value)} rows={12} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-1 text-sm focus:ring-2 focus:ring-brand-primary" />
                     <div className="mb-3"><WordCount text={a.body} label="Article" /></div>
                   </>
                 ) : (
                   <>
                     <h4 className="font-semibold text-slate-900 dark:text-white text-lg">{a.title}</h4>
                     {a.caption && (
-                      <div className="mt-2 p-3 rounded-lg bg-sky-50 dark:bg-sky-900/20 border border-sky-100 dark:border-sky-800">
-                        <p className="text-xs text-sky-600 dark:text-sky-400 font-medium mb-1">LinkedIn post caption:</p>
+                      <div className="mt-2 p-3 rounded-lg bg-brand-primary-light border border-brand-primary">
+                        <p className="text-xs text-brand-primary font-medium mb-1">LinkedIn post caption:</p>
                         <p className="text-sm text-slate-700 dark:text-slate-300">{a.caption}</p>
                       </div>
                     )}
@@ -1829,7 +1831,7 @@ export default function ContentResults({
                 onRedo={() => handleRedo("carousels")}
               />
             </div>
-            <button onClick={() => downloadSectionAsWord(buildCarouselsParagraphs, "carousels.docx")} className="text-sm text-sky-600 dark:text-sky-400 hover:text-sky-800 dark:hover:text-sky-300 font-medium">
+            <button onClick={() => downloadSectionAsWord(buildCarouselsParagraphs, "carousels.docx")} className="text-sm text-brand-primary hover:text-brand-primary-hover font-medium">
               Download as Word
             </button>
           </div>
@@ -1862,17 +1864,17 @@ export default function ContentResults({
                 {isEditing ? (
                   <>
                     <label className="block text-xs text-slate-500 mb-1">Post caption:</label>
-                    <textarea value={c.caption || ""} onChange={(e) => updateCarousel(i, "caption", e.target.value)} rows={3} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm mb-4 focus:ring-2 focus:ring-sky-500" placeholder="Social media caption for this carousel..." />
+                    <textarea value={c.caption || ""} onChange={(e) => updateCarousel(i, "caption", e.target.value)} rows={3} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm mb-4 focus:ring-2 focus:ring-brand-primary" placeholder="Social media caption for this carousel..." />
                     {c.slides.map((s, j) => (
                       <div key={j} className="mb-4 pb-4 border-b border-slate-200 dark:border-slate-700 last:border-0">
                         <label className="block text-xs text-slate-500 mb-1">Slide {j + 1} title:</label>
-                        <input type="text" value={s.title} onChange={(e) => updateCarouselSlide(i, j, "title", e.target.value)} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-2 font-semibold focus:ring-2 focus:ring-sky-500" />
+                        <input type="text" value={s.title} onChange={(e) => updateCarouselSlide(i, j, "title", e.target.value)} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-2 font-semibold focus:ring-2 focus:ring-brand-primary" />
                         <label className="block text-xs text-slate-500 mb-1">Slide {j + 1} body:</label>
-                        <textarea value={s.body} onChange={(e) => updateCarouselSlide(i, j, "body", e.target.value)} rows={3} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-sky-500" />
+                        <textarea value={s.body} onChange={(e) => updateCarouselSlide(i, j, "body", e.target.value)} rows={3} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-brand-primary" />
                       </div>
                     ))}
                     <label className="block text-xs text-slate-500 mb-1">Image style prompt:</label>
-                    <textarea value={c.imagePrompt} onChange={(e) => updateCarousel(i, "imagePrompt", e.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-sky-500" />
+                    <textarea value={c.imagePrompt} onChange={(e) => updateCarousel(i, "imagePrompt", e.target.value)} rows={2} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-brand-primary" />
                   </>
                 ) : (
                   <>
@@ -1885,7 +1887,7 @@ export default function ContentResults({
                           <button
                             onClick={() => onGenerateCarouselImages(i)}
                             disabled={loadingSlides.length > 0}
-                            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-sky-600 text-white font-medium hover:bg-sky-700 disabled:opacity-50 transition-colors text-sm"
+                            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-brand-primary text-white font-medium hover:bg-brand-primary-hover disabled:opacity-50 transition-colors text-sm"
                           >
                             <svg className={`w-4 h-4 ${loadingSlides.length > 0 ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -1917,7 +1919,7 @@ export default function ContentResults({
                                   Generating slide {j + 1}...
                                 </div>
                               ) : (
-                                <button onClick={() => onGenerateImage(slideKey, withBrandContext(buildCarouselSlidePrompt(c, j)), "1:1")} className="text-sm text-sky-600 dark:text-sky-400 hover:text-sky-800 dark:hover:text-sky-300 font-medium">
+                                <button onClick={() => onGenerateImage(slideKey, withBrandContext(buildCarouselSlidePrompt(c, j)), "1:1")} className="text-sm text-brand-primary hover:text-brand-primary-hover font-medium">
                                   Generate slide image
                                 </button>
                               )}
@@ -1950,7 +1952,7 @@ export default function ContentResults({
                 onRedo={() => handleRedo("quotesForX")}
               />
             </div>
-            <button onClick={() => downloadSectionAsWord(buildQuotesParagraphs, "quotes-for-x.docx")} className="text-sm text-sky-600 dark:text-sky-400 hover:text-sky-800 dark:hover:text-sky-300 font-medium">
+            <button onClick={() => downloadSectionAsWord(buildQuotesParagraphs, "quotes-for-x.docx")} className="text-sm text-brand-primary hover:text-brand-primary-hover font-medium">
               Download as Word
             </button>
           </div>
@@ -1971,7 +1973,7 @@ export default function ContentResults({
                 </div>
                 {isEditing ? (
                   <>
-                    <textarea value={q.quote} onChange={(e) => updateQuote(i, "quote", e.target.value)} rows={3} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-1 focus:ring-2 focus:ring-sky-500" />
+                    <textarea value={q.quote} onChange={(e) => updateQuote(i, "quote", e.target.value)} rows={3} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-1 focus:ring-2 focus:ring-brand-primary" />
                     <div className="mb-3"><CharCount text={q.quote} limit={280} label="X" /></div>
                   </>
                 ) : (
@@ -2003,7 +2005,7 @@ export default function ContentResults({
                 onRedo={() => handleRedo("youtube")}
               />
             </div>
-            <button onClick={() => downloadSectionAsWord(buildYoutubeParagraphs, "youtube-scripts.docx")} className="text-sm text-sky-600 dark:text-sky-400 hover:text-sky-800 dark:hover:text-sky-300 font-medium">
+            <button onClick={() => downloadSectionAsWord(buildYoutubeParagraphs, "youtube-scripts.docx")} className="text-sm text-brand-primary hover:text-brand-primary-hover font-medium">
               Download as Word
             </button>
           </div>
@@ -2024,8 +2026,8 @@ export default function ContentResults({
                 </div>
                 {isEditing ? (
                   <>
-                    <input type="text" value={y.title} onChange={(e) => updateYoutube(i, "title", e.target.value)} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-3 font-semibold focus:ring-2 focus:ring-sky-500" />
-                    <textarea value={y.script} onChange={(e) => updateYoutube(i, "script", e.target.value)} rows={12} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-1 text-sm focus:ring-2 focus:ring-sky-500" />
+                    <input type="text" value={y.title} onChange={(e) => updateYoutube(i, "title", e.target.value)} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-3 font-semibold focus:ring-2 focus:ring-brand-primary" />
+                    <textarea value={y.script} onChange={(e) => updateYoutube(i, "script", e.target.value)} rows={12} className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-slate-900 dark:text-slate-100 mb-1 text-sm focus:ring-2 focus:ring-brand-primary" />
                     <div className="mb-3"><WordCount text={y.script} label="Script" /></div>
                   </>
                 ) : (

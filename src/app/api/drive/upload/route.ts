@@ -47,8 +47,11 @@ export async function POST(request: NextRequest) {
       return body.folderName ? await ensureFolder(drive, cid, body.folderName) : cid;
     })();
 
+    console.log("[Drive upload] Target folder ID:", companyFolderId, "| from targetFolderId:", body.targetFolderId);
+
     let uploaded = 0;
     const errors: string[] = [];
+    let lastFileLink: string | undefined;
 
     // Upload sequentially to avoid rate limits
     for (const img of imageList) {
@@ -59,8 +62,10 @@ export async function POST(request: NextRequest) {
       }
 
       const result = await uploadImage(drive, companyFolderId, img.fileName, dataUrl);
+      console.log("[Drive upload] Result:", JSON.stringify({ ok: result.ok, fileId: result.fileId, webViewLink: result.webViewLink, error: result.error }));
       if (result.ok) {
         uploaded++;
+        lastFileLink = result.webViewLink;
       } else {
         errors.push(`Failed to upload "${img.fileName}": ${result.error}`);
       }
@@ -73,6 +78,7 @@ export async function POST(request: NextRequest) {
       uploaded,
       total: imageList.length,
       folderLink,
+      fileLink: lastFileLink,
       errors: errors.length > 0 ? errors : undefined,
     });
   } catch (e) {
