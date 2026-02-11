@@ -59,13 +59,14 @@ function buildSlackBlocks(
     text: { type: "mrkdwn", text: config.slackHeading },
   });
 
-  blocks.push({
-    type: "section",
-    fields: [
-      { type: "mrkdwn", text: `*Company:*\n${body.companyName}` },
-      { type: "mrkdwn", text: `*Theme:*\n\u201c${body.themeName || "N/A"}\u201d` },
-    ],
-  });
+  const fields: Record<string, unknown>[] = [
+    { type: "mrkdwn", text: `*Company:*\n${body.companyName}` },
+    { type: "mrkdwn", text: `*Theme:*\n\u201c${body.themeName || "N/A"}\u201d` },
+  ];
+  if (body.reelTitle) {
+    fields.push({ type: "mrkdwn", text: `*Reel:*\n${body.reelTitle}` });
+  }
+  blocks.push({ type: "section", fields });
 
   blocks.push({ type: "divider" });
 
