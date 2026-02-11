@@ -687,35 +687,59 @@ export default function ContentResults({
   async function handleUploadRawVideo(reelIndex: number, file: File, targetFolderId?: string) {
     setUploadingVideoReel(reelIndex);
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("companyName", companyName);
-      formData.append("folderName", theme.title || "Reels");
-      if (targetFolderId) {
-        formData.append("targetFolderId", targetFolderId);
-      }
+      // Step 1: Ask server to create a resumable upload session (small JSON request)
+      const initRes = await fetch("/api/drive/upload-video", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fileName: file.name,
+          mimeType: file.type,
+          fileSize: file.size,
+          companyName,
+          folderName: theme.title || "Reels",
+          targetFolderId,
+        }),
+      });
+      const initData = await initRes.json();
 
-      const res = await fetch("/api/drive/upload-video", { method: "POST", body: formData });
-      const data = await res.json();
-
-      if (!res.ok) {
-        if (data.error === "not_authenticated") {
+      if (!initRes.ok) {
+        if (initData.error === "not_authenticated") {
           pendingDriveUploadRef.current = `video-upload-${reelIndex}`;
           googleCodeClientRef.current?.requestCode();
         } else {
-          toast(data.error || "Failed to upload video", "error");
+          toast(initData.error || "Failed to start upload", "error");
         }
         return;
       }
 
+      // Step 2: Upload file directly to Google Drive (bypasses Vercel size limit)
+      const uploadRes = await fetch(initData.uploadUrl, {
+        method: "PUT",
+        headers: {
+          "Content-Type": file.type,
+          "Content-Length": String(file.size),
+        },
+        body: file,
+      });
+
+      if (!uploadRes.ok) {
+        const errText = await uploadRes.text().catch(() => "");
+        toast(`Upload failed: ${uploadRes.status} ${errText.slice(0, 100)}`, "error");
+        return;
+      }
+
+      const driveFile = await uploadRes.json();
+      const fileId = driveFile.id;
+      const webViewLink = driveFile.webViewLink || `https://drive.google.com/file/d/${fileId}/view`;
+
       linkReelVideo(reelIndex, "raw", {
-        fileId: data.fileId,
-        webViewLink: data.webViewLink,
-        name: data.name,
+        fileId,
+        webViewLink,
+        name: file.name,
       });
       toast("Raw video uploaded to Drive", "success");
-    } catch {
-      toast("Failed to upload video", "error");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Failed to upload video", "error");
     } finally {
       setUploadingVideoReel(null);
     }

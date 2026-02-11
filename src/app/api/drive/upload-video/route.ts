@@ -1,61 +1,115 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/auth-helpers";
-import { getDriveClient, DriveAuthError, ensureFolder, uploadFile } from "@/lib/drive";
+import { getDriveClient, DriveAuthError, ensureFolder } from "@/lib/drive";
+import { getDriveTokens, refreshAccessToken } from "@/lib/drive-tokens";
 
 export const dynamic = "force-dynamic";
 
 const MAX_VIDEO_SIZE = 500 * 1024 * 1024; // 500MB
 
+/**
+ * Creates a Google Drive resumable upload session.
+ * Returns the upload URL so the client can upload directly to Google,
+ * bypassing Vercel's serverless body size limit.
+ */
 export async function POST(request: NextRequest) {
   try {
     const { userId } = await requireAuth();
     const drive = await getDriveClient(userId);
 
-    const formData = await request.formData();
-    const file = formData.get("file") as File | null;
-    const companyName = formData.get("companyName") as string | null;
-    const folderName = formData.get("folderName") as string | null;
-    const explicitFolderId = formData.get("targetFolderId") as string | null;
+    const body = await request.json();
+    const {
+      fileName,
+      mimeType,
+      fileSize,
+      companyName,
+      folderName,
+      targetFolderId: explicitFolderId,
+    } = body as {
+      fileName: string;
+      mimeType: string;
+      fileSize: number;
+      companyName: string;
+      folderName?: string;
+      targetFolderId?: string;
+    };
 
-    if (!file || !companyName) {
-      return NextResponse.json({ error: "Missing file or companyName" }, { status: 400 });
-    }
-
-    if (!file.type.startsWith("video/")) {
-      return NextResponse.json({ error: "File must be a video" }, { status: 400 });
-    }
-
-    if (file.size > MAX_VIDEO_SIZE) {
+    if (!fileName || !mimeType || !companyName) {
       return NextResponse.json(
-        { error: `File too large (${Math.round(file.size / 1024 / 1024)}MB, max 500MB)` },
+        { error: "Missing fileName, mimeType, or companyName" },
         { status: 400 }
       );
     }
 
-    // Use explicit folder ID if provided, otherwise auto-create structure
-    let targetFolderId: string;
+    if (!mimeType.startsWith("video/")) {
+      return NextResponse.json({ error: "File must be a video" }, { status: 400 });
+    }
+
+    if (fileSize && fileSize > MAX_VIDEO_SIZE) {
+      return NextResponse.json(
+        { error: `File too large (${Math.round(fileSize / 1024 / 1024)}MB, max 500MB)` },
+        { status: 400 }
+      );
+    }
+
+    // Resolve target folder
+    let folderId: string;
     if (explicitFolderId) {
-      targetFolderId = explicitFolderId;
+      folderId = explicitFolderId;
     } else {
       const companyFolderId = await ensureFolder(drive, "root", companyName);
-      targetFolderId = folderName
+      folderId = folderName
         ? await ensureFolder(drive, companyFolderId, folderName)
         : companyFolderId;
     }
 
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const result = await uploadFile(drive, targetFolderId, file.name, buffer, file.type);
-
-    if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: 500 });
+    // Get a fresh access token for the resumable upload session
+    let tokens = await getDriveTokens(userId);
+    if (!tokens) {
+      throw new DriveAuthError("not_authenticated");
+    }
+    if (tokens.expiresAt < Date.now() + 5 * 60 * 1000) {
+      const refreshed = await refreshAccessToken(userId);
+      if (!refreshed) throw new DriveAuthError("not_authenticated");
+      tokens = refreshed;
     }
 
-    return NextResponse.json({
-      ok: true,
-      fileId: result.fileId,
-      webViewLink: result.webViewLink || `https://drive.google.com/file/d/${result.fileId}/view`,
-      name: file.name,
-    });
+    // Create resumable upload session with Google Drive
+    const initRes = await fetch(
+      "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=true",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${tokens.accessToken}`,
+          "Content-Type": "application/json; charset=UTF-8",
+          ...(fileSize ? { "X-Upload-Content-Length": String(fileSize) } : {}),
+          "X-Upload-Content-Type": mimeType,
+        },
+        body: JSON.stringify({
+          name: fileName,
+          parents: [folderId],
+        }),
+      }
+    );
+
+    if (!initRes.ok) {
+      const errText = await initRes.text();
+      console.error("Drive resumable init failed:", initRes.status, errText);
+      return NextResponse.json(
+        { error: `Google Drive error: ${initRes.status}` },
+        { status: 502 }
+      );
+    }
+
+    const uploadUrl = initRes.headers.get("Location");
+    if (!uploadUrl) {
+      return NextResponse.json(
+        { error: "Google Drive did not return an upload URL" },
+        { status: 502 }
+      );
+    }
+
+    return NextResponse.json({ ok: true, uploadUrl, folderId });
   } catch (e) {
     if (e instanceof DriveAuthError) {
       return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
@@ -63,8 +117,8 @@ export async function POST(request: NextRequest) {
     if (e instanceof AuthError) {
       return NextResponse.json({ error: e.message }, { status: (e as AuthError & { status: number }).status });
     }
-    console.error("Drive video upload error:", e);
-    const message = e instanceof Error ? e.message : "Failed to upload video";
+    console.error("Drive video upload init error:", e);
+    const message = e instanceof Error ? e.message : "Failed to initiate upload";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
