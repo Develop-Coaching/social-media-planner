@@ -713,12 +713,10 @@ export default function ContentResults({
       }
 
       // Step 2: Upload file directly to Google Drive (bypasses Vercel size limit)
+      // Content-Length is set automatically by the browser; setting it manually is forbidden
       const uploadRes = await fetch(initData.uploadUrl, {
         method: "PUT",
-        headers: {
-          "Content-Type": file.type,
-          "Content-Length": String(file.size),
-        },
+        headers: { "Content-Type": file.type },
         body: file,
       });
 

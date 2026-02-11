@@ -34,6 +34,9 @@ export async function POST(request: NextRequest) {
       targetFolderId?: string;
     };
 
+    // Capture the request origin so Google returns proper CORS headers
+    const origin = request.headers.get("origin") || request.headers.get("referer")?.replace(/\/[^/]*$/, "") || "";
+
     if (!fileName || !mimeType || !companyName) {
       return NextResponse.json(
         { error: "Missing fileName, mimeType, or companyName" },
@@ -75,8 +78,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Create resumable upload session with Google Drive
+    // The origin param tells Google to return CORS headers for the upload URL
+    const uploadParams = new URLSearchParams({
+      uploadType: "resumable",
+      supportsAllDrives: "true",
+      ...(origin ? { origin } : {}),
+    });
     const initRes = await fetch(
-      "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=true",
+      `https://www.googleapis.com/upload/drive/v3/files?${uploadParams}`,
       {
         method: "POST",
         headers: {
