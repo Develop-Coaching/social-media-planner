@@ -6,7 +6,7 @@ import Link from "next/link";
 import CompanySelector from "@/components/CompanySelector";
 import FontPicker from "@/components/FontPicker";
 import MemoryManager from "@/components/MemoryManager";
-import ProjectDashboard from "@/components/ProjectDashboard";
+import SavedContentList from "@/components/SavedContentList";
 import ThemeSelector from "@/components/ThemeSelector";
 import ContentGenerator from "@/components/ContentGenerator";
 import ContentResults from "@/components/ContentResults";
@@ -27,7 +27,7 @@ function isMobileDevice(): boolean {
 export default function Home() {
   const { toast } = useToast();
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
-  const [activeView, setActiveView] = useState<"dashboard" | "editor">("dashboard");
+  const [showSavedContent, setShowSavedContent] = useState(false);
   const [selectedTheme, setSelectedTheme] = useState<Theme | null>(null);
   const [counts, setCounts] = useState<ContentCounts>(defaultCounts);
   const [selectedTone, setSelectedTone] = useState<ToneStyle>(toneOptions[0]);
@@ -124,11 +124,26 @@ export default function Home() {
     setContent(null);
     setImages({});
     setCurrentSavedId(null);
-    setActiveView("dashboard");
     setPostingDates({});
     loadSavedContent(company.id);
     loadCustomTones(company.id);
     loadCharacters(company.id);
+
+    // Restore autosave from localStorage
+    try {
+      const raw = localStorage.getItem(`pc-autosave-${company.id}`);
+      if (raw) {
+        const data = JSON.parse(raw);
+        if (data.savedAt && Date.now() - data.savedAt < 24 * 60 * 60 * 1000) {
+          if (data.theme) setSelectedTheme(data.theme);
+          if (data.content) setContent(data.content);
+          if (data.postingDates) setPostingDates(data.postingDates);
+          if (data.currentSavedId) setCurrentSavedId(data.currentSavedId);
+        }
+      }
+    } catch {
+      // ignore
+    }
     setAutosaveRestored(true);
   }
 
@@ -143,36 +158,6 @@ export default function Home() {
     setCharacters([]);
     setPostingDates({});
     setAutosaveRestored(false);
-    setActiveView("dashboard");
-  }
-
-  function handleBackToProjects() {
-    setSelectedTheme(null);
-    setContent(null);
-    setImages({});
-    setCurrentSavedId(null);
-    setPostingDates({});
-    setStreamingText("");
-    setActiveView("dashboard");
-    // Clear autosave when going back to dashboard
-    if (selectedCompany) {
-      localStorage.removeItem(`pc-autosave-${selectedCompany.id}`);
-    }
-    // Refresh project list
-    if (selectedCompany) {
-      loadSavedContent(selectedCompany.id);
-    }
-  }
-
-  function handleNewProject() {
-    setSelectedTheme(null);
-    setContent(null);
-    setImages({});
-    setCurrentSavedId(null);
-    setPostingDates({});
-    setStreamingText("");
-    setActiveView("editor");
-    setAutosaveRestored(true);
   }
 
   async function handleLoadProject(item: SavedContentItem) {
@@ -182,8 +167,6 @@ export default function Home() {
     setCurrentSavedId(item.id);
     setPostingDates({});
     setStreamingText("");
-    setActiveView("editor");
-    setAutosaveRestored(true);
 
     // Load images for this specific project
     try {
@@ -913,7 +896,7 @@ export default function Home() {
   // Keyboard shortcuts
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (activeView !== "editor") return;
+      if (!selectedCompany) return;
       const mod = e.metaKey || e.ctrlKey;
       if (!mod) return;
 
@@ -958,7 +941,7 @@ export default function Home() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activeView, content, selectedCompany, selectedTheme, currentSavedId, contentLoading, handleGenerateContent, handleSaveContent, handleUpdateSavedContent, toast]);
+  }, [content, selectedCompany, selectedTheme, currentSavedId, contentLoading, handleGenerateContent, handleSaveContent, handleUpdateSavedContent, toast]);
 
   // Brand CSS variables — apply company colors to CSS custom properties
   useEffect(() => {
@@ -1016,79 +999,18 @@ export default function Home() {
     return <CompanySelector onSelect={handleSelectCompany} />;
   }
 
-  // Dashboard view — show project list
-  if (activeView === "dashboard") {
-    return (
-      <main className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-primary-light dark:from-slate-900 dark:to-brand-primary-light">
-        <header className="bg-brand-primary">
-          <div className={`max-w-4xl mx-auto px-6 py-6 ${headerTextLight ? "text-slate-900" : "text-white"}`}>
-            <button
-              onClick={handleBackToCompanies}
-              className={`flex items-center gap-2 mb-4 transition-colors ${headerTextLight ? "text-slate-700 hover:text-slate-900" : "text-white/80 hover:text-white"}`}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-              Back to companies
-            </button>
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-3xl font-bold">{selectedCompany.name}</h1>
-                <p className={`mt-1 ${headerTextLight ? "text-slate-600" : "text-white/80"}`}>Select a project or create a new one</p>
-              </div>
-              <div className="flex items-center gap-2">
-                {currentUser && (
-                  <span className={`text-sm hidden sm:inline ${headerTextLight ? "text-slate-600" : "text-white/80"}`}>
-                    {currentUser.displayName}
-                  </span>
-                )}
-                {currentUser?.role === "admin" && (
-                  <Link
-                    href="/admin"
-                    className={`p-2 rounded-lg hover:bg-white/10 transition-colors ${headerTextLight ? "text-slate-600 hover:text-slate-900" : "text-white/80 hover:text-white"}`}
-                    title="User management"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                    </svg>
-                  </Link>
-                )}
-                <ThemeToggle />
-                <LogoutButton />
-              </div>
-            </div>
-          </div>
-        </header>
-
-        <ErrorBoundary fallbackTitle="Failed to load project dashboard">
-          <ProjectDashboard
-            items={savedContent}
-            loading={savedContentLoading}
-            companyName={selectedCompany.name}
-            onNewProject={handleNewProject}
-            onLoadProject={handleLoadProject}
-            onDelete={handleDeleteSaved}
-            onBulkDelete={handleBulkDeleteSaved}
-            onComplete={handleCompleteSaved}
-          />
-        </ErrorBoundary>
-      </main>
-    );
-  }
-
-  // Editor view
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-primary-light dark:from-slate-900 dark:to-brand-primary-light">
       <header className="bg-brand-primary">
         <div className={`max-w-4xl mx-auto px-6 py-6 ${headerTextLight ? "text-slate-900" : "text-white"}`}>
           <button
-            onClick={handleBackToProjects}
+            onClick={handleBackToCompanies}
             className={`flex items-center gap-2 mb-4 transition-colors ${headerTextLight ? "text-slate-700 hover:text-slate-900" : "text-white/80 hover:text-white"}`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
-            Back to projects
+            Back to companies
           </button>
           <div className="flex items-center justify-between">
             <div>
@@ -1332,6 +1254,32 @@ export default function Home() {
         </section>
 
         <MemoryManager companyId={selectedCompany.id} />
+
+        {savedContent.length > 0 && (
+          <section className="mb-8">
+            <button
+              onClick={() => setShowSavedContent(!showSavedContent)}
+              className="flex items-center gap-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
+            >
+              <svg className={`w-4 h-4 transition-transform ${showSavedContent ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+              Saved Projects ({savedContent.filter(i => i.status !== "completed").length})
+            </button>
+            {showSavedContent && (
+              <div className="mt-3">
+                <SavedContentList
+                  items={savedContent}
+                  currentSavedId={currentSavedId}
+                  onLoad={handleLoadProject}
+                  onDelete={handleDeleteSaved}
+                  onBulkDelete={handleBulkDeleteSaved}
+                  onComplete={handleCompleteSaved}
+                />
+              </div>
+            )}
+          </section>
+        )}
 
         <ErrorBoundary fallbackTitle="Failed to load theme selector">
           <ThemeSelector

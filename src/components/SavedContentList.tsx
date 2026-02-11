@@ -3,6 +3,12 @@
 import { useState, useMemo } from "react";
 import { SavedContentItem } from "@/types";
 
+function daysRemaining(completedAt: string): number {
+  const completed = new Date(completedAt).getTime();
+  const expiry = completed + 30 * 24 * 60 * 60 * 1000;
+  return Math.max(0, Math.ceil((expiry - Date.now()) / (24 * 60 * 60 * 1000)));
+}
+
 interface Props {
   items: SavedContentItem[];
   currentSavedId: string | null;
@@ -260,37 +266,40 @@ export default function SavedContentList({ items, currentSavedId, onLoad, onDele
                   No completed items matching &ldquo;{searchQuery}&rdquo;
                 </p>
               )}
-              {(searchQuery.trim() ? filteredCompletedItems : completedItems).map((item) => (
-                <div
-                  key={item.id}
-                  className="flex items-center gap-3 p-4 rounded-xl border-2 border-green-200 dark:border-green-800/50 bg-green-50/50 dark:bg-green-900/10 opacity-80"
-                >
-                  <svg className="w-5 h-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-slate-600 dark:text-slate-400 truncate">{item.name}</p>
-                    <p className="text-sm text-slate-400 dark:text-slate-500">
-                      {item.theme.title} &bull; Saved {new Date(item.savedAt).toLocaleDateString()}
-                    </p>
+              {(searchQuery.trim() ? filteredCompletedItems : completedItems).map((item) => {
+                const days = item.completedAt ? daysRemaining(item.completedAt) : 30;
+                return (
+                  <div
+                    key={item.id}
+                    className="flex items-center gap-3 p-4 rounded-xl border-2 border-green-200 dark:border-green-800/50 bg-green-50/50 dark:bg-green-900/10 opacity-80"
+                  >
+                    <svg className="w-5 h-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-slate-600 dark:text-slate-400 truncate">{item.name}</p>
+                      <p className="text-sm text-slate-400 dark:text-slate-500">
+                        {item.theme.title} &bull; Deletes in {days} day{days !== 1 ? "s" : ""}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 ml-4">
+                      <button
+                        onClick={() => onLoad(item)}
+                        className="px-3 py-1.5 rounded-lg bg-brand-primary-light text-brand-primary text-sm font-medium hover:bg-brand-primary-hover transition-colors"
+                      >
+                        Load
+                      </button>
+                      <button
+                        onClick={() => handleDelete(item.id)}
+                        disabled={deletingId === item.id}
+                        className="px-3 py-1.5 rounded-lg bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 text-sm font-medium hover:bg-red-200 dark:hover:bg-red-900 disabled:opacity-50 transition-colors"
+                      >
+                        {deletingId === item.id ? "..." : "Delete"}
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 ml-4">
-                    <button
-                      onClick={() => onLoad(item)}
-                      className="px-3 py-1.5 rounded-lg bg-brand-primary-light text-brand-primary text-sm font-medium hover:bg-brand-primary-hover transition-colors"
-                    >
-                      Load
-                    </button>
-                    <button
-                      onClick={() => handleDelete(item.id)}
-                      disabled={deletingId === item.id}
-                      className="px-3 py-1.5 rounded-lg bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 text-sm font-medium hover:bg-red-200 dark:hover:bg-red-900 disabled:opacity-50 transition-colors"
-                    >
-                      {deletingId === item.id ? "..." : "Delete"}
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
