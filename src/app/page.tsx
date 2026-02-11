@@ -17,6 +17,11 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 import { useToast } from "@/components/ToastProvider";
 import { SkeletonGenerating, SkeletonSavedItem, ElapsedTimer } from "@/components/Skeleton";
 
+function isMobileDevice(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+}
+
 export default function Home() {
   const { toast } = useToast();
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
@@ -389,7 +394,9 @@ export default function Home() {
       body: JSON.stringify({ companyId: selectedCompany.id, images: {} }),
     }).catch(() => {});
     try {
-      const res = await fetch("/api/generate-content", {
+      const mobile = isMobileDevice();
+      const url = mobile ? "/api/generate-content?stream=false" : "/api/generate-content";
+      const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ companyId: selectedCompany.id, theme: selectedTheme, counts, tone: selectedTone, language: selectedLanguage }),
@@ -401,35 +408,39 @@ export default function Home() {
         return;
       }
 
-      const reader = res.body?.getReader();
-      if (!reader) { toast("Streaming not supported", "error"); return; }
+      let fullText: string;
 
-      const decoder = new TextDecoder();
-      let fullText = "";
-      let lastUpdate = 0;
+      if (mobile) {
+        fullText = await res.text();
+      } else {
+        const reader = res.body?.getReader();
+        if (!reader) { toast("Streaming not supported", "error"); return; }
 
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          const chunk = decoder.decode(value, { stream: true });
-          fullText += chunk;
-          const now = Date.now();
-          if (now - lastUpdate >= 100) {
-            setStreamingText(fullText);
-            lastUpdate = now;
+        const decoder = new TextDecoder();
+        fullText = "";
+        let lastUpdate = 0;
+
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const chunk = decoder.decode(value, { stream: true });
+            fullText += chunk;
+            const now = Date.now();
+            if (now - lastUpdate >= 100) {
+              setStreamingText(fullText);
+              lastUpdate = now;
+            }
           }
+          const remaining = decoder.decode();
+          if (remaining) fullText += remaining;
+        } catch {
+          setStreamingText(fullText);
+          toast("Connection lost during generation — partial content shown below", "error");
+          return;
         }
-        // Flush any remaining bytes from the decoder
-        const remaining = decoder.decode();
-        if (remaining) fullText += remaining;
-      } catch {
-        // Network error during streaming — preserve whatever we received
         setStreamingText(fullText);
-        toast("Connection lost during generation — partial content shown below", "error");
-        return;
       }
-      setStreamingText(fullText);
 
       try {
         const cleaned = fullText.replace(/^```json?\s*|\s*```$/g, "").trim();
@@ -438,7 +449,7 @@ export default function Home() {
         setStreamingText("");
         toast("Content generated successfully", "success");
       } catch {
-        // Parse failed — streamingText is preserved so the raw output stays visible
+        setStreamingText(fullText);
         toast("Failed to parse generated content — raw output shown below", "error");
       }
     } finally {

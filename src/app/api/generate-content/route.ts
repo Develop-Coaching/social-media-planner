@@ -76,6 +76,22 @@ Generate exactly this many items (use these exact counts):
 Respond with a single JSON object with keys: posts, reels, linkedinArticles, carousels, quotesForX, youtube. Each value is an array of objects as described. Output ONLY valid JSON, no markdown or extra text.`;
 
     const anthropic = getAnthropicClient();
+    const useStreaming = request.nextUrl.searchParams.get("stream") !== "false";
+
+    if (!useStreaming) {
+      const message = await anthropic.messages.create({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 16384,
+        messages: [{ role: "user", content: prompt }],
+      });
+      const text = message.content
+        .filter((b): b is { type: "text"; text: string } => b.type === "text")
+        .map((b) => b.text)
+        .join("");
+      return new Response(text, {
+        headers: { "Content-Type": "text/plain; charset=utf-8" },
+      });
+    }
 
     const stream = anthropic.messages.stream({
       model: "claude-sonnet-4-20250514",
@@ -102,7 +118,6 @@ Respond with a single JSON object with keys: posts, reels, linkedinArticles, car
     return new Response(readable, {
       headers: {
         "Content-Type": "text/plain; charset=utf-8",
-        "Transfer-Encoding": "chunked",
       },
     });
   } catch (e) {

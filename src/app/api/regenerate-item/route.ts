@@ -59,6 +59,22 @@ ${typePrompts[contentType]}
 Output ONLY valid JSON, no markdown or extra text.`;
 
     const anthropic = getAnthropicClient();
+    const useStreaming = request.nextUrl.searchParams.get("stream") !== "false";
+
+    if (!useStreaming) {
+      const message = await anthropic.messages.create({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 4096,
+        messages: [{ role: "user", content: prompt }],
+      });
+      const text = message.content
+        .filter((b): b is { type: "text"; text: string } => b.type === "text")
+        .map((b) => b.text)
+        .join("");
+      return new Response(text, {
+        headers: { "Content-Type": "text/plain; charset=utf-8" },
+      });
+    }
 
     const stream = anthropic.messages.stream({
       model: "claude-sonnet-4-20250514",
@@ -85,7 +101,6 @@ Output ONLY valid JSON, no markdown or extra text.`;
     return new Response(readable, {
       headers: {
         "Content-Type": "text/plain; charset=utf-8",
-        "Transfer-Encoding": "chunked",
       },
     });
   } catch (e) {
