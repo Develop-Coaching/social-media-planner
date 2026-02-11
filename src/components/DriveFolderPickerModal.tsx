@@ -20,9 +20,13 @@ export default function DriveFolderPickerModal({ onSelect, onClose }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [source, setSource] = useState<DriveSource>("shared");
 
+  // New folder creation
+  const [showNewFolder, setShowNewFolder] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [creatingFolder, setCreatingFolder] = useState(false);
+
   // Breadcrumb trail — first entry depends on source
   const [path, setPath] = useState<FolderInfo[]>([]);
-  // Whether we're at the shared root (flat list of shared folders) vs inside a folder
   const isSharedRoot = source === "shared" && path.length === 0;
 
   const currentFolderId = path.length > 0 ? path[path.length - 1].id : (source === "mydrive" ? "root" : null);
@@ -34,10 +38,8 @@ export default function DriveFolderPickerModal({ onSelect, onClose }: Props) {
     try {
       let url: string;
       if (currentSource === "shared" && !folderId) {
-        // Root of "Shared with me" — list shared folders
         url = "/api/drive/list?mode=folders&source=shared";
       } else {
-        // Inside a specific folder (works for both shared and my drive)
         url = `/api/drive/list?mode=folders&folderId=${encodeURIComponent(folderId || "root")}`;
       }
 
@@ -61,33 +63,72 @@ export default function DriveFolderPickerModal({ onSelect, onClose }: Props) {
 
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        if (showNewFolder) {
+          setShowNewFolder(false);
+          setNewFolderName("");
+        } else {
+          onClose();
+        }
+      }
     }
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [onClose]);
+  }, [onClose, showNewFolder]);
 
   function handleSourceChange(newSource: DriveSource) {
     setSource(newSource);
     setPath([]);
     setFolders([]);
+    setShowNewFolder(false);
+    setNewFolderName("");
   }
 
   function navigateInto(folder: FolderInfo) {
     setPath((prev) => [...prev, folder]);
+    setShowNewFolder(false);
+    setNewFolderName("");
   }
 
   function navigateTo(index: number) {
     if (index < 0) {
-      // Go back to source root
       setPath([]);
     } else {
       setPath((prev) => prev.slice(0, index + 1));
     }
+    setShowNewFolder(false);
+    setNewFolderName("");
   }
 
-  // Can only "Save Here" if we're inside an actual folder (not the shared root list)
+  async function handleCreateFolder() {
+    if (!newFolderName.trim() || !currentFolderId) return;
+    setCreatingFolder(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/drive/create-folder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          parentFolderId: currentFolderId,
+          name: newFolderName.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "Failed to create folder");
+        return;
+      }
+      // Navigate into the new folder
+      navigateInto({ id: data.folderId, name: data.name });
+    } catch {
+      setError("Network error creating folder");
+    } finally {
+      setCreatingFolder(false);
+    }
+  }
+
   const canSaveHere = !isSharedRoot && currentFolderId !== null;
+  const canCreateFolder = canSaveHere; // Can only create folders inside an actual folder
 
   return (
     <div
@@ -179,6 +220,39 @@ export default function DriveFolderPickerModal({ onSelect, onClose }: Props) {
             </div>
           )}
 
+          {/* New folder input */}
+          {showNewFolder && (
+            <div className="mb-3 flex items-center gap-2">
+              <svg className="w-5 h-5 text-amber-500 dark:text-amber-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
+              </svg>
+              <input
+                type="text"
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleCreateFolder(); }}
+                placeholder="Folder name"
+                autoFocus
+                className="flex-1 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-1.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-sky-500 focus:outline-none"
+              />
+              <button
+                onClick={handleCreateFolder}
+                disabled={creatingFolder || !newFolderName.trim()}
+                className="px-3 py-1.5 rounded-lg bg-sky-600 text-white text-sm font-medium hover:bg-sky-700 transition-colors disabled:opacity-50"
+              >
+                {creatingFolder ? "Creating..." : "Create"}
+              </button>
+              <button
+                onClick={() => { setShowNewFolder(false); setNewFolderName(""); }}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          )}
+
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <svg className="animate-spin h-8 w-8 text-sky-600" viewBox="0 0 24 24">
@@ -186,7 +260,7 @@ export default function DriveFolderPickerModal({ onSelect, onClose }: Props) {
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
               </svg>
             </div>
-          ) : folders.length === 0 ? (
+          ) : folders.length === 0 && !showNewFolder ? (
             <div className="text-center py-8 text-slate-500 dark:text-slate-400">
               <svg className="w-10 h-10 mx-auto mb-2 text-slate-300 dark:text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
@@ -195,7 +269,7 @@ export default function DriveFolderPickerModal({ onSelect, onClose }: Props) {
                 {isSharedRoot ? "No folders shared with you." : "No subfolders here."}
               </p>
               {!isSharedRoot && (
-                <p className="text-xs mt-1">You can save to this folder or go back.</p>
+                <p className="text-xs mt-1">You can save to this folder, create a new one, or go back.</p>
               )}
             </div>
           ) : (
@@ -221,13 +295,19 @@ export default function DriveFolderPickerModal({ onSelect, onClose }: Props) {
 
         {/* Footer */}
         <div className="flex items-center justify-between px-6 py-4 border-t border-slate-200 dark:border-slate-700">
-          <p className="text-xs text-slate-500 dark:text-slate-400 truncate mr-3">
-            {canSaveHere ? (
-              <>Saving to: <span className="font-medium text-slate-700 dark:text-slate-300">{currentFolderName}</span></>
-            ) : (
-              "Select a folder to save to"
+          <div className="flex items-center gap-2">
+            {canCreateFolder && !showNewFolder && (
+              <button
+                onClick={() => setShowNewFolder(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                New Folder
+              </button>
             )}
-          </p>
+          </div>
           <div className="flex items-center gap-2">
             <button
               onClick={onClose}

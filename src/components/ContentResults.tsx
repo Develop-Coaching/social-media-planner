@@ -16,6 +16,11 @@ type ContentType = "post" | "reel" | "linkedinArticle" | "carousel" | "quoteForX
 
 type SectionKey = "posts" | "reels" | "linkedinArticles" | "carousels" | "quotesForX" | "youtube";
 
+function isMobileDevice(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+}
+
 const MAX_HISTORY = 20;
 
 type HistoryStacks = Record<SectionKey, { undo: GeneratedContent[SectionKey][]; redo: GeneratedContent[SectionKey][] }>;
@@ -264,6 +269,7 @@ export default function ContentResults({
   // Drive integration state
   const [driveSavingKey, setDriveSavingKey] = useState<string | null>(null);
   const [driveFolderPickerKey, setDriveFolderPickerKey] = useState<string | null>(null);
+  const [driveLinks, setDriveLinks] = useState<Record<string, string>>({}); // key → folder link
   const [driveImportForKey, setDriveImportForKey] = useState<string | null>(null);
   const [videoPickerReel, setVideoPickerReel] = useState<{ index: number; kind: "raw" | "finished" } | null>(null);
   const [uploadingVideoReel, setUploadingVideoReel] = useState<number | null>(null);
@@ -420,7 +426,9 @@ export default function ContentResults({
     setRegeneratingKey(key);
     pushUndo(section, content[section]);
     try {
-      const res = await fetch("/api/regenerate-item", {
+      const mobile = isMobileDevice();
+      const url = mobile ? "/api/regenerate-item?stream=false" : "/api/regenerate-item";
+      const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ companyId, theme, contentType, currentItem, tone, language }),
@@ -432,16 +440,22 @@ export default function ContentResults({
         return;
       }
 
-      const reader = res.body?.getReader();
-      if (!reader) { toast("Streaming not supported", "error"); return; }
+      let fullText: string;
 
-      const decoder = new TextDecoder();
-      let fullText = "";
+      if (mobile) {
+        fullText = await res.text();
+      } else {
+        const reader = res.body?.getReader();
+        if (!reader) { toast("Streaming not supported", "error"); return; }
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        fullText += decoder.decode(value, { stream: true });
+        const decoder = new TextDecoder();
+        fullText = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          fullText += decoder.decode(value, { stream: true });
+        }
       }
 
       try {
@@ -461,7 +475,9 @@ export default function ContentResults({
     setAddingItemType(contentType);
     pushUndo(section, content[section]);
     try {
-      const res = await fetch("/api/regenerate-item", {
+      const mobile = isMobileDevice();
+      const url = mobile ? "/api/regenerate-item?stream=false" : "/api/regenerate-item";
+      const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ companyId, theme, contentType, currentItem: null, tone, language }),
@@ -473,16 +489,22 @@ export default function ContentResults({
         return;
       }
 
-      const reader = res.body?.getReader();
-      if (!reader) { toast("Streaming not supported", "error"); return; }
+      let fullText: string;
 
-      const decoder = new TextDecoder();
-      let fullText = "";
+      if (mobile) {
+        fullText = await res.text();
+      } else {
+        const reader = res.body?.getReader();
+        if (!reader) { toast("Streaming not supported", "error"); return; }
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        fullText += decoder.decode(value, { stream: true });
+        const decoder = new TextDecoder();
+        fullText = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          fullText += decoder.decode(value, { stream: true });
+        }
       }
 
       try {
@@ -1007,6 +1029,9 @@ export default function ContentResults({
       const data = await res.json();
       if (res.ok) {
         toast("Saved to Google Drive", "success");
+        if (data.folderLink) {
+          setDriveLinks((prev) => ({ ...prev, [key]: data.folderLink }));
+        }
       } else if (data.error === "not_authenticated") {
         pendingDriveUploadRef.current = key;
         googleCodeClientRef.current?.requestCode();
@@ -1081,6 +1106,21 @@ export default function ContentResults({
             </>
           )}
         </div>
+        {driveLinks[key] && (
+          <div className="mt-2 flex items-center gap-1.5">
+            <svg className="w-3.5 h-3.5 text-green-600 dark:text-green-400 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M7.71 3.5L1.15 15l2.16 3.75h4.73L4.46 12.5l2.17-3.75L7.71 3.5zm4.5 0L5.62 15l2.17 3.75h4.32l2.17-3.75L7.71 3.5h4.5zm4.5 0L10.12 15l2.17 3.75h4.32l6.56-11.5L20.71 3.5h-4z" />
+            </svg>
+            <a
+              href={driveLinks[key]}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-300 font-medium hover:underline"
+            >
+              View on Google Drive
+            </a>
+          </div>
+        )}
         {showingFeedback && (
           <div className="mt-2 p-3 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
             <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">What should be different? (optional)</label>
