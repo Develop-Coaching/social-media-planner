@@ -17,6 +17,7 @@ export default function MemoryManager({ companyId }: Props) {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
   const dragCounterRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -242,11 +243,33 @@ export default function MemoryManager({ companyId }: Props) {
   }, [companyId]);
 
   return (
-    <section className="mb-8 rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-lg border border-slate-200 dark:border-slate-700">
-      <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-200 mb-2 flex items-center gap-3">
-        <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-brand-primary-light text-brand-primary text-sm font-bold">1</span>
-        Add to memory
-      </h2>
+    <section className="mb-8 rounded-2xl bg-white dark:bg-slate-800 shadow-lg border border-slate-200 dark:border-slate-700">
+      <button
+        type="button"
+        onClick={() => setIsExpanded((v) => !v)}
+        className="w-full flex items-center justify-between p-6 text-left cursor-pointer"
+      >
+        <div className="flex items-center gap-3">
+          <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-brand-primary-light text-brand-primary text-sm font-bold">1</span>
+          <div>
+            <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-200">Add to memory</h2>
+            {!isExpanded && files.length > 0 && (
+              <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">{files.length} file{files.length !== 1 ? "s" : ""} saved</p>
+            )}
+          </div>
+        </div>
+        <svg
+          className={`w-5 h-5 text-slate-400 dark:text-slate-500 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {isExpanded && (
+      <div className="px-6 pb-6">
       <p className="text-sm text-slate-500 dark:text-slate-400 mb-4 ml-11">
         Paste or type context, or upload files (.txt, .md, .pdf, .doc, .docx, .jpg, .png). Documents and images will be processed to extract text.
       </p>
@@ -370,6 +393,8 @@ export default function MemoryManager({ companyId }: Props) {
           </div>
         )}
       </div>
+      </div>
+      )}
     </section>
   );
 }
