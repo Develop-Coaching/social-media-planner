@@ -7,24 +7,54 @@ import { getCompanyById } from "@/lib/companies";
 
 export const dynamic = "force-dynamic";
 
-interface SendToEditorBody {
+type Target = "editor" | "filming";
+
+const TARGET_CONFIG: Record<Target, {
+  slackEnvVar: string;
+  asanaProjectEnvVar: string;
+  asanaAssigneeEnvVar: string;
+  slackHeading: string;
+  slackFallback: (body: SendBody) => string;
+  asanaTaskName: (body: SendBody) => string;
+}> = {
+  editor: {
+    slackEnvVar: "SLACK_SEND_TO_EDITOR_WEBHOOK_URL",
+    asanaProjectEnvVar: "ASANA_PROJECT_ID",
+    asanaAssigneeEnvVar: "ASANA_EDITOR_USER_ID",
+    slackHeading: "*\ud83c\udfac Reel Ready for Editing*",
+    slackFallback: (b) => `\ud83c\udfac Reel ${b.reelIndex + 1} ready for editing \u2014 ${b.companyName}`,
+    asanaTaskName: (b) => `Edit Reel ${b.reelIndex + 1} - ${b.companyName}${b.themeName ? ` - ${b.themeName}` : ""}`,
+  },
+  filming: {
+    slackEnvVar: "SLACK_SEND_FOR_FILMING_WEBHOOK_URL",
+    asanaProjectEnvVar: "ASANA_FILMING_PROJECT_ID",
+    asanaAssigneeEnvVar: "ASANA_FILMING_USER_ID",
+    slackHeading: "*\ud83c\udfac Reel Ready for Filming*",
+    slackFallback: (b) => `\ud83c\udfac Reel ${b.reelIndex + 1} ready for filming \u2014 ${b.companyName}`,
+    asanaTaskName: (b) => `Film Reel ${b.reelIndex + 1} - ${b.companyName}${b.themeName ? ` - ${b.themeName}` : ""}`,
+  },
+};
+
+interface SendBody {
   companyName: string;
   companyId: string;
   themeName: string;
   reelIndex: number;
   script: string;
   caption: string;
+  target?: Target;
 }
 
-function buildEditorSlackBlocks(
-  body: SendToEditorBody,
+function buildSlackBlocks(
+  body: SendBody,
+  config: typeof TARGET_CONFIG[Target],
   driveLink?: string
 ): { text: string; blocks: Record<string, unknown>[] } {
   const blocks: Record<string, unknown>[] = [];
 
   blocks.push({
     type: "section",
-    text: { type: "mrkdwn", text: "*\ud83c\udfac Reel Ready for Editing*" },
+    text: { type: "mrkdwn", text: config.slackHeading },
   });
 
   blocks.push({
@@ -68,10 +98,10 @@ function buildEditorSlackBlocks(
     });
   }
 
-  return { text: `\ud83c\udfac Reel ${body.reelIndex + 1} ready for editing \u2014 ${body.companyName}`, blocks };
+  return { text: config.slackFallback(body), blocks };
 }
 
-function buildAsanaNotes(body: SendToEditorBody, driveLink?: string): string {
+function buildAsanaNotes(body: SendBody, driveLink?: string): string {
   let notes = `Company: ${body.companyName}\nTheme: ${body.themeName || "N/A"}\n\n`;
   notes += `--- SCRIPT ---\n${body.script}\n\n`;
   if (body.caption) {
@@ -87,7 +117,9 @@ export async function POST(request: NextRequest) {
   try {
     const { userId } = await requireAuth();
 
-    const body = (await request.json()) as SendToEditorBody;
+    const body = (await request.json()) as SendBody;
+    const target: Target = body.target === "filming" ? "filming" : "editor";
+    const config = TARGET_CONFIG[target];
 
     if (!body.companyName || !body.script || body.reelIndex == null) {
       return NextResponse.json(
@@ -118,17 +150,21 @@ export async function POST(request: NextRequest) {
     const company = body.companyId ? await getCompanyById(userId, body.companyId) : null;
 
     // Build Slack message
-    const slackBlocks = buildEditorSlackBlocks(body, driveLink);
-    const editingWebhook = company?.slackEditorWebhookUrl || process.env.SLACK_SEND_TO_EDITOR_WEBHOOK_URL;
+    const slackBlocks = buildSlackBlocks(body, config, driveLink);
+    const webhookUrl = company?.slackEditorWebhookUrl || process.env[config.slackEnvVar];
+    const projectId = process.env[config.asanaProjectEnvVar];
+    const assignee = process.env[config.asanaAssigneeEnvVar];
 
     // Run Slack + Asana in parallel (independent)
     const [slackResult, asanaResult] = await Promise.all([
-      editingWebhook
-        ? sendSlackNotification(slackBlocks, editingWebhook)
-        : Promise.resolve({ ok: false as const, error: "Editing webhook not configured" }),
+      webhookUrl
+        ? sendSlackNotification(slackBlocks, webhookUrl)
+        : Promise.resolve({ ok: false as const, error: `${target} webhook not configured` }),
       createAsanaTask({
-        name: `Edit Reel ${body.reelIndex + 1} - ${body.companyName}${body.themeName ? ` - ${body.themeName}` : ""}`,
+        name: config.asanaTaskName(body),
         notes: buildAsanaNotes(body, driveLink),
+        projectId,
+        assignee,
       }),
     ]);
 

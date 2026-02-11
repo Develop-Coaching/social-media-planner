@@ -267,9 +267,11 @@ export default function ContentResults({
   const googleCodeClientRef = useRef<{ requestCode: () => void } | null>(null);
   const pendingDriveUploadRef = useRef<string | null>(null);
 
-  // Send to Editor state
+  // Send to Editor / Send for Filming state
   const [sentToEditor, setSentToEditor] = useState<Set<string>>(new Set());
   const [sendingToEditor, setSendingToEditor] = useState<Set<string>>(new Set());
+  const [sentForFilming, setSentForFilming] = useState<Set<string>>(new Set());
+  const [sendingForFilming, setSendingForFilming] = useState<Set<string>>(new Set());
 
   // Feature 3: Freshly regenerated items indicator
   const [freshlyRegenerated, setFreshlyRegenerated] = useState<Set<string>>(new Set());
@@ -557,6 +559,51 @@ export default function ContentResults({
       toast("Network error sending to editor", "error");
     } finally {
       setSendingToEditor(prev => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+    }
+  }
+
+  async function handleSendForFilming(reelIndex: number) {
+    const key = `reel-${reelIndex}`;
+    if (sentForFilming.has(key) || sendingForFilming.has(key)) return;
+
+    setSendingForFilming(prev => new Set(prev).add(key));
+    try {
+      const reel = content.reels[reelIndex];
+      const res = await fetch("/api/send-to-editor", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyName,
+          companyId,
+          themeName: theme.title,
+          reelIndex,
+          script: reel.script,
+          caption: reel.caption || "",
+          target: "filming",
+        }),
+      });
+      const data = await res.json();
+
+      if (data.ok) {
+        setSentForFilming(prev => new Set(prev).add(key));
+        const parts: string[] = [];
+        if (data.slack?.ok) parts.push("Slack");
+        if (data.asana?.ok) parts.push("Asana");
+        toast(`Sent for filming via ${parts.join(" & ")}`, "success");
+      } else {
+        const errors: string[] = [];
+        if (data.slack?.error) errors.push(`Slack: ${data.slack.error}`);
+        if (data.asana?.error) errors.push(`Asana: ${data.asana.error}`);
+        toast(errors.join(". ") || "Failed to send for filming", "error");
+      }
+    } catch {
+      toast("Network error sending for filming", "error");
+    } finally {
+      setSendingForFilming(prev => {
         const next = new Set(prev);
         next.delete(key);
         return next;
@@ -1380,6 +1427,32 @@ export default function ContentResults({
                         <>
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
                           Send to Editor
+                        </>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => handleSendForFilming(i)}
+                      disabled={sendingForFilming.has(key) || sentForFilming.has(key)}
+                      className={`inline-flex items-center gap-1.5 text-sm font-medium transition-colors ${
+                        sentForFilming.has(key)
+                          ? "text-green-600 dark:text-green-400"
+                          : "text-slate-600 dark:text-slate-400 hover:text-orange-600 dark:hover:text-orange-400"
+                      } disabled:opacity-70`}
+                    >
+                      {sendingForFilming.has(key) ? (
+                        <>
+                          <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" /></svg>
+                          Sending...
+                        </>
+                      ) : sentForFilming.has(key) ? (
+                        <>
+                          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
+                          Sent
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                          Send for Filming
                         </>
                       )}
                     </button>
