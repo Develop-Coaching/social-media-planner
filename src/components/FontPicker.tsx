@@ -20,13 +20,22 @@ interface Props {
 
 export default function FontPicker({ value, onChange }: Props) {
   const [query, setQuery] = useState(value || "");
+  const [draft, setDraft] = useState(value || "");
   const [open, setOpen] = useState(false);
   const [previewLoaded, setPreviewLoaded] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
+  // Sync draft when external value changes (e.g. company switch)
+  useEffect(() => {
+    setDraft(value || "");
+    setQuery(value || "");
+  }, [value]);
+
   const filtered = query
     ? POPULAR_FONTS.filter((f) => f.toLowerCase().includes(query.toLowerCase()))
     : POPULAR_FONTS;
+
+  const hasChanges = draft !== (value || "");
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -39,9 +48,9 @@ export default function FontPicker({ value, onChange }: Props) {
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  // Load preview font
+  // Load preview font when draft changes
   useEffect(() => {
-    if (!value) { setPreviewLoaded(false); return; }
+    if (!draft) { setPreviewLoaded(false); return; }
     const id = "font-picker-preview";
     let link = document.getElementById(id) as HTMLLinkElement | null;
     if (!link) {
@@ -50,14 +59,15 @@ export default function FontPicker({ value, onChange }: Props) {
       link.rel = "stylesheet";
       document.head.appendChild(link);
     }
-    link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(value)}&display=swap`;
+    link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(draft)}&display=swap`;
     link.onload = () => setPreviewLoaded(true);
-  }, [value]);
+    setPreviewLoaded(false);
+  }, [draft]);
 
   function selectFont(font: string) {
     setQuery(font);
+    setDraft(font);
     setOpen(false);
-    onChange(font);
   }
 
   function handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -66,20 +76,23 @@ export default function FontPicker({ value, onChange }: Props) {
   }
 
   function handleBlur() {
-    // Allow clicking dropdown items before blur fires
     setTimeout(() => {
       if (!wrapperRef.current?.contains(document.activeElement)) {
         setOpen(false);
-        // If typed value differs from current, treat as custom font
-        if (query.trim() && query.trim() !== value) {
-          onChange(query.trim());
+        if (query.trim()) {
+          setDraft(query.trim());
         }
       }
     }, 150);
   }
 
+  function handleApply() {
+    onChange(draft);
+  }
+
   function handleClear() {
     setQuery("");
+    setDraft("");
     onChange("");
   }
 
@@ -97,6 +110,14 @@ export default function FontPicker({ value, onChange }: Props) {
             placeholder="Search Google Fonts..."
             className="flex-1 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-shadow"
           />
+          {hasChanges && (
+            <button
+              onClick={handleApply}
+              className="px-4 py-2 rounded-xl text-sm font-medium bg-brand-primary text-white hover:bg-brand-primary-hover transition-colors shadow-sm"
+            >
+              Apply
+            </button>
+          )}
           {value && (
             <button
               onClick={handleClear}
@@ -116,7 +137,7 @@ export default function FontPicker({ value, onChange }: Props) {
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => selectFont(font)}
                 className={`w-full text-left px-4 py-2 text-sm hover:bg-brand-primary-light transition-colors ${
-                  font === value ? "text-brand-primary font-medium" : "text-slate-700 dark:text-slate-300"
+                  font === draft ? "text-brand-primary font-medium" : "text-slate-700 dark:text-slate-300"
                 }`}
               >
                 {font}
@@ -126,16 +147,16 @@ export default function FontPicker({ value, onChange }: Props) {
         )}
       </div>
 
-      {value && previewLoaded && (
+      {draft && previewLoaded && (
         <p
           className="mt-3 text-sm text-slate-600 dark:text-slate-400"
-          style={{ fontFamily: `"${value}", sans-serif` }}
+          style={{ fontFamily: `"${draft}", sans-serif` }}
         >
           The quick brown fox jumps over the lazy dog
         </p>
       )}
       <p className="text-xs text-slate-400 mt-1">
-        Select from popular fonts or type any Google Font name.
+        Select a font and click Apply to change the site font.
       </p>
     </div>
   );
