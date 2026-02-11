@@ -13,7 +13,7 @@ const TARGET_CONFIG: Record<Target, {
   slackEnvVar: string;
   asanaProjectEnvVar: string;
   asanaAssigneeEnvVar: string;
-  slackHeading: string;
+  slackHeading: (body: SendBody) => string;
   slackFallback: (body: SendBody) => string;
   asanaTaskName: (body: SendBody) => string;
 }> = {
@@ -21,7 +21,7 @@ const TARGET_CONFIG: Record<Target, {
     slackEnvVar: "SLACK_SEND_TO_EDITOR_WEBHOOK_URL",
     asanaProjectEnvVar: "ASANA_PROJECT_ID",
     asanaAssigneeEnvVar: "ASANA_EDITOR_USER_ID",
-    slackHeading: "*\ud83c\udfac Reel Ready for Editing*",
+    slackHeading: (b) => `*\ud83c\udfac ${b.reelTitle ? `"${b.reelTitle}" \u2014 ` : ""}Ready for Editing*`,
     slackFallback: (b) => `\ud83c\udfac ${b.reelTitle || `Reel ${b.reelIndex + 1}`} ready for editing \u2014 ${b.companyName}`,
     asanaTaskName: (b) => `Edit: ${b.reelTitle || `Reel ${b.reelIndex + 1}`} - ${b.companyName}${b.themeName ? ` - ${b.themeName}` : ""}`,
   },
@@ -29,7 +29,7 @@ const TARGET_CONFIG: Record<Target, {
     slackEnvVar: "SLACK_SEND_FOR_FILMING_WEBHOOK_URL",
     asanaProjectEnvVar: "ASANA_FILMING_PROJECT_ID",
     asanaAssigneeEnvVar: "ASANA_FILMING_USER_ID",
-    slackHeading: "*\ud83c\udfac Reel Ready for Filming*",
+    slackHeading: (b) => `*\ud83c\udfac ${b.reelTitle ? `"${b.reelTitle}" \u2014 ` : ""}Ready for Filming*`,
     slackFallback: (b) => `\ud83c\udfac ${b.reelTitle || `Reel ${b.reelIndex + 1}`} ready for filming \u2014 ${b.companyName}`,
     asanaTaskName: (b) => `Film: ${b.reelTitle || `Reel ${b.reelIndex + 1}`} - ${b.companyName}${b.themeName ? ` - ${b.themeName}` : ""}`,
   },
@@ -56,7 +56,7 @@ function buildSlackBlocks(
 
   blocks.push({
     type: "section",
-    text: { type: "mrkdwn", text: config.slackHeading },
+    text: { type: "mrkdwn", text: config.slackHeading(body) },
   });
 
   const fields: Record<string, unknown>[] = [
