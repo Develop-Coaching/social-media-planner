@@ -323,6 +323,7 @@ export default function ContentResults({
         client_id: clientId,
         scope: "https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/userinfo.email",
         ux_mode: "popup",
+        prompt: "consent",
         callback: async (response: { code?: string; error?: string }) => {
           if (response.error || !response.code) return;
           if (onDriveAuth) {

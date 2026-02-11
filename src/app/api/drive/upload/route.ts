@@ -63,9 +63,21 @@ export async function POST(request: NextRequest) {
 
       const result = await uploadImage(drive, companyFolderId, img.fileName, dataUrl);
       console.log("[Drive upload] Result:", JSON.stringify({ ok: result.ok, fileId: result.fileId, webViewLink: result.webViewLink, error: result.error }));
-      if (result.ok) {
+      if (result.ok && result.fileId) {
         uploaded++;
-        lastFileLink = result.webViewLink;
+        lastFileLink = `https://drive.google.com/file/d/${result.fileId}/view`;
+
+        // Verify the file actually landed in the right folder
+        try {
+          const verify = await drive.files.get({
+            fileId: result.fileId,
+            fields: "id, name, parents",
+            supportsAllDrives: true,
+          });
+          console.log("[Drive upload] File parents:", JSON.stringify(verify.data.parents), "| expected:", companyFolderId);
+        } catch (verifyErr) {
+          console.log("[Drive upload] Could not verify file location:", verifyErr);
+        }
       } else {
         errors.push(`Failed to upload "${img.fileName}": ${result.error}`);
       }
