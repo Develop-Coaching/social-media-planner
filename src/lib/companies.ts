@@ -100,7 +100,8 @@ export async function updateCompany(userId: string, id: string, updates: Partial
     .select("*")
     .single();
 
-  if (error || !data) return null;
+  if (error) throw new Error(error.message);
+  if (!data) return null;
   return rowToCompany(data);
 }
 
