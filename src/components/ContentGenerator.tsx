@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ContentCounts, ToneStyle, CustomToneStyle, LanguageOption, Theme, toneOptions, languageOptions } from "@/types";
+import { ContentCounts, ToneStyle, CustomToneStyle, CustomContentPreset, LanguageOption, Theme, toneOptions, languageOptions } from "@/types";
 import { useToast } from "@/components/ToastProvider";
 import { ElapsedTimer } from "@/components/Skeleton";
 
@@ -43,9 +43,12 @@ interface Props {
   customTones: CustomToneStyle[];
   onAddCustomTone: (label: string, prompt: string) => void;
   onDeleteCustomTone: (id: string) => void;
+  customPresets: CustomContentPreset[];
+  onAddCustomPreset: (label: string, counts: ContentCounts) => void;
+  onDeleteCustomPreset: (id: string) => void;
 }
 
-export default function ContentGenerator({ selectedTheme, counts, onCountsChange, selectedTone, onToneChange, selectedLanguage, onLanguageChange, onGenerate, loading, customTones, onAddCustomTone, onDeleteCustomTone }: Props) {
+export default function ContentGenerator({ selectedTheme, counts, onCountsChange, selectedTone, onToneChange, selectedLanguage, onLanguageChange, onGenerate, loading, customTones, onAddCustomTone, onDeleteCustomTone, customPresets, onAddCustomPreset, onDeleteCustomPreset }: Props) {
   const { toast } = useToast();
   const [showCustomForm, setShowCustomForm] = useState(false);
   const [customTab, setCustomTab] = useState<"paste" | "gdoc">("paste");
@@ -54,11 +57,24 @@ export default function ContentGenerator({ selectedTheme, counts, onCountsChange
   const [gdocUrl, setGdocUrl] = useState("");
   const [gdocName, setGdocName] = useState("");
   const [importingGdoc, setImportingGdoc] = useState(false);
+  const [showPresetForm, setShowPresetForm] = useState(false);
+  const [presetName, setPresetName] = useState("");
+
+  const allPresets = useMemo(() => [...contentPresets, ...customPresets.map((p) => ({ id: p.id, label: p.label, counts: p.counts }))], [customPresets]);
 
   const activePresetId = useMemo(() => {
-    const match = contentPresets.find((p) => countsMatch(p.counts, counts));
+    const match = allPresets.find((p) => countsMatch(p.counts, counts));
     return match?.id ?? null;
-  }, [counts]);
+  }, [counts, allPresets]);
+
+  function handleSavePreset() {
+    if (!presetName.trim()) return;
+    const total = Object.values(counts).reduce((s, v) => s + v, 0);
+    if (total === 0) { toast("Set at least one content count first", "error"); return; }
+    onAddCustomPreset(presetName.trim(), { ...counts });
+    setPresetName("");
+    setShowPresetForm(false);
+  }
 
   function handleSaveCustomTone() {
     if (!customName.trim() || !customPrompt.trim()) return;
@@ -120,7 +136,68 @@ export default function ContentGenerator({ selectedTheme, counts, onCountsChange
                 {preset.label}
               </button>
             ))}
+
+            {customPresets.map((preset) => (
+              <button
+                key={preset.id}
+                onClick={() => onCountsChange({ ...preset.counts })}
+                className={`group relative px-3 py-1.5 rounded-full text-xs font-medium transition-all border ${
+                  activePresetId === preset.id
+                    ? "bg-indigo-600 text-white border-indigo-600 shadow-md"
+                    : "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-600 hover:border-indigo-400 dark:hover:border-indigo-500"
+                }`}
+                title={`${preset.label}: ${preset.counts.posts}P ${preset.counts.reels}R ${preset.counts.carousels}C ${preset.counts.quotesForX}Q ${preset.counts.linkedinArticles}A ${preset.counts.youtube}Y`}
+              >
+                {preset.label}
+                <span
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDeleteCustomPreset(preset.id);
+                  }}
+                  className="absolute -top-1.5 -right-1.5 hidden group-hover:flex items-center justify-center w-4 h-4 rounded-full bg-red-500 text-white text-[10px] leading-none cursor-pointer hover:bg-red-600"
+                >
+                  x
+                </span>
+              </button>
+            ))}
+
+            <button
+              onClick={() => setShowPresetForm(!showPresetForm)}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all border border-dashed ${
+                showPresetForm
+                  ? "bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 border-indigo-400"
+                  : "text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-600 hover:border-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-400"
+              }`}
+            >
+              + Save preset
+            </button>
           </div>
+          {showPresetForm && (
+            <div className="mt-2 flex items-center gap-2">
+              <input
+                type="text"
+                placeholder="Preset name..."
+                value={presetName}
+                onChange={(e) => setPresetName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleSavePreset(); }}
+                className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-1.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent w-48"
+                autoFocus
+              />
+              <button
+                onClick={handleSavePreset}
+                disabled={!presetName.trim()}
+                className="rounded-lg bg-indigo-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Save
+              </button>
+              <button
+                onClick={() => { setShowPresetForm(false); setPresetName(""); }}
+                className="text-sm text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-5">

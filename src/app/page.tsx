@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Company, Character, Theme, ContentCounts, GeneratedContent, SavedContentItem, ToneStyle, CustomToneStyle, LanguageOption, defaultCounts, toneOptions, languageOptions } from "@/types";
+import { Company, Character, Theme, ContentCounts, GeneratedContent, SavedContentItem, ToneStyle, CustomToneStyle, CustomContentPreset, LanguageOption, defaultCounts, toneOptions, languageOptions } from "@/types";
 import Link from "next/link";
 import CompanySelector from "@/components/CompanySelector";
 import FontPicker from "@/components/FontPicker";
@@ -22,6 +22,78 @@ import { buildBrandCssVars, isLightColor } from "@/lib/brand-theme";
 function isMobileDevice(): boolean {
   if (typeof navigator === "undefined") return false;
   return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+}
+
+const TOKEN_WEIGHTS: Record<keyof ContentCounts, number> = {
+  posts: 200, reels: 400, carousels: 600, quotesForX: 150, linkedinArticles: 1200, youtube: 2500,
+};
+const CONTENT_GROUPS: { keys: (keyof ContentCounts)[]; label: string }[] = [
+  { keys: ["posts", "quotesForX"], label: "posts & quotes" },
+  { keys: ["reels", "carousels"], label: "reels & carousels" },
+  { keys: ["linkedinArticles", "youtube"], label: "articles & YouTube" },
+];
+const CHUNK_THRESHOLD = 12000;
+
+type GenerationResult = { content: GeneratedContent | null; rawText: string; error?: string };
+
+async function fetchGeneration(
+  companyId: string,
+  theme: Theme,
+  subCounts: ContentCounts,
+  tone: ToneStyle,
+  language: LanguageOption,
+  onStreamUpdate?: (text: string) => void,
+): Promise<GenerationResult> {
+  const mobile = isMobileDevice();
+  const url = mobile ? "/api/generate-content?stream=false" : "/api/generate-content";
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ companyId, theme, counts: subCounts, tone, language }),
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    return { content: null, rawText: "", error: data.error || "Failed to generate content" };
+  }
+
+  let fullText: string;
+
+  if (mobile) {
+    fullText = await res.text();
+  } else {
+    const reader = res.body?.getReader();
+    if (!reader) return { content: null, rawText: "", error: "Streaming not supported" };
+    const decoder = new TextDecoder();
+    fullText = "";
+    let lastUpdate = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        fullText += chunk;
+        const now = Date.now();
+        if (now - lastUpdate >= 100) {
+          onStreamUpdate?.(fullText);
+          lastUpdate = now;
+        }
+      }
+      const remaining = decoder.decode();
+      if (remaining) fullText += remaining;
+    } catch {
+      return { content: null, rawText: fullText, error: "Connection lost during generation" };
+    }
+    onStreamUpdate?.(fullText);
+  }
+
+  try {
+    const cleaned = fullText.replace(/^```json?\s*|\s*```$/g, "").trim();
+    const parsed = JSON.parse(cleaned) as GeneratedContent;
+    return { content: parsed, rawText: fullText };
+  } catch {
+    return { content: null, rawText: fullText, error: "Failed to parse response" };
+  }
 }
 
 export default function Home() {
@@ -48,8 +120,9 @@ export default function Home() {
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [currentSavedId, setCurrentSavedId] = useState<string | null>(null);
 
-  // Custom tones state
+  // Custom tones & presets state
   const [customTones, setCustomTones] = useState<CustomToneStyle[]>([]);
+  const [customPresets, setCustomPresets] = useState<CustomContentPreset[]>([]);
 
   // Current user info
   const [currentUser, setCurrentUser] = useState<{ displayName: string; role: string } | null>(null);
@@ -127,6 +200,7 @@ export default function Home() {
     setPostingDates({});
     loadSavedContent(company.id);
     loadCustomTones(company.id);
+    loadContentPresets(company.id);
     loadCharacters(company.id);
 
     // Restore autosave from localStorage
@@ -155,6 +229,7 @@ export default function Home() {
     setSavedContent([]);
     setCurrentSavedId(null);
     setCustomTones([]);
+    setCustomPresets([]);
     setCharacters([]);
     setPostingDates({});
     setAutosaveRestored(false);
@@ -371,6 +446,16 @@ export default function Home() {
     }
   }
 
+  async function loadContentPresets(companyId: string) {
+    try {
+      const res = await fetch(`/api/content-presets?companyId=${companyId}`);
+      const data = await res.json();
+      if (res.ok && data.presets) setCustomPresets(data.presets);
+    } catch {
+      // ignore
+    }
+  }
+
   async function handleAddCustomTone(label: string, prompt: string) {
     if (!selectedCompany) return;
     try {
@@ -402,6 +487,35 @@ export default function Home() {
     }
   }
 
+  async function handleAddCustomPreset(label: string, presetCounts: ContentCounts) {
+    if (!selectedCompany) return;
+    try {
+      const res = await fetch("/api/content-presets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId: selectedCompany.id, label, counts: presetCounts }),
+      });
+      if (res.ok) {
+        const preset: CustomContentPreset = await res.json();
+        setCustomPresets((prev) => [preset, ...prev]);
+        toast("Custom preset saved", "success");
+      } else {
+        const data = await res.json();
+        toast(data.error || "Failed to save preset", "error");
+      }
+    } catch {
+      toast("Failed to save preset", "error");
+    }
+  }
+
+  async function handleDeleteCustomPreset(id: string) {
+    if (!selectedCompany) return;
+    const res = await fetch(`/api/content-presets?companyId=${selectedCompany.id}&id=${id}`, { method: "DELETE" });
+    if (res.ok) {
+      setCustomPresets((prev) => prev.filter((p) => p.id !== id));
+    }
+  }
+
   const handleGenerateContent = useCallback(async () => {
     if (!selectedCompany || !selectedTheme) return;
     setContentLoading(true);
@@ -410,65 +524,64 @@ export default function Home() {
     setPostingDates({});
     setCurrentSavedId(null);
     setStreamingText("");
+
     try {
-      const mobile = isMobileDevice();
-      const url = mobile ? "/api/generate-content?stream=false" : "/api/generate-content";
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ companyId: selectedCompany.id, theme: selectedTheme, counts, tone: selectedTone, language: selectedLanguage }),
-      });
+      const totalEstimated = (Object.keys(TOKEN_WEIGHTS) as (keyof ContentCounts)[]).reduce(
+        (sum, k) => sum + TOKEN_WEIGHTS[k] * counts[k], 0
+      );
+      const activeGroups = CONTENT_GROUPS.filter(g => g.keys.some(k => counts[k] > 0));
+      const needsChunking = totalEstimated > CHUNK_THRESHOLD && activeGroups.length > 1;
 
-      if (!res.ok) {
-        const data = await res.json();
-        toast(data.error || "Failed to generate content", "error");
-        return;
-      }
-
-      let fullText: string;
-
-      if (mobile) {
-        fullText = await res.text();
-      } else {
-        const reader = res.body?.getReader();
-        if (!reader) { toast("Streaming not supported", "error"); return; }
-
-        const decoder = new TextDecoder();
-        fullText = "";
-        let lastUpdate = 0;
-
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            const chunk = decoder.decode(value, { stream: true });
-            fullText += chunk;
-            const now = Date.now();
-            if (now - lastUpdate >= 100) {
-              setStreamingText(fullText);
-              lastUpdate = now;
-            }
-          }
-          const remaining = decoder.decode();
-          if (remaining) fullText += remaining;
-        } catch {
-          setStreamingText(fullText);
-          toast("Connection lost during generation — partial content shown below", "error");
-          return;
+      if (!needsChunking) {
+        // Single request
+        const result = await fetchGeneration(
+          selectedCompany.id, selectedTheme, counts, selectedTone, selectedLanguage,
+          setStreamingText,
+        );
+        if (result.content) {
+          setContent(result.content);
+          setStreamingText("");
+          toast("Content generated successfully", "success");
+        } else {
+          setStreamingText(result.rawText);
+          toast(result.error ? result.error + (result.rawText ? " — raw output shown below" : "") : "Generation failed", "error");
         }
-        setStreamingText(fullText);
-      }
+      } else {
+        // Chunked generation — split by content type groups
+        const merged: GeneratedContent = { posts: [], reels: [], linkedinArticles: [], carousels: [], quotesForX: [], youtube: [] };
+        let anyFailed = false;
 
-      try {
-        const cleaned = fullText.replace(/^```json?\s*|\s*```$/g, "").trim();
-        const parsed = JSON.parse(cleaned) as GeneratedContent;
-        setContent(parsed);
-        setStreamingText("");
-        toast("Content generated successfully", "success");
-      } catch {
-        setStreamingText(fullText);
-        toast("Failed to parse generated content — raw output shown below", "error");
+        for (let gi = 0; gi < activeGroups.length; gi++) {
+          const group = activeGroups[gi];
+          const subCounts: ContentCounts = { posts: 0, reels: 0, linkedinArticles: 0, carousels: 0, quotesForX: 0, youtube: 0 };
+          for (const key of group.keys) subCounts[key] = counts[key];
+
+          const result = await fetchGeneration(
+            selectedCompany.id, selectedTheme, subCounts, selectedTone, selectedLanguage,
+            (text) => setStreamingText(`Batch ${gi + 1}/${activeGroups.length}: ${group.label}\n\n${text}`),
+          );
+
+          if (result.content) {
+            for (const key of Object.keys(merged) as (keyof GeneratedContent)[]) {
+              (merged[key] as unknown[]) = [...(merged[key] as unknown[]), ...(result.content[key] as unknown[])];
+            }
+          } else {
+            anyFailed = true;
+            toast(`Batch ${gi + 1} (${group.label}) failed: ${result.error}`, "error");
+          }
+        }
+
+        const hasContent = Object.values(merged).some(arr => arr.length > 0);
+        if (hasContent) {
+          setContent(merged);
+          setStreamingText("");
+          toast(anyFailed ? "Some content generated — some batches failed" : "Content generated successfully", anyFailed ? "info" : "success");
+        } else {
+          toast("Failed to generate any content", "error");
+        }
       }
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Failed to generate content", "error");
     } finally {
       setContentLoading(false);
     }
@@ -1304,6 +1417,9 @@ export default function Home() {
               customTones={customTones}
               onAddCustomTone={handleAddCustomTone}
               onDeleteCustomTone={handleDeleteCustomTone}
+              customPresets={customPresets}
+              onAddCustomPreset={handleAddCustomPreset}
+              onDeleteCustomPreset={handleDeleteCustomPreset}
             />
           </ErrorBoundary>
         )}

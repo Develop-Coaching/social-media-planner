@@ -76,6 +76,14 @@ export interface DriveFileInfo {
   size?: string;
 }
 
+export type CustomContentPreset = {
+  id: string;
+  label: string;
+  counts: ContentCounts;
+  isCustom: true;
+  createdAt: string;
+};
+
 export const defaultCounts: ContentCounts = {
   posts: 2,
   reels: 1,

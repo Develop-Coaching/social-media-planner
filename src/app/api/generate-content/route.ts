@@ -4,7 +4,7 @@ import { requireAuth, AuthError } from "@/lib/auth-helpers";
 import { getAnthropicClient } from "@/lib/anthropic";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 export interface ContentCounts {
   posts: number;
@@ -78,10 +78,20 @@ Respond with a single JSON object with keys: posts, reels, linkedinArticles, car
     const anthropic = getAnthropicClient();
     const useStreaming = request.nextUrl.searchParams.get("stream") !== "false";
 
+    // Dynamically size max_tokens based on estimated output
+    const tokenEstimate =
+      counts.posts * 200 +
+      counts.reels * 400 +
+      counts.carousels * 600 +
+      counts.quotesForX * 150 +
+      counts.linkedinArticles * 1200 +
+      counts.youtube * 2500;
+    const maxTokens = Math.min(Math.max(Math.round(tokenEstimate * 1.5) + 2048, 8192), 65536);
+
     if (!useStreaming) {
       const message = await anthropic.messages.create({
         model: "claude-sonnet-4-20250514",
-        max_tokens: 16384,
+        max_tokens: maxTokens,
         messages: [{ role: "user", content: prompt }],
       });
       const text = message.content
@@ -95,7 +105,7 @@ Respond with a single JSON object with keys: posts, reels, linkedinArticles, car
 
     const stream = anthropic.messages.stream({
       model: "claude-sonnet-4-20250514",
-      max_tokens: 16384,
+      max_tokens: maxTokens,
       messages: [{ role: "user", content: prompt }],
     });
 

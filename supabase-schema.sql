@@ -103,6 +103,17 @@ CREATE TABLE characters (
   FOREIGN KEY (user_id, company_id) REFERENCES companies(user_id, id) ON DELETE CASCADE
 );
 
+-- 9. Content presets (custom quick-preset templates per company)
+CREATE TABLE content_presets (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id TEXT NOT NULL,
+  company_id TEXT NOT NULL,
+  label TEXT NOT NULL,
+  counts JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  FOREIGN KEY (user_id, company_id) REFERENCES companies(user_id, id) ON DELETE CASCADE
+);
+
 -- Migration: Add project-scoped images and auto-deletion support
 -- Run these ALTER statements if tables already exist:
 --
@@ -119,3 +130,4 @@ CREATE INDEX idx_saved_content_company ON saved_content(user_id, company_id);
 CREATE INDEX idx_custom_tones_company ON custom_tones(user_id, company_id);
 CREATE INDEX idx_images_company ON images(user_id, company_id);
 CREATE INDEX idx_characters_company ON characters(user_id, company_id);
+CREATE INDEX idx_content_presets_company ON content_presets(user_id, company_id);
