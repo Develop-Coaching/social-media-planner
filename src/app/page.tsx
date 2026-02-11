@@ -236,6 +236,14 @@ export default function Home() {
     updateCompanyBrand({ brandColors: current.filter((_, i) => i !== index) });
   }
 
+  function handleReorderBrandColors(fromIndex: number, toIndex: number) {
+    const current = [...(selectedCompany?.brandColors || [])];
+    if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0 || fromIndex >= current.length || toIndex >= current.length) return;
+    const [moved] = current.splice(fromIndex, 1);
+    current.splice(toIndex, 0, moved);
+    updateCompanyBrand({ brandColors: current });
+  }
+
   async function handleAddCharacter() {
     if (!selectedCompany) return;
     try {
@@ -1059,31 +1067,56 @@ export default function Home() {
                 {/* Brand Colors */}
                 <div>
                   <h4 className="font-medium text-slate-700 dark:text-slate-300 mb-3">Brand Colors</h4>
-                  <div className="flex flex-wrap gap-2 mb-3">
+                  <div className="flex flex-wrap gap-3 mb-3">
                     {(selectedCompany.brandColors || []).map((color, i) => (
-                      <button
+                      <div
                         key={i}
-                        onClick={() => handleRemoveBrandColor(i)}
-                        title={`${color} — click to remove`}
-                        className="w-8 h-8 rounded-full border-2 border-slate-300 dark:border-slate-600 hover:border-red-400 dark:hover:border-red-500 transition-colors hover:scale-110"
-                        style={{ backgroundColor: color }}
-                      />
+                        draggable
+                        onDragStart={(e) => e.dataTransfer.setData("brand-color-index", String(i))}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          const from = parseInt(e.dataTransfer.getData("brand-color-index"), 10);
+                          handleReorderBrandColors(from, i);
+                        }}
+                        className="flex flex-col items-center gap-1 cursor-grab active:cursor-grabbing"
+                      >
+                        <button
+                          onClick={() => handleRemoveBrandColor(i)}
+                          title={`${color} — click to remove, drag to reorder`}
+                          className={`w-9 h-9 rounded-full border-2 transition-colors hover:scale-110 hover:border-red-400 dark:hover:border-red-500 ${
+                            i === 0
+                              ? "border-brand-primary ring-2 ring-brand-primary/30"
+                              : "border-slate-300 dark:border-slate-600"
+                          }`}
+                          style={{ backgroundColor: color }}
+                        />
+                        {i <= 1 && (
+                          <span className={`text-[10px] font-medium ${
+                            i === 0 ? "text-brand-primary" : "text-slate-400 dark:text-slate-500"
+                          }`}>
+                            {i === 0 ? "Main" : "Accent"}
+                          </span>
+                        )}
+                      </div>
                     ))}
                     {(selectedCompany.brandColors || []).length < 6 && (
-                      <label className="w-8 h-8 rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center cursor-pointer hover:border-brand-primary transition-colors">
-                        <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                        </svg>
-                        <input
-                          type="color"
-                          className="hidden"
-                          onChange={(e) => handleAddBrandColor(e.target.value)}
-                        />
-                      </label>
+                      <div className="flex flex-col items-center gap-1">
+                        <label className="w-9 h-9 rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center cursor-pointer hover:border-brand-primary transition-colors">
+                          <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                          </svg>
+                          <input
+                            type="color"
+                            className="hidden"
+                            onChange={(e) => handleAddBrandColor(e.target.value)}
+                          />
+                        </label>
+                      </div>
                     )}
                   </div>
                   <p className="text-xs text-slate-400">
-                    {(selectedCompany.brandColors || []).length}/6 colors. Click a swatch to remove it.
+                    {(selectedCompany.brandColors || []).length}/6 colors. Drag to reorder, click to remove.
                   </p>
                 </div>
               </div>
