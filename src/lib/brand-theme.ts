@@ -76,7 +76,7 @@ export function buildBrandCssVars(
   };
 
   if (fontFamily) {
-    const fontValue = `"${fontFamily}", var(--font-geist-sans), system-ui, sans-serif`;
+    const fontValue = `"${fontFamily}", system-ui, -apple-system, sans-serif`;
     light["--brand-font"] = fontValue;
     dark["--brand-font"] = fontValue;
   }
