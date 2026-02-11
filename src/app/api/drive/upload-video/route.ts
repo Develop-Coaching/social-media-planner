@@ -64,6 +64,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: e.message }, { status: (e as AuthError & { status: number }).status });
     }
     console.error("Drive video upload error:", e);
-    return NextResponse.json({ error: "Failed to upload video" }, { status: 500 });
+    const message = e instanceof Error ? e.message : "Failed to upload video";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
