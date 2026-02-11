@@ -919,13 +919,13 @@ export default function ContentResults({
   async function handleSendToSlack() {
     setSlackSending(true);
     try {
-      const items: { type: string; title: string; preview: string; imageKey?: string }[] = [];
-      content.posts.forEach((p, i) => items.push({ type: "Post", title: p.title, preview: p.caption, imageKey: `post-${i}` }));
-      content.reels.forEach((r, i) => items.push({ type: "Reel", title: `Reel ${i + 1}`, preview: r.caption || "" }));
-      content.linkedinArticles.forEach((a, i) => items.push({ type: "Article", title: a.title, preview: a.caption || "", imageKey: `article-${i}` }));
-      content.carousels.forEach((c, i) => items.push({ type: "Carousel", title: c.slides[0]?.title || `Carousel ${i + 1}`, preview: c.caption || "", imageKey: `carousel-${i}` }));
-      content.quotesForX.forEach((q, i) => items.push({ type: "Quote (X)", title: q.quote.slice(0, 40), preview: q.quote, imageKey: `quote-${i}` }));
-      content.youtube.forEach((y, i) => items.push({ type: "YouTube", title: y.title, preview: "", imageKey: `youtube-${i}` }));
+      const items: { type: string; title: string; preview: string; imageKey?: string; postingDate?: string }[] = [];
+      content.posts.forEach((p, i) => items.push({ type: "Post", title: p.title, preview: p.caption, imageKey: `post-${i}`, postingDate: postingDates[`post-${i}`] }));
+      content.reels.forEach((r, i) => items.push({ type: "Reel", title: `Reel ${i + 1}`, preview: r.caption || "", postingDate: postingDates[`reel-${i}`] }));
+      content.linkedinArticles.forEach((a, i) => items.push({ type: "Article", title: a.title, preview: a.caption || "", imageKey: `article-${i}`, postingDate: postingDates[`article-${i}`] }));
+      content.carousels.forEach((c, i) => items.push({ type: "Carousel", title: c.slides[0]?.title || `Carousel ${i + 1}`, preview: c.caption || "", imageKey: `carousel-${i}`, postingDate: postingDates[`carousel-${i}`] }));
+      content.quotesForX.forEach((q, i) => items.push({ type: "Quote (X)", title: q.quote.slice(0, 40), preview: q.quote, imageKey: `quote-${i}`, postingDate: postingDates[`quote-${i}`] }));
+      content.youtube.forEach((y, i) => items.push({ type: "YouTube", title: y.title, preview: "", imageKey: `youtube-${i}`, postingDate: postingDates[`youtube-${i}`] }));
 
       const days = [{ dayName: "All Content", date: "", items: items.map(item => ({ time: "", ...item })) }];
 

@@ -13,6 +13,7 @@ interface ScheduleItem {
   title: string;
   preview: string;
   imageKey?: string;
+  postingDate?: string;
 }
 
 interface ScheduleDay {
@@ -56,7 +57,17 @@ function buildSlackText(payload: SlackPayload, driveLink?: string): string {
     }
 
     for (const item of day.items) {
+      // Format posting date as readable string (e.g. "Wed, Feb 12")
+      let dateStr = "";
+      if (item.postingDate) {
+        const d = new Date(item.postingDate + "T00:00:00");
+        dateStr = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+      }
+
       lines.push(`${item.type}: ${item.title}`);
+      if (dateStr) {
+        lines.push(`Post on: ${dateStr}`);
+      }
       if (item.preview) {
         lines.push("");
         lines.push(item.preview);
