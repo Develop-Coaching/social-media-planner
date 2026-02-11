@@ -16,6 +16,7 @@ const TARGET_CONFIG: Record<Target, {
   slackHeading: (body: SendBody) => string;
   slackFallback: (body: SendBody) => string;
   asanaTaskName: (body: SendBody) => string;
+  includeDriveLink: boolean;
 }> = {
   editor: {
     slackEnvVar: "SLACK_SEND_TO_EDITOR_WEBHOOK_URL",
@@ -24,6 +25,7 @@ const TARGET_CONFIG: Record<Target, {
     slackHeading: (b) => `*\ud83c\udfac ${b.reelTitle ? `"${b.reelTitle}" \u2014 ` : ""}Ready for Editing*`,
     slackFallback: (b) => `\ud83c\udfac ${b.reelTitle || `Reel ${b.reelIndex + 1}`} ready for editing \u2014 ${b.companyName}`,
     asanaTaskName: (b) => `Edit: ${b.reelTitle || `Reel ${b.reelIndex + 1}`} - ${b.companyName}${b.themeName ? ` - ${b.themeName}` : ""}`,
+    includeDriveLink: true,
   },
   filming: {
     slackEnvVar: "SLACK_SEND_FOR_FILMING_WEBHOOK_URL",
@@ -32,6 +34,7 @@ const TARGET_CONFIG: Record<Target, {
     slackHeading: (b) => `*\ud83c\udfac ${b.reelTitle ? `"${b.reelTitle}" \u2014 ` : ""}Ready for Filming*`,
     slackFallback: (b) => `\ud83c\udfac ${b.reelTitle || `Reel ${b.reelIndex + 1}`} ready for filming \u2014 ${b.companyName}`,
     asanaTaskName: (b) => `Film: ${b.reelTitle || `Reel ${b.reelIndex + 1}`} - ${b.companyName}${b.themeName ? ` - ${b.themeName}` : ""}`,
+    includeDriveLink: false,
   },
 };
 
@@ -133,10 +136,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Use the raw video URL if available (links directly to the file in the shared folder),
-    // otherwise fall back to looking up the Drive folder
+    // Drive link: only include for targets that want it (editor yes, filming no)
     let driveLink: string | undefined;
-    if (body.rawVideoUrl) {
+    if (!config.includeDriveLink) {
+      // Skip Drive link entirely for this target
+    } else if (body.rawVideoUrl) {
       driveLink = body.rawVideoUrl;
     } else if (isDriveEnabled()) {
       try {
