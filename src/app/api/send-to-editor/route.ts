@@ -43,6 +43,7 @@ interface SendBody {
   reelTitle?: string;
   script: string;
   caption: string;
+  rawVideoUrl?: string;
   target?: Target;
 }
 
@@ -94,7 +95,7 @@ function buildSlackBlocks(
       type: "section",
       text: {
         type: "mrkdwn",
-        text: `*Google Drive:* <${driveLink}|Open folder in Drive>`,
+        text: `*Google Drive:* <${driveLink}|${driveLink.includes("/folders/") ? "Open folder in Drive" : "Open video in Drive"}>`,
       },
     });
   }
@@ -131,9 +132,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Best-effort Drive folder link (only if user has OAuth tokens)
+    // Use the raw video URL if available (links directly to the file in the shared folder),
+    // otherwise fall back to looking up the Drive folder
     let driveLink: string | undefined;
-    if (isDriveEnabled()) {
+    if (body.rawVideoUrl) {
+      driveLink = body.rawVideoUrl;
+    } else if (isDriveEnabled()) {
       try {
         const drive = await getDriveClient(userId);
         const companyFolderId = await ensureFolder(drive, "root", body.companyName);
@@ -143,7 +147,6 @@ export async function POST(request: NextRequest) {
         driveLink = `https://drive.google.com/drive/folders/${themeFolderId}`;
       } catch (err) {
         if (!(err instanceof DriveAuthError)) {
-          // Log unexpected errors but continue without link
           console.error("Drive folder lookup failed:", err);
         }
       }

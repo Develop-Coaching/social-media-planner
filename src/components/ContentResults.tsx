@@ -569,6 +569,7 @@ export default function ContentResults({
           reelTitle: reel.title || "",
           script: reel.script,
           caption: reel.caption || "",
+          rawVideoUrl: reel.rawVideoUrl || "",
         }),
       });
       const data = await res.json();
@@ -614,6 +615,7 @@ export default function ContentResults({
           reelTitle: reel.title || "",
           script: reel.script,
           caption: reel.caption || "",
+          rawVideoUrl: reel.rawVideoUrl || "",
           target: "filming",
         }),
       });
