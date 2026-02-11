@@ -720,27 +720,37 @@ export default function ContentResults({
 
       // Step 2: Upload file directly to Google Drive (bypasses Vercel size limit)
       // Content-Length is set automatically by the browser; setting it manually is forbidden
-      const uploadRes = await fetch(initData.uploadUrl, {
-        method: "PUT",
-        headers: { "Content-Type": file.type },
-        body: file,
-      });
-
-      if (!uploadRes.ok) {
-        const errText = await uploadRes.text().catch(() => "");
-        toast(`Upload failed: ${uploadRes.status} ${errText.slice(0, 100)}`, "error");
-        return;
-      }
-
+      // The PUT may throw a TypeError ("Failed to fetch") due to CORS even when the upload succeeds,
+      // so we catch errors here and fall through to the server-side lookup.
       let fileId: string | undefined;
       let webViewLink: string | undefined;
+      let uploadFailed = false;
+
       try {
-        const driveFile = await uploadRes.json();
-        fileId = driveFile.id;
-        webViewLink = driveFile.webViewLink;
+        const uploadRes = await fetch(initData.uploadUrl, {
+          method: "PUT",
+          headers: { "Content-Type": file.type },
+          body: file,
+        });
+
+        if (!uploadRes.ok) {
+          const errText = await uploadRes.text().catch(() => "");
+          toast(`Upload failed: ${uploadRes.status} ${errText.slice(0, 100)}`, "error");
+          uploadFailed = true;
+        } else {
+          try {
+            const driveFile = await uploadRes.json();
+            fileId = driveFile.id;
+            webViewLink = driveFile.webViewLink;
+          } catch {
+            // CORS may block reading response body
+          }
+        }
       } catch {
-        // Google may return empty body or CORS may block reading response
+        // CORS TypeError — upload likely succeeded but browser can't read the response
       }
+
+      if (uploadFailed) return;
 
       if (!fileId) {
         // Upload succeeded (file is on Drive) but CORS blocked reading Google's response.
