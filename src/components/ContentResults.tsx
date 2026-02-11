@@ -10,6 +10,7 @@ import { useToast } from "@/components/ToastProvider";
 import { ElapsedTimer } from "@/components/Skeleton";
 import DriveVideoPickerModal from "@/components/DriveVideoPickerModal";
 import DriveImagePickerModal from "@/components/DriveImagePickerModal";
+import DriveFolderPickerModal from "@/components/DriveFolderPickerModal";
 
 type ContentType = "post" | "reel" | "linkedinArticle" | "carousel" | "quoteForX" | "youtube";
 
@@ -262,6 +263,7 @@ export default function ContentResults({
 
   // Drive integration state
   const [driveSavingKey, setDriveSavingKey] = useState<string | null>(null);
+  const [driveFolderPickerKey, setDriveFolderPickerKey] = useState<string | null>(null);
   const [driveImportForKey, setDriveImportForKey] = useState<string | null>(null);
   const [videoPickerReel, setVideoPickerReel] = useState<{ index: number; kind: "raw" | "finished" } | null>(null);
   const [uploadingVideoReel, setUploadingVideoReel] = useState<number | null>(null);
@@ -964,7 +966,7 @@ export default function ContentResults({
     link.click();
   }
 
-  async function handleDriveSave(key: string) {
+  function handleDriveSave(key: string) {
     if (!driveStatus?.enabled) return;
 
     // If not authenticated, trigger popup and save the key for later
@@ -974,6 +976,11 @@ export default function ContentResults({
       return;
     }
 
+    // Open folder picker so user can choose where to save
+    setDriveFolderPickerKey(key);
+  }
+
+  async function handleDriveSaveToFolder(key: string, targetFolderId: string) {
     setDriveSavingKey(key);
     try {
       const res = await fetch("/api/drive/upload", {
@@ -982,7 +989,7 @@ export default function ContentResults({
         body: JSON.stringify({
           companyId,
           companyName,
-          folderName: theme.title,
+          targetFolderId,
           imageKey: key,
           fileName: `${key}.png`,
         }),
@@ -991,7 +998,6 @@ export default function ContentResults({
       if (res.ok) {
         toast("Saved to Google Drive", "success");
       } else if (data.error === "not_authenticated") {
-        // Token expired — trigger re-auth
         pendingDriveUploadRef.current = key;
         googleCodeClientRef.current?.requestCode();
       } else {
@@ -1226,6 +1232,18 @@ export default function ContentResults({
             setVideoPickerReel(null);
           }}
           onClose={() => setVideoPickerReel(null)}
+        />
+      )}
+
+      {/* Drive folder picker modal for Save to Drive */}
+      {driveFolderPickerKey && (
+        <DriveFolderPickerModal
+          onSelect={(folderId) => {
+            const key = driveFolderPickerKey;
+            setDriveFolderPickerKey(null);
+            handleDriveSaveToFolder(key, folderId);
+          }}
+          onClose={() => setDriveFolderPickerKey(null)}
         />
       )}
 

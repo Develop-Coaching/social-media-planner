@@ -13,6 +13,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const companyName = searchParams.get("companyName");
     const folder = searchParams.get("folder");
+    const folderId = searchParams.get("folderId"); // browse by ID (for folder picker)
     const pageToken = searchParams.get("pageToken") || undefined;
     const mode = searchParams.get("mode"); // "folders" to list folders instead of images
     const type = searchParams.get("type"); // "videos" to list videos instead of images
@@ -35,6 +36,14 @@ export async function GET(request: NextRequest) {
     const rootFolderId = "root";
 
     if (mode === "folders") {
+      // Browse by explicit folder ID (for folder picker navigation)
+      if (folderId) {
+        const result = await listFolders(drive, folderId);
+        if (!result.ok) {
+          return NextResponse.json({ error: result.error }, { status: 500 });
+        }
+        return NextResponse.json({ folders: result.folders });
+      }
       // List subfolders of root or company folder
       if (companyName) {
         const companyFolderId = await ensureFolder(drive, rootFolderId, companyName);

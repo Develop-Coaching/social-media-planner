@@ -9,6 +9,7 @@ interface UploadBody {
   companyId: string;
   companyName: string;
   folderName?: string;
+  targetFolderId?: string; // upload directly to a specific Drive folder
   imageKey?: string;      // single-image upload
   fileName?: string;      // single-image upload
   images?: { key: string; fileName: string }[]; // bulk upload (kept for import modal)
@@ -39,9 +40,8 @@ export async function POST(request: NextRequest) {
     // Read all images from server storage
     const storedImages = await getImages(userId, body.companyId);
 
-    // Upload to user's root Drive — create Company/Theme folder structure
-    // Use "root" as the parent to upload to My Drive
-    const companyFolderId = await (async () => {
+    // Determine target folder: explicit ID, or auto-create Company/Theme structure
+    const companyFolderId = body.targetFolderId || await (async () => {
       const { ensureFolder } = await import("@/lib/drive");
       const cid = await ensureFolder(drive, "root", body.companyName);
       return body.folderName ? await ensureFolder(drive, cid, body.folderName) : cid;
