@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/auth-helpers";
-import { getDriveClient, DriveAuthError, listImages, listVideos, listSharedFiles, listFolders, ensureFolder } from "@/lib/drive";
+import { getDriveClient, DriveAuthError, listImages, listVideos, listSharedFiles, listSharedFolders, listFolders, ensureFolder } from "@/lib/drive";
 
 export const dynamic = "force-dynamic";
 
@@ -19,8 +19,17 @@ export async function GET(request: NextRequest) {
     const type = searchParams.get("type"); // "videos" to list videos instead of images
     const source = searchParams.get("source"); // "shared" to list files shared with user
 
-    // "Shared with me" mode — flat list, no folder navigation
+    // "Shared with me" mode
     if (source === "shared") {
+      // List shared folders (for folder picker)
+      if (mode === "folders") {
+        const result = await listSharedFolders(drive, pageToken);
+        if (!result.ok) {
+          return NextResponse.json({ error: result.error }, { status: 500 });
+        }
+        return NextResponse.json({ folders: result.folders, nextPageToken: result.nextPageToken });
+      }
+      // List shared files (images or videos)
       const mimeCategory = type === "videos" ? "video" : "image";
       const result = await listSharedFiles(drive, mimeCategory, pageToken);
       if (!result.ok) {

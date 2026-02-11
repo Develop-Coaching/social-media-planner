@@ -313,6 +313,34 @@ export async function downloadImage(
   }
 }
 
+/** List folders shared with the user */
+export async function listSharedFolders(
+  drive: drive_v3.Drive,
+  pageToken?: string
+): Promise<{ ok: boolean; folders?: { id: string; name: string }[]; nextPageToken?: string; error?: string }> {
+  try {
+    const res = await drive.files.list({
+      q: `sharedWithMe = true and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+      fields: "nextPageToken, files(id, name)",
+      pageSize: 100,
+      pageToken: pageToken || undefined,
+      orderBy: "name",
+    });
+
+    const folders = (res.data.files || []).map((f) => ({
+      id: f.id!,
+      name: f.name!,
+    }));
+
+    return { ok: true, folders, nextPageToken: res.data.nextPageToken || undefined };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Failed to list shared folders",
+    };
+  }
+}
+
 /** List subfolders within a parent folder */
 export async function listFolders(
   drive: drive_v3.Drive,
