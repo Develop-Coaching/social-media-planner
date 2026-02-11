@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { google } from "googleapis";
 import { requireAuth, AuthError } from "@/lib/auth-helpers";
-import { saveDriveTokens } from "@/lib/drive-tokens";
+import { saveDriveTokens, clearDriveTokens } from "@/lib/drive-tokens";
 
 export const dynamic = "force-dynamic";
 
@@ -54,5 +54,19 @@ export async function POST(request: NextRequest) {
       { error: "Failed to authenticate with Google Drive" },
       { status: 500 }
     );
+  }
+}
+
+/** Disconnect Google Drive — clears stored tokens */
+export async function DELETE() {
+  try {
+    const { userId } = await requireAuth();
+    await clearDriveTokens(userId);
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    if (e instanceof AuthError) {
+      return NextResponse.json({ error: e.message }, { status: (e as AuthError & { status: number }).status });
+    }
+    return NextResponse.json({ error: "Failed to disconnect" }, { status: 500 });
   }
 }
