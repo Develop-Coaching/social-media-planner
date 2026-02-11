@@ -899,22 +899,32 @@ export default function ContentResults({
     try {
       const items: { type: string; title: string; preview: string; imageKey?: string }[] = [];
       content.posts.forEach((p, i) => items.push({ type: "Post", title: p.title, preview: p.caption, imageKey: `post-${i}` }));
-      content.reels.forEach((r, i) => items.push({ type: "Reel", title: `Reel ${i + 1}`, preview: r.caption ? `${r.caption}\n\n${r.script}` : r.script }));
-      content.linkedinArticles.forEach((a, i) => items.push({ type: "Article", title: a.title, preview: a.caption ? `${a.caption}\n\n${a.body}` : a.body, imageKey: `article-${i}` }));
-      content.carousels.forEach((c, i) => items.push({ type: "Carousel", title: c.slides[0]?.title || `Carousel ${i + 1}`, preview: (c.caption ? `${c.caption}\n\n` : "") + c.slides.map((s, j) => `Slide ${j + 1}: ${s.title}\n${s.body}`).join("\n\n"), imageKey: `carousel-${i}` }));
+      content.reels.forEach((r, i) => items.push({ type: "Reel", title: `Reel ${i + 1}`, preview: r.caption || "" }));
+      content.linkedinArticles.forEach((a, i) => items.push({ type: "Article", title: a.title, preview: a.caption || "", imageKey: `article-${i}` }));
+      content.carousels.forEach((c, i) => items.push({ type: "Carousel", title: c.slides[0]?.title || `Carousel ${i + 1}`, preview: c.caption || "", imageKey: `carousel-${i}` }));
       content.quotesForX.forEach((q, i) => items.push({ type: "Quote (X)", title: q.quote.slice(0, 40), preview: q.quote, imageKey: `quote-${i}` }));
-      content.youtube.forEach((y, i) => items.push({ type: "YouTube", title: y.title, preview: y.script, imageKey: `youtube-${i}` }));
+      content.youtube.forEach((y, i) => items.push({ type: "YouTube", title: y.title, preview: "", imageKey: `youtube-${i}` }));
 
       const days = [{ dayName: "All Content", date: "", items: items.map(item => ({ time: "", ...item })) }];
 
       const res = await fetch("/api/notify-slack", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ companyName, companyId, themeName: themeName || theme.title, weekLabel: "", days }),
+        body: JSON.stringify({
+          companyName,
+          companyId,
+          themeName: themeName || theme.title,
+          weekLabel: "",
+          days,
+          driveEnabled: driveStatus?.enabled && driveStatus?.authenticated,
+        }),
       });
       const data = await res.json();
       if (res.ok) {
-        toast(`Sent to Slack${data.imagesUploaded ? ` with ${data.imagesUploaded} image(s)` : ""}`, "success");
+        let msg = "Sent to Slack";
+        if (data.driveLink) msg += " with Drive link";
+        else if (data.imagesUploaded) msg += ` with ${data.imagesUploaded} image(s)`;
+        toast(msg, "success");
       } else {
         toast(data.error || "Failed to send to Slack", "error");
       }
