@@ -3,7 +3,12 @@
 import { useState, useEffect, useCallback } from "react";
 import { DriveFileInfo } from "@/types";
 
-type DriveSource = "mydrive" | "shared";
+type DriveSource = "shared" | "mydrive";
+
+interface FolderInfo {
+  id: string;
+  name: string;
+}
 
 interface Props {
   companyName: string;
@@ -13,8 +18,9 @@ interface Props {
   onClose: () => void;
 }
 
-export default function DriveImagePickerModal({ companyName, companyId, targetKey, onImport, onClose }: Props) {
+export default function DriveImagePickerModal({ companyId, targetKey, onImport, onClose }: Props) {
   const [files, setFiles] = useState<DriveFileInfo[]>([]);
+  const [folders, setFolders] = useState<FolderInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [nextPageToken, setNextPageToken] = useState<string | undefined>();
   const [loadingMore, setLoadingMore] = useState(false);
@@ -22,47 +28,53 @@ export default function DriveImagePickerModal({ companyName, companyId, targetKe
   const [error, setError] = useState<string | null>(null);
 
   const [source, setSource] = useState<DriveSource>("shared");
-  const [folders, setFolders] = useState<{ id: string; name: string }[]>([]);
-  const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
+  // Breadcrumb path for folder navigation
+  const [path, setPath] = useState<FolderInfo[]>([]);
 
-  const fetchFolders = useCallback(async () => {
-    if (source === "shared") {
-      setFolders([]);
-      return;
-    }
-    try {
-      const res = await fetch(`/api/drive/list?companyName=${encodeURIComponent(companyName)}&mode=folders`);
-      const data = await res.json();
-      if (res.ok && data.folders) {
-        setFolders(data.folders);
-      }
-    } catch {
-      // Folders are optional
-    }
-  }, [companyName, source]);
+  const isSharedRoot = source === "shared" && path.length === 0;
+  const currentFolderId = path.length > 0 ? path[path.length - 1].id : (source === "mydrive" ? "root" : null);
 
-  const fetchFiles = useCallback(async (folder?: string | null, pageToken?: string, currentSource?: DriveSource) => {
-    const src = currentSource ?? source;
+  const fetchContent = useCallback(async (folderId: string | null, currentSource: DriveSource, pageToken?: string) => {
     if (pageToken) {
       setLoadingMore(true);
     } else {
       setLoading(true);
       setFiles([]);
+      setFolders([]);
       setNextPageToken(undefined);
     }
     setError(null);
 
     try {
-      let url: string;
-      if (src === "shared") {
-        url = `/api/drive/list?source=shared`;
-      } else {
-        url = `/api/drive/list?companyName=${encodeURIComponent(companyName)}`;
-        if (folder) url += `&folder=${encodeURIComponent(folder)}`;
-      }
-      if (pageToken) url += `&pageToken=${encodeURIComponent(pageToken)}`;
+      // Fetch folders and images in parallel
+      const isSharedRootLevel = currentSource === "shared" && !folderId;
 
-      const res = await fetch(url);
+      // Fetch folders (only on first page)
+      if (!pageToken) {
+        let folderUrl: string;
+        if (isSharedRootLevel) {
+          folderUrl = "/api/drive/list?mode=folders&source=shared";
+        } else {
+          folderUrl = `/api/drive/list?mode=folders&folderId=${encodeURIComponent(folderId || "root")}`;
+        }
+        fetch(folderUrl)
+          .then((r) => r.json())
+          .then((data) => {
+            if (data.folders) setFolders(data.folders);
+          })
+          .catch(() => {});
+      }
+
+      // Fetch images
+      let imageUrl: string;
+      if (isSharedRootLevel) {
+        imageUrl = "/api/drive/list?source=shared";
+      } else {
+        imageUrl = `/api/drive/list?folderId=${encodeURIComponent(folderId || "root")}`;
+      }
+      if (pageToken) imageUrl += `&pageToken=${encodeURIComponent(pageToken)}`;
+
+      const res = await fetch(imageUrl);
       const data = await res.json();
 
       if (!res.ok) {
@@ -82,12 +94,11 @@ export default function DriveImagePickerModal({ companyName, companyId, targetKe
       setLoading(false);
       setLoadingMore(false);
     }
-  }, [companyName, source]);
+  }, []);
 
   useEffect(() => {
-    fetchFolders();
-    fetchFiles(null, undefined, source);
-  }, [fetchFolders, fetchFiles, source]);
+    fetchContent(currentFolderId, source);
+  }, [currentFolderId, source, fetchContent]);
 
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
@@ -99,13 +110,19 @@ export default function DriveImagePickerModal({ companyName, companyId, targetKe
 
   function handleSourceChange(newSource: DriveSource) {
     setSource(newSource);
-    setSelectedFolder(null);
-    setFolders([]);
+    setPath([]);
   }
 
-  function handleFolderChange(folderName: string | null) {
-    setSelectedFolder(folderName);
-    fetchFiles(folderName);
+  function navigateInto(folder: FolderInfo) {
+    setPath((prev) => [...prev, folder]);
+  }
+
+  function navigateTo(index: number) {
+    if (index < 0) {
+      setPath([]);
+    } else {
+      setPath((prev) => prev.slice(0, index + 1));
+    }
   }
 
   async function handleSelect(file: DriveFileInfo) {
@@ -139,6 +156,8 @@ export default function DriveImagePickerModal({ companyName, companyId, targetKe
     }
   }
 
+  const hasContent = folders.length > 0 || files.length > 0;
+
   return (
     <div
       className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
@@ -166,7 +185,7 @@ export default function DriveImagePickerModal({ companyName, companyId, targetKe
           </button>
         </div>
 
-        {/* Source toggle + folder selector */}
+        {/* Source toggle */}
         <div className="px-6 py-3 border-b border-slate-200 dark:border-slate-700 flex items-center gap-4 flex-wrap">
           <div className="inline-flex rounded-lg border border-slate-300 dark:border-slate-600 overflow-hidden text-sm">
             <button
@@ -190,21 +209,35 @@ export default function DriveImagePickerModal({ companyName, companyId, targetKe
               My Drive
             </button>
           </div>
-          {source === "mydrive" && folders.length > 0 && (
-            <div className="flex items-center gap-2">
-              <label className="text-sm text-slate-600 dark:text-slate-400">Folder:</label>
-              <select
-                value={selectedFolder || ""}
-                onChange={(e) => handleFolderChange(e.target.value || null)}
-                className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-1.5 text-sm text-slate-900 dark:text-slate-100"
+        </div>
+
+        {/* Breadcrumb */}
+        <div className="px-6 py-2 border-b border-slate-200 dark:border-slate-700 flex items-center gap-1 flex-wrap text-sm">
+          <button
+            onClick={() => navigateTo(-1)}
+            className={`hover:text-sky-600 dark:hover:text-sky-400 transition-colors ${
+              path.length === 0
+                ? "text-slate-800 dark:text-slate-200 font-medium"
+                : "text-slate-500 dark:text-slate-400"
+            }`}
+          >
+            {source === "shared" ? "Shared with me" : "My Drive"}
+          </button>
+          {path.map((p, idx) => (
+            <span key={p.id} className="flex items-center gap-1">
+              <span className="text-slate-400">/</span>
+              <button
+                onClick={() => navigateTo(idx)}
+                className={`hover:text-sky-600 dark:hover:text-sky-400 transition-colors ${
+                  idx === path.length - 1
+                    ? "text-slate-800 dark:text-slate-200 font-medium"
+                    : "text-slate-500 dark:text-slate-400"
+                }`}
               >
-                <option value="">{companyName} (root)</option>
-                {folders.map((f) => (
-                  <option key={f.id} value={f.name}>{f.name}</option>
-                ))}
-              </select>
-            </div>
-          )}
+                {p.name}
+              </button>
+            </span>
+          ))}
         </div>
 
         {/* Content */}
@@ -234,47 +267,78 @@ export default function DriveImagePickerModal({ companyName, companyId, targetKe
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
               </svg>
             </div>
-          ) : !importing && files.length === 0 ? (
+          ) : !importing && !hasContent ? (
             <div className="text-center py-12 text-slate-500 dark:text-slate-400">
               <svg className="w-12 h-12 mx-auto mb-3 text-slate-300 dark:text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
               </svg>
-              <p className="text-sm">No images found{source === "shared" ? " shared with you" : " in this folder"}.</p>
-              <p className="text-xs mt-1">
-                {source === "shared"
-                  ? "Ask someone to share images with your Google account, or switch to My Drive."
-                  : "Upload images to your Drive folder first, or try a different folder."}
+              <p className="text-sm">
+                {isSharedRoot
+                  ? "No files or folders shared with you."
+                  : "No images or folders found here."}
               </p>
             </div>
           ) : !importing ? (
             <>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {files.map((file) => (
-                  <div
-                    key={file.id}
-                    className="rounded-xl border-2 border-slate-200 dark:border-slate-700 hover:border-sky-400 dark:hover:border-sky-500 overflow-hidden cursor-pointer transition-all group"
-                    onClick={() => handleSelect(file)}
-                  >
-                    <div className="aspect-square bg-slate-100 dark:bg-slate-900 flex items-center justify-center overflow-hidden">
-                      {file.thumbnailLink ? (
-                        <img src={file.thumbnailLink} alt={file.name} className="w-full h-full object-cover" />
-                      ) : (
-                        <svg className="w-10 h-10 text-slate-300 dark:text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              {/* Folders */}
+              {folders.length > 0 && (
+                <div className="mb-4">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mb-2 uppercase tracking-wider">Folders</p>
+                  <div className="space-y-1">
+                    {folders.map((f) => (
+                      <button
+                        key={f.id}
+                        onClick={() => navigateInto(f)}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors text-left group"
+                      >
+                        <svg className="w-5 h-5 text-amber-500 dark:text-amber-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
                         </svg>
-                      )}
-                    </div>
-                    <div className="p-2">
-                      <p className="text-xs text-slate-700 dark:text-slate-300 font-medium truncate">{file.name}</p>
-                    </div>
+                        <span className="text-sm text-slate-700 dark:text-slate-300 font-medium truncate">{f.name}</span>
+                        <svg className="w-4 h-4 text-slate-400 ml-auto flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      </button>
+                    ))}
                   </div>
-                ))}
-              </div>
+                </div>
+              )}
+
+              {/* Images */}
+              {files.length > 0 && (
+                <>
+                  {folders.length > 0 && (
+                    <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mb-2 uppercase tracking-wider">Images</p>
+                  )}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {files.map((file) => (
+                      <div
+                        key={file.id}
+                        className="rounded-xl border-2 border-slate-200 dark:border-slate-700 hover:border-sky-400 dark:hover:border-sky-500 overflow-hidden cursor-pointer transition-all group"
+                        onClick={() => handleSelect(file)}
+                      >
+                        <div className="aspect-square bg-slate-100 dark:bg-slate-900 flex items-center justify-center overflow-hidden">
+                          {file.thumbnailLink ? (
+                            <img src={file.thumbnailLink} alt={file.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <svg className="w-10 h-10 text-slate-300 dark:text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                          )}
+                        </div>
+                        <div className="p-2">
+                          <p className="text-xs text-slate-700 dark:text-slate-300 font-medium truncate">{file.name}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
 
               {nextPageToken && (
                 <div className="text-center mt-4">
                   <button
-                    onClick={() => fetchFiles(selectedFolder, nextPageToken)}
+                    onClick={() => fetchContent(currentFolderId, source, nextPageToken)}
                     disabled={loadingMore}
                     className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors disabled:opacity-50"
                   >

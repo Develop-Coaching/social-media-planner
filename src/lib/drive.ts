@@ -54,6 +54,8 @@ export async function ensureFolder(
     q: `'${parentId}' in parents and name = '${name.replace(/'/g, "\\'")}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
     fields: "files(id)",
     pageSize: 1,
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
   });
 
   if (res.data.files && res.data.files.length > 0) {
@@ -68,6 +70,7 @@ export async function ensureFolder(
       parents: [parentId],
     },
     fields: "id",
+    supportsAllDrives: true,
   });
 
   return folder.data.id!;
@@ -101,6 +104,7 @@ export async function uploadImage(
         body: stream,
       },
       fields: "id, webViewLink",
+      supportsAllDrives: true,
     });
 
     return {
@@ -138,6 +142,8 @@ export async function listImages(
       pageSize: 20,
       pageToken: pageToken || undefined,
       orderBy: "modifiedTime desc",
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
     });
 
     const files: DriveFileInfo[] = (res.data.files || []).map((f) => ({
@@ -175,6 +181,8 @@ export async function listVideos(
       pageSize: 20,
       pageToken: pageToken || undefined,
       orderBy: "modifiedTime desc",
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
     });
 
     const files: DriveFileInfo[] = (res.data.files || []).map((f) => ({
@@ -213,6 +221,8 @@ export async function listSharedFiles(
       pageSize: 20,
       pageToken: pageToken || undefined,
       orderBy: "modifiedTime desc",
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
     });
 
     const files: DriveFileInfo[] = (res.data.files || []).map((f) => ({
@@ -260,6 +270,7 @@ export async function uploadFile(
         body: stream,
       },
       fields: "id, webViewLink",
+      supportsAllDrives: true,
     });
 
     return {
@@ -286,6 +297,7 @@ export async function downloadImage(
     const meta = await drive.files.get({
       fileId,
       fields: "size, mimeType",
+      supportsAllDrives: true,
     });
     const size = parseInt(meta.data.size || "0", 10);
     if (size > MAX_DOWNLOAD_SIZE) {
@@ -293,7 +305,7 @@ export async function downloadImage(
     }
 
     const res = await drive.files.get(
-      { fileId, alt: "media" },
+      { fileId, alt: "media", supportsAllDrives: true },
       { responseType: "arraybuffer" }
     );
 
@@ -325,6 +337,8 @@ export async function listSharedFolders(
       pageSize: 100,
       pageToken: pageToken || undefined,
       orderBy: "name",
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
     });
 
     const folders = (res.data.files || []).map((f) => ({
@@ -352,6 +366,8 @@ export async function listFolders(
       fields: "files(id, name)",
       pageSize: 100,
       orderBy: "name",
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
     });
 
     const folders = (res.data.files || []).map((f) => ({
