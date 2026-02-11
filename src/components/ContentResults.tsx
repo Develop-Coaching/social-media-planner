@@ -278,6 +278,8 @@ export default function ContentResults({
   const videoUploadReelIndexRef = useRef<number | null>(null);
   const googleCodeClientRef = useRef<{ requestCode: () => void } | null>(null);
   const pendingDriveUploadRef = useRef<string | null>(null);
+  const [driveBulkUploading, setDriveBulkUploading] = useState(false);
+  const [driveBulkFolderPicker, setDriveBulkFolderPicker] = useState(false);
 
   // Send to Editor / Send for Filming state
   const [sentToEditor, setSentToEditor] = useState<Set<string>>(new Set());
@@ -333,7 +335,11 @@ export default function ContentResults({
             if (ok && pendingDriveUploadRef.current) {
               const key = pendingDriveUploadRef.current;
               pendingDriveUploadRef.current = null;
-              handleDriveSave(key);
+              if (key === "__bulk__") {
+                handleDriveSaveAll();
+              } else {
+                handleDriveSave(key);
+              }
             }
           }
         },
@@ -1076,6 +1082,82 @@ export default function ContentResults({
     }
   }
 
+  function handleDriveSaveAll() {
+    if (!driveStatus?.enabled) return;
+    if (!driveStatus.authenticated) {
+      pendingDriveUploadRef.current = "__bulk__";
+      googleCodeClientRef.current?.requestCode();
+      return;
+    }
+    setDriveBulkFolderPicker(true);
+  }
+
+  async function handleDriveSaveAllToFolder(targetFolderId: string) {
+    setDriveBulkUploading(true);
+    try {
+      // Collect all image keys that have generated images
+      const allImages: { key: string; fileName: string }[] = [];
+      content.posts.forEach((_, i) => {
+        const key = `post-${i}`;
+        if (images[key]) allImages.push({ key, fileName: `post-${i + 1}.png` });
+      });
+      content.linkedinArticles.forEach((_, i) => {
+        const key = `article-${i}`;
+        if (images[key]) allImages.push({ key, fileName: `article-${i + 1}-hero.png` });
+      });
+      content.carousels.forEach((c, i) => {
+        c.slides.forEach((_, j) => {
+          const key = `carousel-${i}-slide-${j}`;
+          if (images[key]) allImages.push({ key, fileName: `carousel-${i + 1}-slide-${j + 1}.png` });
+        });
+      });
+      content.quotesForX.forEach((_, i) => {
+        const key = `quote-${i}`;
+        if (images[key]) allImages.push({ key, fileName: `quote-${i + 1}.png` });
+      });
+      content.youtube.forEach((_, i) => {
+        const key = `yt-${i}`;
+        if (images[key]) allImages.push({ key, fileName: `youtube-${i + 1}-thumbnail.png` });
+      });
+
+      if (allImages.length === 0) {
+        toast("No images to upload", "info");
+        return;
+      }
+
+      const res = await fetch("/api/drive/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId,
+          companyName,
+          targetFolderId,
+          images: allImages,
+        }),
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        const link = data.folderLink;
+        toast(`Uploaded ${data.uploaded}/${data.total} images to Drive`, "success");
+        if (link) {
+          for (const img of allImages) {
+            setDriveLinks((prev) => ({ ...prev, [img.key]: link }));
+          }
+        }
+      } else if (data.error === "not_authenticated") {
+        pendingDriveUploadRef.current = "__bulk__";
+        googleCodeClientRef.current?.requestCode();
+      } else {
+        toast(data.error || "Failed to upload to Drive", "error");
+      }
+    } catch {
+      toast("Failed to upload to Drive", "error");
+    } finally {
+      setDriveBulkUploading(false);
+    }
+  }
+
   function renderImageWithRegenerate(key: string, prompt: string, filename: string, aspectRatio?: string) {
     const showingFeedback = imageRegenKey === key;
     return (
@@ -1355,6 +1437,17 @@ export default function ContentResults({
         />
       )}
 
+      {/* Drive folder picker for bulk image upload */}
+      {driveBulkFolderPicker && (
+        <DriveFolderPickerModal
+          onSelect={(folderId) => {
+            setDriveBulkFolderPicker(false);
+            handleDriveSaveAllToFolder(folderId);
+          }}
+          onClose={() => setDriveBulkFolderPicker(false)}
+        />
+      )}
+
       {/* Fullscreen image overlay */}
       {fullscreenImage && (
         <div
@@ -1428,6 +1521,18 @@ export default function ContentResults({
             </svg>
             {slackSending ? "Sending..." : "Send to Slack"}
           </button>
+          {driveStatus?.enabled && (
+            <button
+              onClick={handleDriveSaveAll}
+              disabled={driveBulkUploading || Object.keys(images).length === 0}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-green-600 text-white font-medium hover:bg-green-700 disabled:opacity-50 transition-colors text-sm"
+            >
+              <svg className={`w-4 h-4 ${driveBulkUploading ? "animate-spin" : ""}`} viewBox="0 0 24 24" fill="currentColor">
+                <path d="M7.71 3.5L1.15 15l2.16 3.75h4.73L4.46 12.5l2.17-3.75L7.71 3.5zm4.5 0L5.62 15l2.17 3.75h4.32l2.17-3.75L7.71 3.5h4.5zm4.5 0L10.12 15l2.17 3.75h4.32l6.56-11.5L20.71 3.5h-4z" />
+              </svg>
+              {driveBulkUploading ? "Uploading..." : "All Images to Drive"}
+            </button>
+          )}
           {currentSavedId ? (
             <button
               onClick={onUpdate}
