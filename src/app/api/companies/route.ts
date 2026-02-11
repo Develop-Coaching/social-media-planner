@@ -105,8 +105,9 @@ export async function PUT(request: NextRequest) {
     if (e instanceof AuthError) {
       return NextResponse.json({ error: e.message }, { status: e.status });
     }
-    console.error(e);
-    return NextResponse.json({ error: "Failed to update company" }, { status: 500 });
+    console.error("Failed to update company:", { userId, id, error: e });
+    const message = e instanceof Error ? e.message : "Failed to update company";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
