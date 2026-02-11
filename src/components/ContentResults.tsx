@@ -8,8 +8,8 @@ import CopyButton from "@/components/ui/CopyButton";
 import EditButton from "@/components/ui/EditButton";
 import { useToast } from "@/components/ToastProvider";
 import { ElapsedTimer } from "@/components/Skeleton";
-import DriveImportModal from "@/components/DriveImportModal";
 import DriveVideoPickerModal from "@/components/DriveVideoPickerModal";
+import DriveImagePickerModal from "@/components/DriveImagePickerModal";
 
 type ContentType = "post" | "reel" | "linkedinArticle" | "carousel" | "quoteForX" | "youtube";
 
@@ -262,7 +262,7 @@ export default function ContentResults({
 
   // Drive integration state
   const [driveSavingKey, setDriveSavingKey] = useState<string | null>(null);
-  const [showDriveImport, setShowDriveImport] = useState(false);
+  const [driveImportForKey, setDriveImportForKey] = useState<string | null>(null);
   const [videoPickerReel, setVideoPickerReel] = useState<{ index: number; kind: "raw" | "finished" } | null>(null);
   const googleCodeClientRef = useRef<{ requestCode: () => void } | null>(null);
   const pendingDriveUploadRef = useRef<string | null>(null);
@@ -956,16 +956,27 @@ export default function ContentResults({
             Delete
           </button>
           {driveStatus?.enabled && (
-            <button
-              onClick={() => handleDriveSave(key)}
-              disabled={driveSavingKey === key}
-              className="text-sm text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-300 font-medium inline-flex items-center gap-1 disabled:opacity-50"
-            >
-              <svg className={`w-4 h-4 ${driveSavingKey === key ? "animate-spin" : ""}`} viewBox="0 0 24 24" fill="currentColor">
-                <path d="M7.71 3.5L1.15 15l2.16 3.75h4.73L4.46 12.5l2.17-3.75L7.71 3.5zm4.5 0L5.62 15l2.17 3.75h4.32l2.17-3.75L7.71 3.5h4.5zm4.5 0L10.12 15l2.17 3.75h4.32l6.56-11.5L20.71 3.5h-4z" />
-              </svg>
-              {driveSavingKey === key ? "Saving..." : "Save to Drive"}
-            </button>
+            <>
+              <button
+                onClick={() => handleDriveSave(key)}
+                disabled={driveSavingKey === key}
+                className="text-sm text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-300 font-medium inline-flex items-center gap-1 disabled:opacity-50"
+              >
+                <svg className={`w-4 h-4 ${driveSavingKey === key ? "animate-spin" : ""}`} viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M7.71 3.5L1.15 15l2.16 3.75h4.73L4.46 12.5l2.17-3.75L7.71 3.5zm4.5 0L5.62 15l2.17 3.75h4.32l2.17-3.75L7.71 3.5h4.5zm4.5 0L10.12 15l2.17 3.75h4.32l6.56-11.5L20.71 3.5h-4z" />
+                </svg>
+                {driveSavingKey === key ? "Saving..." : "Save to Drive"}
+              </button>
+              <button
+                onClick={() => setDriveImportForKey(key)}
+                className="text-sm text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-300 font-medium inline-flex items-center gap-1"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M7.71 3.5L1.15 15l2.16 3.75h4.73L4.46 12.5l2.17-3.75L7.71 3.5zm4.5 0L5.62 15l2.17 3.75h4.32l2.17-3.75L7.71 3.5h4.5zm4.5 0L10.12 15l2.17 3.75h4.32l6.56-11.5L20.71 3.5h-4z" />
+                </svg>
+                Replace from Drive
+              </button>
+            </>
           )}
         </div>
         {showingFeedback && (
@@ -1043,16 +1054,29 @@ export default function ContentResults({
           rows={2}
           className="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 text-slate-900 dark:text-slate-100 text-sm focus:ring-2 focus:ring-sky-500"
         />
-        <button
-          onClick={() => onGenerateImage(key, withBrandContext(prompt), aspectRatio)}
-          disabled={imageLoading.has(key) || !prompt.trim()}
-          className="mt-2 inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-sky-600 text-white text-sm font-medium hover:bg-sky-700 disabled:opacity-50 transition-colors"
-        >
-          <svg className={`w-4 h-4 ${imageLoading.has(key) ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-          {imageLoading.has(key) ? "Generating..." : "Generate image"}
-        </button>
+        <div className="flex items-center gap-2 mt-2">
+          <button
+            onClick={() => onGenerateImage(key, withBrandContext(prompt), aspectRatio)}
+            disabled={imageLoading.has(key) || !prompt.trim()}
+            className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-sky-600 text-white text-sm font-medium hover:bg-sky-700 disabled:opacity-50 transition-colors"
+          >
+            <svg className={`w-4 h-4 ${imageLoading.has(key) ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            {imageLoading.has(key) ? "Generating..." : "Generate image"}
+          </button>
+          {driveStatus?.enabled && (
+            <button
+              onClick={() => setDriveImportForKey(key)}
+              className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg border border-green-500 dark:border-green-400 text-green-700 dark:text-green-300 text-sm font-medium hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M7.71 3.5L1.15 15l2.16 3.75h4.73L4.46 12.5l2.17-3.75L7.71 3.5zm4.5 0L5.62 15l2.17 3.75h4.32l2.17-3.75L7.71 3.5h4.5zm4.5 0L10.12 15l2.17 3.75h4.32l6.56-11.5L20.71 3.5h-4z" />
+              </svg>
+              Import from Drive
+            </button>
+          )}
+        </div>
       </div>
     );
   }
@@ -1093,18 +1117,17 @@ export default function ContentResults({
 
   return (
     <section className="rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-lg border border-slate-200 dark:border-slate-700">
-      {/* Drive import modal */}
-      {showDriveImport && onDriveImport && (
-        <DriveImportModal
+      {/* Per-item Drive image picker modal */}
+      {driveImportForKey && onDriveImport && (
+        <DriveImagePickerModal
           companyName={companyName}
           companyId={companyId}
-          content={content}
-          images={images}
+          targetKey={driveImportForKey}
           onImport={(imported) => {
             onDriveImport(imported);
-            setShowDriveImport(false);
+            setDriveImportForKey(null);
           }}
-          onClose={() => setShowDriveImport(false)}
+          onClose={() => setDriveImportForKey(null)}
         />
       )}
 
@@ -1193,17 +1216,6 @@ export default function ContentResults({
             </svg>
             {slackSending ? "Sending..." : "Send to Slack"}
           </button>
-          {driveStatus?.enabled && (
-            <button
-              onClick={() => setShowDriveImport(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border-2 border-sky-500 dark:border-sky-400 text-sky-700 dark:text-sky-300 font-medium hover:bg-sky-50 dark:hover:bg-sky-900/30 transition-colors text-sm"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-              </svg>
-              Import from Drive
-            </button>
-          )}
           {currentSavedId ? (
             <button
               onClick={onUpdate}
