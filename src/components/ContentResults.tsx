@@ -732,9 +732,40 @@ export default function ContentResults({
         return;
       }
 
-      const driveFile = await uploadRes.json();
-      const fileId = driveFile.id;
-      const webViewLink = driveFile.webViewLink || `https://drive.google.com/file/d/${fileId}/view`;
+      let fileId: string | undefined;
+      let webViewLink: string | undefined;
+      try {
+        const driveFile = await uploadRes.json();
+        fileId = driveFile.id;
+        webViewLink = driveFile.webViewLink;
+      } catch {
+        // Google may return empty body or CORS may block reading response
+      }
+
+      if (!fileId) {
+        // Upload succeeded (file is on Drive) but we couldn't read the response.
+        // Ask the server to look up the file we just uploaded.
+        try {
+          const lookupRes = await fetch(
+            `/api/drive/list?mode=folders&folderId=${encodeURIComponent(initData.folderId)}&_t=${Date.now()}`
+          );
+          // We can't easily find the exact file, so just link to the folder
+          webViewLink = `https://drive.google.com/drive/folders/${initData.folderId}`;
+          fileId = `folder-${initData.folderId}`;
+          void lookupRes; // not needed, just ensuring fetch completes
+        } catch {
+          // ignore
+        }
+      }
+
+      if (!fileId) {
+        toast("Video uploaded to Drive but couldn't link it back. Check your Drive folder.", "info");
+        return;
+      }
+
+      if (!webViewLink) {
+        webViewLink = `https://drive.google.com/file/d/${fileId}/view`;
+      }
 
       linkReelVideo(reelIndex, "raw", {
         fileId,

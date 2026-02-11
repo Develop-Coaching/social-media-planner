@@ -82,6 +82,7 @@ export async function POST(request: NextRequest) {
     const uploadParams = new URLSearchParams({
       uploadType: "resumable",
       supportsAllDrives: "true",
+      fields: "id,name,webViewLink",
       ...(origin ? { origin } : {}),
     });
     const initRes = await fetch(
