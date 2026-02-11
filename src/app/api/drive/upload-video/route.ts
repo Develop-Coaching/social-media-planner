@@ -5,7 +5,7 @@ import { getDriveTokens, refreshAccessToken } from "@/lib/drive-tokens";
 
 export const dynamic = "force-dynamic";
 
-const MAX_VIDEO_SIZE = 500 * 1024 * 1024; // 500MB
+const MAX_VIDEO_SIZE = 900 * 1024 * 1024; // 900MB
 
 /**
  * Creates a Google Drive resumable upload session.
