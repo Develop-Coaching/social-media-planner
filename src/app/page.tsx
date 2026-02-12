@@ -15,6 +15,8 @@ import ContentCalendar from "@/components/ContentCalendar";
 import ThemeToggle from "@/components/ThemeToggle";
 import LogoutButton from "@/components/LogoutButton";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import LowBalanceBanner from "@/components/LowBalanceBanner";
+import BalanceDisplay from "@/components/BalanceDisplay";
 import { useToast } from "@/components/ToastProvider";
 import { SkeletonGenerating, ElapsedTimer } from "@/components/Skeleton";
 import { buildBrandCssVars, isLightColor } from "@/lib/brand-theme";
@@ -138,11 +140,28 @@ export default function Home() {
   // Google Drive integration
   const [driveStatus, setDriveStatus] = useState<{ enabled: boolean; authenticated: boolean; email?: string; clientId?: string }>({ enabled: false, authenticated: false });
 
+  // Credits balance
+  const [creditsEnabled, setCreditsEnabled] = useState(false);
+  const [balanceCents, setBalanceCents] = useState<number>(0);
+  const [balanceDismissed, setBalanceDismissed] = useState(false);
+
   // Keyboard shortcuts help
   const [showShortcuts, setShowShortcuts] = useState(false);
 
   // Autosave: track whether we've restored from localStorage
   const [autosaveRestored, setAutosaveRestored] = useState(false);
+
+  const fetchBalance = useCallback(() => {
+    fetch("/api/billing")
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => {
+        if (data) {
+          setCreditsEnabled(data.creditsEnabled);
+          setBalanceCents(data.balance?.balanceCents ?? 0);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     fetch("/api/auth/me")
@@ -153,7 +172,8 @@ export default function Home() {
       .then((res) => res.ok ? res.json() : null)
       .then((data) => { if (data) setDriveStatus(data); })
       .catch(() => {});
-  }, []);
+    fetchBalance();
+  }, [fetchBalance]);
 
   // Autosave: save working state to localStorage when content changes
   useEffect(() => {
@@ -581,11 +601,13 @@ export default function Home() {
         }
       }
     } catch (err) {
-      toast(err instanceof Error ? err.message : "Failed to generate content", "error");
+      const msg = err instanceof Error ? err.message : "Failed to generate content";
+      toast(msg, "error");
     } finally {
       setContentLoading(false);
+      if (creditsEnabled) fetchBalance();
     }
-  }, [selectedCompany, selectedTheme, counts, selectedTone, selectedLanguage, toast]);
+  }, [selectedCompany, selectedTheme, counts, selectedTone, selectedLanguage, toast, creditsEnabled, fetchBalance]);
 
   function getCharacterReferenceImages(): { base64: string; mimeType: string }[] {
     return characters
@@ -633,6 +655,7 @@ export default function Home() {
         next.delete(key);
         return next;
       });
+      if (creditsEnabled) fetchBalance();
     }
   }
 
@@ -1131,6 +1154,9 @@ export default function Home() {
               <p className={`mt-1 ${headerTextLight ? "text-slate-600" : "text-white/80"}`}>Content themes from your memory - scripts, captions, articles & images</p>
             </div>
             <div className="flex items-center gap-2">
+              {creditsEnabled && (
+                <BalanceDisplay balanceCents={balanceCents} headerTextLight={headerTextLight} />
+              )}
               {currentUser && (
                 <span className={`text-sm hidden sm:inline ${headerTextLight ? "text-slate-600" : "text-white/80"}`}>
                   {currentUser.displayName}
@@ -1147,6 +1173,17 @@ export default function Home() {
                   </svg>
                 </Link>
               )}
+              {creditsEnabled && (
+                <Link
+                  href="/billing"
+                  className={`p-2 rounded-lg hover:bg-white/10 transition-colors ${headerTextLight ? "text-slate-600 hover:text-slate-900" : "text-white/80 hover:text-white"}`}
+                  title="Billing & credits"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                  </svg>
+                </Link>
+              )}
               <ThemeToggle />
               <LogoutButton />
             </div>
@@ -1155,6 +1192,13 @@ export default function Home() {
       </header>
 
       <div className="max-w-4xl mx-auto px-6 py-8 pb-20">
+        {creditsEnabled && !balanceDismissed && (
+          <LowBalanceBanner
+            balanceCents={balanceCents}
+            onDismiss={() => setBalanceDismissed(true)}
+          />
+        )}
+
         {/* Brand Settings */}
         <section className="mb-8">
           <button

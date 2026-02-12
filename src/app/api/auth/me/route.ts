@@ -16,6 +16,7 @@ export async function GET() {
       username: user.username,
       displayName: user.displayName,
       role: user.role,
+      onboardingCompleted: user.onboardingCompleted,
     });
   } catch (e) {
     if (e instanceof AuthError) {

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getContextForAI } from "@/lib/memory";
 import { requireAuth, AuthError } from "@/lib/auth-helpers";
 import { getAnthropicClient } from "@/lib/anthropic";
+import { getBalance, deductCredits, logUsage } from "@/lib/credits";
+import { calculateCost, isCreditsEnabled } from "@/lib/pricing";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -38,6 +40,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid contentType" }, { status: 400 });
     }
 
+    // Credit check
+    if (isCreditsEnabled()) {
+      const balance = await getBalance(userId);
+      if (balance.balanceCents <= 0) {
+        return NextResponse.json({ error: "Insufficient credits. Please top up to continue generating." }, { status: 402 });
+      }
+    }
+
     const context = await getContextForAI(userId, companyId);
 
     const toneInstruction = tone?.prompt ? `\n\nTONE & STYLE: ${tone.prompt}` : "";
@@ -71,6 +81,13 @@ Output ONLY valid JSON, no markdown or extra text.`;
         .filter((b): b is { type: "text"; text: string } => b.type === "text")
         .map((b) => b.text)
         .join("");
+
+      if (isCreditsEnabled() && message.usage) {
+        const cost = calculateCost("claude-sonnet-4", message.usage.input_tokens, message.usage.output_tokens);
+        await logUsage(userId, "/api/regenerate-item", "claude-sonnet-4-20250514", message.usage.input_tokens, message.usage.output_tokens, cost);
+        await deductCredits(userId, cost);
+      }
+
       return new Response(text, {
         headers: { "Content-Type": "text/plain; charset=utf-8" },
       });
@@ -92,6 +109,17 @@ Output ONLY valid JSON, no markdown or extra text.`;
             }
           }
           controller.close();
+
+          if (isCreditsEnabled()) {
+            try {
+              const finalMessage = await stream.finalMessage();
+              if (finalMessage.usage) {
+                const cost = calculateCost("claude-sonnet-4", finalMessage.usage.input_tokens, finalMessage.usage.output_tokens);
+                await logUsage(userId, "/api/regenerate-item", "claude-sonnet-4-20250514", finalMessage.usage.input_tokens, finalMessage.usage.output_tokens, cost);
+                await deductCredits(userId, cost);
+              }
+            } catch { /* usage logging failure shouldn't break response */ }
+          }
         } catch (err) {
           controller.error(err);
         }

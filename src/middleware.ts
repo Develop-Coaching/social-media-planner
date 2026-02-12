@@ -10,11 +10,13 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
-  // Allow login page, setup page, and auth API routes (login, logout, setup, status)
+  // Allow login page, setup page, auth API routes, signup pages, and onboarding
   if (
     pathname === "/login" ||
     pathname === "/setup" ||
-    pathname.startsWith("/api/auth/")
+    pathname.startsWith("/api/auth/") ||
+    pathname.startsWith("/signup/") ||
+    pathname === "/api/stripe/webhook"
   ) {
     return NextResponse.next();
   }
@@ -41,7 +43,20 @@ export async function middleware(request: NextRequest) {
   }
 
   try {
-    await jwtVerify(token, getSecret());
+    const { payload } = await jwtVerify(token, getSecret());
+
+    // If user hasn't completed onboarding, redirect to onboarding
+    // (allow onboarding page, its API, and auth routes through)
+    if (
+      payload.onboardingCompleted === false &&
+      pathname !== "/onboarding" &&
+      !pathname.startsWith("/api/onboarding") &&
+      !pathname.startsWith("/api/auth/")
+    ) {
+      const onboardingUrl = new URL("/onboarding", request.url);
+      return NextResponse.redirect(onboardingUrl);
+    }
+
     return NextResponse.next();
   } catch {
     return redirectToLogin(request);

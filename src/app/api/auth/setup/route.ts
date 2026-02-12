@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
     // Migrate existing flat data files into the new admin user's directory
     const migrated = await migrateExistingData(user.id);
 
-    const token = await createToken(user.id, "admin");
+    const token = await createToken(user.id, "admin", true);
     const response = NextResponse.json({
       success: true,
       user,

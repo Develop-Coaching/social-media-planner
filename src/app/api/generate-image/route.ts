@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
 import { requireAuth, AuthError } from "@/lib/auth-helpers";
+import { getBalance, deductCredits, logUsage } from "@/lib/credits";
+import { calculateCost, isCreditsEnabled } from "@/lib/pricing";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -16,13 +18,23 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  let userId: string;
   try {
-    await requireAuth();
+    const auth = await requireAuth();
+    userId = auth.userId;
   } catch (e) {
     if (e instanceof AuthError) {
       return NextResponse.json({ error: e.message }, { status: e.status });
     }
     return NextResponse.json({ error: "Auth failed" }, { status: 500 });
+  }
+
+  // Credit check
+  if (isCreditsEnabled()) {
+    const balance = await getBalance(userId);
+    if (balance.balanceCents <= 0) {
+      return NextResponse.json({ error: "Insufficient credits. Please top up to continue generating." }, { status: 402 });
+    }
   }
 
   const ai = new GoogleGenAI({ apiKey });
@@ -95,6 +107,13 @@ export async function POST(request: NextRequest) {
     const imagePart = parts?.find((p) => p.inlineData);
 
     if (imagePart?.inlineData?.data) {
+      // Log image generation usage
+      if (isCreditsEnabled()) {
+        const cost = calculateCost("gemini", 0, 0);
+        await logUsage(userId, "/api/generate-image", "gemini-3-pro-image-preview", 0, 0, cost);
+        await deductCredits(userId, cost);
+      }
+
       return NextResponse.json({
         imageBase64: imagePart.inlineData.data,
         mimeType: imagePart.inlineData.mimeType || "image/png",

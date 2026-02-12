@@ -123,6 +123,64 @@ CREATE TABLE content_presets (
 -- ALTER TABLE images ADD CONSTRAINT images_user_company_sc_key_unique
 --   UNIQUE(user_id, company_id, saved_content_id, key);
 
+-- 10. Invites table (magic link invitations)
+CREATE TABLE invites (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  token TEXT NOT NULL UNIQUE,
+  email TEXT,
+  role TEXT NOT NULL DEFAULT 'user',
+  created_by TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at TIMESTAMPTZ NOT NULL,
+  used_at TIMESTAMPTZ,
+  used_by TEXT
+);
+
+-- 11. Onboarding responses
+CREATE TABLE onboarding_responses (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id TEXT NOT NULL UNIQUE,
+  responses JSONB NOT NULL,
+  completed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 12. User credits (balance in cents)
+CREATE TABLE user_credits (
+  user_id TEXT PRIMARY KEY,
+  balance_cents INTEGER NOT NULL DEFAULT 0,
+  total_topped_up_cents INTEGER NOT NULL DEFAULT 0,
+  total_spent_cents INTEGER NOT NULL DEFAULT 0,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 13. Usage logs (every API call tracked)
+CREATE TABLE usage_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id TEXT NOT NULL,
+  route TEXT NOT NULL,
+  model TEXT NOT NULL,
+  input_tokens INTEGER NOT NULL DEFAULT 0,
+  output_tokens INTEGER NOT NULL DEFAULT 0,
+  cost_cents INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 14. Payment history (Stripe transactions)
+CREATE TABLE payment_history (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id TEXT NOT NULL,
+  stripe_session_id TEXT UNIQUE,
+  amount_cents INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Migration: Add columns to existing tables for new features
+-- ALTER TABLE companies ADD COLUMN website TEXT;
+-- ALTER TABLE companies ADD COLUMN social_platforms TEXT[];
+-- ALTER TABLE users ADD COLUMN onboarding_completed BOOLEAN NOT NULL DEFAULT false;
+-- ALTER TABLE users ADD COLUMN email TEXT;
+
 -- Indexes for common query patterns
 CREATE INDEX idx_companies_user ON companies(user_id);
 CREATE INDEX idx_memory_files_company ON memory_files(user_id, company_id);
@@ -131,3 +189,6 @@ CREATE INDEX idx_custom_tones_company ON custom_tones(user_id, company_id);
 CREATE INDEX idx_images_company ON images(user_id, company_id);
 CREATE INDEX idx_characters_company ON characters(user_id, company_id);
 CREATE INDEX idx_content_presets_company ON content_presets(user_id, company_id);
+CREATE INDEX idx_invites_token ON invites(token);
+CREATE INDEX idx_usage_logs_user ON usage_logs(user_id, created_at DESC);
+CREATE INDEX idx_payment_history_user ON payment_history(user_id, created_at DESC);

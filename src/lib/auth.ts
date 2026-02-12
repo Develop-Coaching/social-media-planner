@@ -25,10 +25,15 @@ export function getSecret(): Uint8Array {
 export interface TokenPayload {
   userId: string;
   role: "admin" | "user";
+  onboardingCompleted?: boolean;
 }
 
-export async function createToken(userId: string, role: "admin" | "user"): Promise<string> {
-  return new SignJWT({ userId, role })
+export async function createToken(
+  userId: string,
+  role: "admin" | "user",
+  onboardingCompleted = true
+): Promise<string> {
+  return new SignJWT({ userId, role, onboardingCompleted })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(EXPIRY)
@@ -50,7 +55,11 @@ export async function getUserFromToken(token: string): Promise<TokenPayload | nu
     const userId = payload.userId as string | undefined;
     const role = payload.role as string | undefined;
     if (!userId || !role) return null;
-    return { userId, role: role as "admin" | "user" };
+    return {
+      userId,
+      role: role as "admin" | "user",
+      onboardingCompleted: payload.onboardingCompleted as boolean | undefined,
+    };
   } catch {
     return null;
   }

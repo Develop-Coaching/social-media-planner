@@ -9,6 +9,8 @@ export interface User {
   role: "admin" | "user";
   createdAt: string;
   createdBy: string | null;
+  onboardingCompleted: boolean;
+  email: string | null;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -21,13 +23,15 @@ function rowToUser(row: any): User {
     role: row.role,
     createdAt: row.created_at,
     createdBy: row.created_by,
+    onboardingCompleted: row.onboarding_completed ?? false,
+    email: row.email ?? null,
   };
 }
 
 export async function getUsers(): Promise<Omit<User, "passwordHash">[]> {
   const { data, error } = await supabase
     .from("users")
-    .select("id, username, display_name, role, created_at, created_by");
+    .select("id, username, display_name, role, created_at, created_by, onboarding_completed, email");
   if (error || !data) return [];
   return data.map((row) => ({
     id: row.id,
@@ -36,6 +40,8 @@ export async function getUsers(): Promise<Omit<User, "passwordHash">[]> {
     role: row.role,
     createdAt: row.created_at,
     createdBy: row.created_by,
+    onboardingCompleted: row.onboarding_completed ?? false,
+    email: row.email ?? null,
   }));
 }
 
@@ -87,7 +93,7 @@ export async function createUser(
 
   if (error) throw new Error(error.message);
 
-  return { id, username: username.toLowerCase(), displayName, role, createdAt, createdBy };
+  return { id, username: username.toLowerCase(), displayName, role, createdAt, createdBy, onboardingCompleted: false, email: null };
 }
 
 export async function verifyPassword(username: string, password: string): Promise<User | null> {
@@ -142,6 +148,14 @@ export async function hasAnyUsers(): Promise<boolean> {
     .select("id", { count: "exact", head: true });
   if (error) return false;
   return (count ?? 0) > 0;
+}
+
+export async function markOnboardingComplete(userId: string): Promise<boolean> {
+  const { error } = await supabase
+    .from("users")
+    .update({ onboarding_completed: true })
+    .eq("id", userId);
+  return !error;
 }
 
 export async function migrateExistingData(userId: string): Promise<number> {

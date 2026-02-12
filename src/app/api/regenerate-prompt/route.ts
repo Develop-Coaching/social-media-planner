@@ -1,12 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/auth-helpers";
 import { getAnthropicClient } from "@/lib/anthropic";
+import { getBalance, deductCredits, logUsage } from "@/lib/credits";
+import { calculateCost, isCreditsEnabled } from "@/lib/pricing";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
   try {
-    await requireAuth();
+    const { userId } = await requireAuth();
+
+    // Credit check
+    if (isCreditsEnabled()) {
+      const balance = await getBalance(userId);
+      if (balance.balanceCents <= 0) {
+        return NextResponse.json({ error: "Insufficient credits. Please top up to continue generating." }, { status: 402 });
+      }
+    }
+
     const { contentType, contentText, theme } = (await request.json()) as {
       contentType: string;
       contentText: string;
@@ -34,6 +45,13 @@ Respond with ONLY the image prompt text, nothing else. No quotes, no labels, no 
     });
 
     const text = response.content[0].type === "text" ? response.content[0].text : "";
+
+    if (isCreditsEnabled() && response.usage) {
+      const cost = calculateCost("claude-sonnet-4", response.usage.input_tokens, response.usage.output_tokens);
+      await logUsage(userId, "/api/regenerate-prompt", "claude-sonnet-4-20250514", response.usage.input_tokens, response.usage.output_tokens, cost);
+      await deductCredits(userId, cost);
+    }
+
     return NextResponse.json({ prompt: text.trim() });
   } catch (e) {
     if (e instanceof AuthError) {
