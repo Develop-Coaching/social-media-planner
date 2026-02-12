@@ -4,16 +4,19 @@
 
 :root {
   --foreground: #0f172a;
-  --background: #f8fafc;
+  --background: #f9fafb;
   --accent: #6366f1;
   --muted: #64748b;
 
-  /* Brand theme defaults (sky blue) */
-  --brand-primary: #0284c7;
-  --brand-primary-hover: #0369a1;
-  --brand-primary-light: #f0f9ff;
-  --brand-accent: #0284c7;
-  --brand-font: system-ui, -apple-system, sans-serif;
+  /* Brand theme defaults (blue) */
+  --brand-primary: #2563eb;
+  --brand-primary-hover: #1d4ed8;
+  --brand-primary-light: #eff6ff;
+  --brand-accent: #2563eb;
+  --brand-font: "Source Sans 3", system-ui, -apple-system, sans-serif;
+
+  /* Input background */
+  --input-bg: #eef2ff;
 }
 
 .dark {
@@ -23,10 +26,12 @@
   --muted: #94a3b8;
 
   /* Brand theme dark mode defaults */
-  --brand-primary: #38bdf8;
-  --brand-primary-hover: #7dd3fc;
-  --brand-primary-light: rgba(14,165,233,0.1);
-  --brand-accent: #38bdf8;
+  --brand-primary: #60a5fa;
+  --brand-primary-hover: #93c5fd;
+  --brand-primary-light: rgba(96,165,250,0.1);
+  --brand-accent: #60a5fa;
+
+  --input-bg: rgba(30,41,59,0.8);
 }
 
 body {
@@ -43,15 +48,41 @@ body {
   }
 }
 
+@layer components {
+  /* Lavender input field — pill shape for single-line, rounded-2xl for textarea */
+  .input-field {
+    @apply w-full rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:ring-2 focus:ring-brand-primary focus:outline-none transition-shadow;
+  }
+
+  .input-field-area {
+    @apply w-full rounded-2xl border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:ring-2 focus:ring-brand-primary focus:outline-none transition-shadow;
+  }
+
+  /* Primary button — pill */
+  .btn-primary {
+    @apply rounded-full bg-brand-primary text-white px-6 py-2.5 font-medium hover:bg-brand-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow-md;
+  }
+
+  /* Secondary button — outlined pill */
+  .btn-secondary {
+    @apply rounded-full bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 text-slate-700 dark:text-slate-300 px-5 py-2 text-sm font-medium hover:bg-gray-50 dark:hover:bg-slate-700 transition-all;
+  }
+
+  /* Card — soft shadow */
+  .card {
+    @apply rounded-2xl bg-white dark:bg-slate-800 shadow-sm border border-slate-100 dark:border-slate-700;
+  }
+}
+
 /* Smooth transitions for interactive elements */
-button, a, input, textarea {
+button, a, input, textarea, select {
   transition: all 0.2s ease;
 }
 
 /* Custom scrollbar */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -59,12 +90,12 @@ button, a, input, textarea {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 4px;
+  background: #d1d5db;
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: #9ca3af;
 }
 
 .dark ::-webkit-scrollbar-thumb {
@@ -95,8 +126,8 @@ button, a, input, textarea {
 }
 
 .card-hover:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 40px -10px color-mix(in srgb, var(--brand-primary) 20%, transparent);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 20px -4px color-mix(in srgb, var(--brand-primary) 15%, transparent);
 }
 
 /* Button gradient */
@@ -106,8 +137,8 @@ button, a, input, textarea {
 }
 
 .btn-gradient:hover {
-  filter: brightness(0.9);
-  box-shadow: 0 4px 20px -4px color-mix(in srgb, var(--brand-primary) 50%, transparent);
+  filter: brightness(0.95);
+  box-shadow: 0 2px 12px -2px color-mix(in srgb, var(--brand-primary) 40%, transparent);
 }
 
 /* Animate spin for loading states */
@@ -136,5 +167,5 @@ button, a, input, textarea {
 
 /* Selection color */
 ::selection {
-  background: color-mix(in srgb, var(--brand-primary) 30%, transparent);
+  background: color-mix(in srgb, var(--brand-primary) 25%, transparent);
 }

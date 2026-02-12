@@ -166,7 +166,7 @@ export default function DriveImagePickerModal({ companyId, savedContentId, targe
       onClick={onClose}
     >
       <div
-        className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 max-w-3xl w-full max-h-[85vh] flex flex-col"
+        className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-slate-100 dark:border-slate-700 max-w-3xl w-full max-h-[85vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -342,7 +342,7 @@ export default function DriveImagePickerModal({ companyId, savedContentId, targe
                   <button
                     onClick={() => fetchContent(currentFolderId, source, nextPageToken)}
                     disabled={loadingMore}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors disabled:opacity-50"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors disabled:opacity-50"
                   >
                     {loadingMore ? "Loading..." : "Load more"}
                   </button>
@@ -356,7 +356,7 @@ export default function DriveImagePickerModal({ companyId, savedContentId, targe
         <div className="flex items-center justify-end px-6 py-4 border-t border-slate-200 dark:border-slate-700">
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors text-sm"
+            className="px-4 py-2 rounded-full bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 text-slate-700 dark:text-slate-300 font-medium hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-sm"
           >
             Cancel
           </button>

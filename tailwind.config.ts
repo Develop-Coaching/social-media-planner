@@ -16,9 +16,12 @@ const config: Config = {
           "primary-light": "var(--brand-primary-light)",
           accent: "var(--brand-accent)",
         },
+        input: {
+          bg: "var(--input-bg)",
+        },
       },
       fontFamily: {
-        sans: ["var(--brand-font)", "system-ui", "sans-serif"],
+        sans: ['"Source Sans 3"', "var(--brand-font)", "system-ui", "sans-serif"],
         mono: ["var(--font-geist-mono)", "monospace"],
       },
     },

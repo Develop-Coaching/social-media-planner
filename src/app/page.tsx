@@ -1113,7 +1113,7 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-primary-light dark:from-slate-900 dark:to-brand-primary-light">
+    <main className="min-h-screen bg-gray-50 dark:bg-slate-900">
       <header className="bg-brand-primary">
         <div className={`max-w-4xl mx-auto px-6 py-6 ${headerTextLight ? "text-slate-900" : "text-white"}`}>
           <button
@@ -1170,7 +1170,7 @@ export default function Home() {
             )}
           </button>
           {showBrandSettings && (
-            <div className="mt-3 rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-lg border border-slate-200 dark:border-slate-700">
+            <div className="mt-3 rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-sm border border-slate-100 dark:border-slate-700">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Logo */}
                 <div>
@@ -1188,7 +1188,7 @@ export default function Home() {
                   ) : (
                     <p className="text-sm text-slate-500 dark:text-slate-400 mb-2">No logo uploaded</p>
                   )}
-                  <label className="mt-3 inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 text-sm text-slate-700 dark:text-slate-300 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                  <label className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-full border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-slate-700 dark:text-slate-300 cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                     </svg>
@@ -1281,7 +1281,7 @@ export default function Home() {
                         }
                       }}
                       placeholder="https://hooks.slack.com/services/..."
-                      className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-shadow"
+                      className="w-full rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none transition-shadow"
                     />
                     <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
                       Leave blank to use system defaults.
@@ -1301,7 +1301,7 @@ export default function Home() {
                         }
                       }}
                       placeholder="https://hooks.slack.com/services/..."
-                      className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-shadow"
+                      className="w-full rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none transition-shadow"
                     />
                   </div>
                   <div>
@@ -1329,7 +1329,7 @@ export default function Home() {
                               }
                             }}
                             placeholder="xoxb-..."
-                            className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-shadow font-mono"
+                            className="w-full rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none transition-shadow font-mono"
                           />
                         </div>
                         <div>
@@ -1344,7 +1344,7 @@ export default function Home() {
                               }
                             }}
                             placeholder="C01234ABCDE"
-                            className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-shadow font-mono"
+                            className="w-full rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none transition-shadow font-mono"
                           />
                         </div>
                       </div>
@@ -1429,7 +1429,7 @@ export default function Home() {
         )}
 
         {contentLoading && streamingText && (
-          <section className="mb-8 rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-lg border border-slate-200 dark:border-slate-700">
+          <section className="mb-8 rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-sm border border-slate-100 dark:border-slate-700">
             <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-200 mb-4 flex items-center gap-3">
               <svg className="animate-spin h-5 w-5 text-brand-primary" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
@@ -1437,14 +1437,14 @@ export default function Home() {
               </svg>
               Generating content... <ElapsedTimer />
             </h2>
-            <pre className="text-xs text-slate-500 dark:text-slate-400 whitespace-pre-wrap max-h-64 overflow-y-auto bg-slate-50 dark:bg-slate-900/50 rounded-xl p-4 font-mono">
+            <pre className="text-xs text-slate-500 dark:text-slate-400 whitespace-pre-wrap max-h-64 overflow-y-auto bg-slate-50 dark:bg-slate-900/50 rounded-2xl p-4 font-mono">
               {streamingText}
             </pre>
           </section>
         )}
 
         {!contentLoading && !content && streamingText && (
-          <section className="mb-8 rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-lg border border-amber-300 dark:border-amber-700">
+          <section className="mb-8 rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-sm border border-amber-200 dark:border-amber-700">
             <h2 className="text-lg font-semibold text-amber-700 dark:text-amber-400 mb-2 flex items-center gap-2">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
@@ -1471,7 +1471,7 @@ export default function Home() {
                 Dismiss
               </button>
             </div>
-            <pre className="text-xs text-slate-500 dark:text-slate-400 whitespace-pre-wrap max-h-96 overflow-y-auto bg-slate-50 dark:bg-slate-900/50 rounded-xl p-4 font-mono">
+            <pre className="text-xs text-slate-500 dark:text-slate-400 whitespace-pre-wrap max-h-96 overflow-y-auto bg-slate-50 dark:bg-slate-900/50 rounded-2xl p-4 font-mono">
               {streamingText}
             </pre>
           </section>
@@ -1483,10 +1483,10 @@ export default function Home() {
               <div className="flex items-center gap-2 mb-4">
                 <button
                   onClick={() => setViewMode("list")}
-                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all border ${
+                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all border ${
                     viewMode === "list"
-                      ? "bg-brand-primary text-white border-brand-primary shadow-md"
-                      : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600 hover:border-brand-primary"
+                      ? "bg-brand-primary text-white border-brand-primary shadow-sm"
+                      : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-gray-200 dark:border-slate-600 hover:border-brand-primary"
                   }`}
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1496,10 +1496,10 @@ export default function Home() {
                 </button>
                 <button
                   onClick={() => setViewMode("calendar")}
-                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all border ${
+                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all border ${
                     viewMode === "calendar"
-                      ? "bg-brand-primary text-white border-brand-primary shadow-md"
-                      : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600 hover:border-brand-primary"
+                      ? "bg-brand-primary text-white border-brand-primary shadow-sm"
+                      : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-gray-200 dark:border-slate-600 hover:border-brand-primary"
                   }`}
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1511,7 +1511,7 @@ export default function Home() {
 
               {viewMode === "calendar" ? (
                 <ErrorBoundary fallbackTitle="Failed to render calendar">
-                  <section className="mb-8 rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-lg border border-slate-200 dark:border-slate-700">
+                  <section className="mb-8 rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-sm border border-slate-100 dark:border-slate-700">
                     <ContentCalendar content={content} startDate={new Date()} companyName={selectedCompany.name} companyId={selectedCompany.id} savedContentId={currentSavedId} themeName={selectedTheme?.title || ""} images={images} postingDates={postingDates} onPostingDateChange={handlePostingDateChange} />
                   </section>
                 </ErrorBoundary>
@@ -1571,7 +1571,7 @@ export default function Home() {
             ?
           </button>
           {showShortcuts && (
-            <div className="absolute bottom-12 left-0 bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 p-4 w-64">
+            <div className="absolute bottom-12 left-0 bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-slate-100 dark:border-slate-700 p-4 w-64">
               <h4 className="font-semibold text-slate-800 dark:text-slate-200 text-sm mb-3">Keyboard Shortcuts</h4>
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm">

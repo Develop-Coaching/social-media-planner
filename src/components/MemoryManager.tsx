@@ -243,7 +243,7 @@ export default function MemoryManager({ companyId }: Props) {
   }, [companyId]);
 
   return (
-    <section className="mb-8 rounded-2xl bg-white dark:bg-slate-800 shadow-lg border border-slate-200 dark:border-slate-700">
+    <section className="mb-8 rounded-2xl bg-white dark:bg-slate-800 shadow-sm border border-slate-100 dark:border-slate-700">
       <button
         type="button"
         onClick={() => setIsExpanded((v) => !v)}
@@ -283,7 +283,7 @@ export default function MemoryManager({ companyId }: Props) {
           className={`relative mb-3 rounded-xl border-2 border-dashed p-6 text-center transition-all ${
             isDragOver
               ? "border-brand-primary bg-brand-primary-light"
-              : "border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/30 hover:border-slate-400 dark:hover:border-slate-500"
+              : "border-indigo-200 dark:border-slate-600 bg-indigo-50/30 dark:bg-slate-800/50 hover:border-slate-400 dark:hover:border-slate-500"
           }`}
         >
           {isDragOver && (
@@ -343,19 +343,19 @@ export default function MemoryManager({ companyId }: Props) {
           placeholder="Name (e.g. Brand guidelines)"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-3 text-slate-900 dark:text-slate-100 mb-3 focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-shadow"
+          className="w-full rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-3 text-slate-900 dark:text-slate-100 mb-3 focus:ring-2 focus:ring-brand-primary focus:outline-none transition-shadow"
         />
         <textarea
           placeholder="Paste your context here..."
           value={content}
           onChange={(e) => setContent(e.target.value)}
           rows={4}
-          className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-3 text-slate-900 dark:text-slate-100 resize-y focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-shadow"
+          className="w-full rounded-2xl border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-3 text-slate-900 dark:text-slate-100 resize-y focus:ring-2 focus:ring-brand-primary focus:outline-none transition-shadow"
         />
         <button
           onClick={handleSave}
           disabled={saving || !name.trim() || !content.trim()}
-          className="mt-3 rounded-xl bg-brand-primary text-white px-6 py-3 font-medium hover:bg-brand-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg"
+          className="mt-3 rounded-full bg-brand-primary text-white px-6 py-3 font-medium hover:bg-brand-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow-lg"
         >
           {saving ? "Saving..." : "Save to memory"}
         </button>

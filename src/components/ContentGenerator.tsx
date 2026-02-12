@@ -110,7 +110,7 @@ export default function ContentGenerator({ selectedTheme, counts, onCountsChange
   }
 
   return (
-    <section className="mb-8 rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-lg border border-slate-200 dark:border-slate-700">
+    <section className="mb-8 rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-sm border border-slate-100 dark:border-slate-700">
       <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-200 mb-2 flex items-center gap-3">
         <span className="flex items-center justify-center w-8 h-8 rounded-lg bg-brand-primary-light text-brand-primary text-sm font-bold">3</span>
         How much content?
@@ -180,13 +180,13 @@ export default function ContentGenerator({ selectedTheme, counts, onCountsChange
                 value={presetName}
                 onChange={(e) => setPresetName(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") handleSavePreset(); }}
-                className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-1.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent w-48"
+                className="rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-3 py-1.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-indigo-500 focus:outline-none w-48"
                 autoFocus
               />
               <button
                 onClick={handleSavePreset}
                 disabled={!presetName.trim()}
-                className="rounded-lg bg-indigo-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="rounded-full bg-indigo-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 Save
               </button>
@@ -212,7 +212,7 @@ export default function ContentGenerator({ selectedTheme, counts, onCountsChange
                 max={20}
                 value={counts[key]}
                 onChange={(e) => onCountsChange({ ...counts, [key]: Math.max(0, parseInt(e.target.value, 10) || 0) })}
-                className="rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-3 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-shadow"
+                className="rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-3 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none transition-shadow"
               />
             </label>
           ))}
@@ -225,10 +225,10 @@ export default function ContentGenerator({ selectedTheme, counts, onCountsChange
               <button
                 key={tone.id}
                 onClick={() => onToneChange(tone)}
-                className={`px-3 py-2 rounded-xl text-sm font-medium transition-all border ${
+                className={`px-3 py-2 rounded-full text-sm font-medium transition-all border ${
                   selectedTone.id === tone.id
-                    ? "bg-brand-primary text-white border-brand-primary shadow-md"
-                    : "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600 hover:border-brand-primary"
+                    ? "bg-brand-primary text-white border-brand-primary shadow-sm"
+                    : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-gray-200 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700 hover:border-brand-primary"
                 }`}
                 title={tone.description}
               >
@@ -240,9 +240,9 @@ export default function ContentGenerator({ selectedTheme, counts, onCountsChange
               <button
                 key={tone.id}
                 onClick={() => onToneChange(tone)}
-                className={`group relative px-3 py-2 rounded-xl text-sm font-medium transition-all border ${
+                className={`group relative px-3 py-2 rounded-full text-sm font-medium transition-all border ${
                   selectedTone.id === tone.id
-                    ? "bg-teal-600 text-white border-teal-600 shadow-md"
+                    ? "bg-teal-600 text-white border-teal-600 shadow-sm"
                     : "bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 border-teal-300 dark:border-teal-600 hover:border-teal-400 dark:hover:border-teal-500"
                 }`}
                 title={tone.description}
@@ -262,7 +262,7 @@ export default function ContentGenerator({ selectedTheme, counts, onCountsChange
 
             <button
               onClick={() => setShowCustomForm(!showCustomForm)}
-              className={`px-3 py-2 rounded-xl text-sm font-medium transition-all border border-dashed ${
+              className={`px-3 py-2 rounded-full text-sm font-medium transition-all border border-dashed ${
                 showCustomForm
                   ? "bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 border-teal-400"
                   : "text-slate-500 dark:text-slate-400 border-slate-300 dark:border-slate-600 hover:border-teal-400 hover:text-teal-600 dark:hover:text-teal-400"
@@ -281,10 +281,10 @@ export default function ContentGenerator({ selectedTheme, counts, onCountsChange
               <button
                 key={lang.id}
                 onClick={() => onLanguageChange(lang)}
-                className={`px-3 py-2 rounded-xl text-sm font-medium transition-all border ${
+                className={`px-3 py-2 rounded-full text-sm font-medium transition-all border ${
                   selectedLanguage.id === lang.id
-                    ? "bg-brand-primary text-white border-brand-primary shadow-md"
-                    : "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600 hover:border-brand-primary"
+                    ? "bg-brand-primary text-white border-brand-primary shadow-sm"
+                    : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-gray-200 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700 hover:border-brand-primary"
                 }`}
               >
                 {lang.label}
@@ -298,7 +298,7 @@ export default function ContentGenerator({ selectedTheme, counts, onCountsChange
             <div className="flex gap-2 mb-3">
               <button
                 onClick={() => setCustomTab("paste")}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
                   customTab === "paste"
                     ? "bg-teal-600 text-white shadow-sm"
                     : "text-teal-600 dark:text-teal-400 hover:bg-teal-100 dark:hover:bg-teal-900/40"
@@ -308,7 +308,7 @@ export default function ContentGenerator({ selectedTheme, counts, onCountsChange
               </button>
               <button
                 onClick={() => setCustomTab("gdoc")}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
                   customTab === "gdoc"
                     ? "bg-teal-600 text-white shadow-sm"
                     : "text-teal-600 dark:text-teal-400 hover:bg-teal-100 dark:hover:bg-teal-900/40"
@@ -325,19 +325,19 @@ export default function ContentGenerator({ selectedTheme, counts, onCountsChange
                   placeholder="Tone name (e.g. Our Brand Voice)"
                   value={customName}
                   onChange={(e) => setCustomName(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                  className="w-full rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-teal-500 focus:outline-none"
                 />
                 <textarea
                   placeholder="Describe the brand voice, style guide, or tone instructions..."
                   value={customPrompt}
                   onChange={(e) => setCustomPrompt(e.target.value)}
                   rows={4}
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-teal-500 focus:border-transparent resize-y"
+                  className="w-full rounded-2xl border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-teal-500 focus:outline-none resize-y"
                 />
                 <button
                   onClick={handleSaveCustomTone}
                   disabled={!customName.trim() || !customPrompt.trim()}
-                  className="rounded-xl bg-teal-600 text-white px-4 py-2 text-sm font-medium hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="rounded-full bg-teal-600 text-white px-4 py-2 text-sm font-medium hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   Save tone
                 </button>
@@ -349,14 +349,14 @@ export default function ContentGenerator({ selectedTheme, counts, onCountsChange
                   placeholder="Tone name (e.g. Brand Style Guide)"
                   value={gdocName}
                   onChange={(e) => setGdocName(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                  className="w-full rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-teal-500 focus:outline-none"
                 />
                 <input
                   type="url"
                   placeholder="https://docs.google.com/document/d/..."
                   value={gdocUrl}
                   onChange={(e) => setGdocUrl(e.target.value)}
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                  className="w-full rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-teal-500 focus:outline-none"
                 />
                 <p className="text-xs text-slate-500 dark:text-slate-400">
                   The document must be set to &quot;Anyone with the link can view&quot;
@@ -364,7 +364,7 @@ export default function ContentGenerator({ selectedTheme, counts, onCountsChange
                 <button
                   onClick={handleImportGdoc}
                   disabled={!gdocName.trim() || !gdocUrl.trim() || importingGdoc}
-                  className="rounded-xl bg-teal-600 text-white px-4 py-2 text-sm font-medium hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="rounded-full bg-teal-600 text-white px-4 py-2 text-sm font-medium hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   {importingGdoc ? "Importing..." : "Import & save tone"}
                 </button>
@@ -376,7 +376,7 @@ export default function ContentGenerator({ selectedTheme, counts, onCountsChange
         <button
           onClick={onGenerate}
           disabled={loading}
-          className="rounded-xl bg-brand-primary text-white px-6 py-3 font-medium hover:bg-brand-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg"
+          className="rounded-full bg-brand-primary text-white px-6 py-3 font-medium hover:bg-brand-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow-lg"
         >
           {loading ? (
             <span className="inline-flex items-center gap-2">

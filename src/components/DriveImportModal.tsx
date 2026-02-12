@@ -190,7 +190,7 @@ export default function DriveImportModal({ companyName, companyId, savedContentI
       onClick={onClose}
     >
       <div
-        className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 max-w-3xl w-full max-h-[85vh] flex flex-col"
+        className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-slate-100 dark:border-slate-700 max-w-3xl w-full max-h-[85vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -241,7 +241,7 @@ export default function DriveImportModal({ companyName, companyId, savedContentI
               <select
                 value={selectedFolder || ""}
                 onChange={(e) => handleFolderChange(e.target.value || null)}
-                className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-1.5 text-sm text-slate-900 dark:text-slate-100"
+                className="rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-3 py-1.5 text-sm text-slate-900 dark:text-slate-100 focus:outline-none"
               >
                 <option value="">{companyName} (root)</option>
                 {folders.map((f) => (
@@ -320,7 +320,7 @@ export default function DriveImportModal({ companyName, companyId, savedContentI
                               updateAssignment(file.id, e.target.value);
                             }}
                             onClick={(e) => e.stopPropagation()}
-                            className="mt-1.5 w-full rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-2 py-1 text-xs text-slate-900 dark:text-slate-100"
+                            className="mt-1.5 w-full rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-2 py-1 text-xs text-slate-900 dark:text-slate-100 focus:outline-none"
                           >
                             <option value="">-- Assign to --</option>
                             {contentKeys.map((k) => (
@@ -351,7 +351,7 @@ export default function DriveImportModal({ companyName, companyId, savedContentI
                   <button
                     onClick={() => fetchFiles(selectedFolder, nextPageToken)}
                     disabled={loadingMore}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors disabled:opacity-50"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors disabled:opacity-50"
                   >
                     {loadingMore ? (
                       <>
@@ -376,14 +376,14 @@ export default function DriveImportModal({ companyName, companyId, savedContentI
           <div className="flex items-center gap-3">
             <button
               onClick={onClose}
-              className="px-4 py-2 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors text-sm"
+              className="px-4 py-2 rounded-full bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 text-slate-700 dark:text-slate-300 font-medium hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-sm"
             >
               Cancel
             </button>
             <button
               onClick={handleImport}
               disabled={importing || selectedCount === 0}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-brand-primary text-white font-medium hover:bg-brand-primary-hover disabled:opacity-50 transition-colors text-sm"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-brand-primary text-white font-medium hover:bg-brand-primary-hover disabled:opacity-50 transition-colors text-sm"
             >
               {importing ? (
                 <>

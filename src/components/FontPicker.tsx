@@ -110,12 +110,12 @@ export default function FontPicker({ value, onChange }: Props) {
             onFocus={() => setOpen(true)}
             onBlur={handleBlur}
             placeholder="Search Google Fonts..."
-            className="flex-1 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-shadow"
+            className="flex-1 rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none transition-shadow"
           />
           {hasChanges && (
             <button
               onClick={handleApply}
-              className="px-4 py-2 rounded-xl text-sm font-medium bg-brand-primary text-white hover:bg-brand-primary-hover transition-colors shadow-sm"
+              className="px-4 py-2 rounded-full text-sm font-medium bg-brand-primary text-white hover:bg-brand-primary-hover transition-colors shadow-sm"
             >
               Apply
             </button>
@@ -123,7 +123,7 @@ export default function FontPicker({ value, onChange }: Props) {
           {value && (
             <button
               onClick={handleClear}
-              className="px-3 py-2 rounded-xl text-sm text-slate-500 dark:text-slate-400 hover:text-red-500 dark:hover:text-red-400 border border-slate-300 dark:border-slate-600 hover:border-red-300 dark:hover:border-red-500 transition-colors"
+              className="px-3 py-2 rounded-full text-sm text-slate-500 dark:text-slate-400 hover:text-red-500 dark:hover:text-red-400 border border-gray-200 dark:border-slate-600 hover:border-red-300 dark:hover:border-red-500 transition-colors"
               title="Reset to default font"
             >
               Clear
@@ -132,7 +132,7 @@ export default function FontPicker({ value, onChange }: Props) {
         </div>
 
         {open && filtered.length > 0 && (
-          <div className="absolute z-20 mt-1 w-full max-h-48 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-xl">
+          <div className="absolute z-20 mt-1 w-full max-h-48 overflow-y-auto rounded-xl border border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-xl">
             {filtered.map((font) => (
               <button
                 key={font}

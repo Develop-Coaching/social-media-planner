@@ -55,7 +55,7 @@ export function buildBrandCssVars(
   brandColors?: string[],
   fontFamily?: string
 ): { light: Record<string, string>; dark: Record<string, string> } {
-  const primary = brandColors?.[0] || "#0284c7";
+  const primary = brandColors?.[0] || "#2563eb";
   const accent = brandColors?.[1] || primary;
 
   const light: Record<string, string> = {

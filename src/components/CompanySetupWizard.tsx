@@ -100,7 +100,7 @@ export default function CompanySetupWizard({ onComplete, onCancel }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg w-full max-w-lg max-h-[90vh] overflow-y-auto">
         {/* Step indicator */}
         <div className="flex items-center justify-center gap-2 pt-6 pb-2">
           {STEPS.map((label, i) => (
@@ -151,7 +151,7 @@ export default function CompanySetupWizard({ onComplete, onCancel }: Props) {
                 onKeyDown={(e) => { if (e.key === "Enter" && canNext) setStep(1); }}
                 placeholder="e.g. Acme Corp"
                 autoFocus
-                className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-3 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-shadow text-lg"
+                className="w-full rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-3 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none transition-shadow text-lg"
               />
             </div>
           )}
@@ -176,7 +176,7 @@ export default function CompanySetupWizard({ onComplete, onCancel }: Props) {
                     value={slackWebhookUrl}
                     onChange={(e) => setSlackWebhookUrl(e.target.value)}
                     placeholder="https://hooks.slack.com/services/..."
-                    className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-shadow"
+                    className="w-full rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none transition-shadow"
                   />
                   <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
                     Receives the weekly content schedule when you click &ldquo;Send to Slack&rdquo;.
@@ -192,7 +192,7 @@ export default function CompanySetupWizard({ onComplete, onCancel }: Props) {
                     value={slackEditorWebhookUrl}
                     onChange={(e) => setSlackEditorWebhookUrl(e.target.value)}
                     placeholder="https://hooks.slack.com/services/..."
-                    className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-shadow"
+                    className="w-full rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none transition-shadow"
                   />
                   <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
                     Receives reel scripts when you click &ldquo;Send to Editor&rdquo;.
@@ -221,7 +221,7 @@ export default function CompanySetupWizard({ onComplete, onCancel }: Props) {
                           value={slackBotToken}
                           onChange={(e) => setSlackBotToken(e.target.value)}
                           placeholder="xoxb-..."
-                          className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-shadow font-mono"
+                          className="w-full rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none transition-shadow font-mono"
                         />
                         <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
                           Required for uploading images to Slack. Create a Slack app with <code className="bg-slate-100 dark:bg-slate-700 px-1 rounded">files:write</code> and <code className="bg-slate-100 dark:bg-slate-700 px-1 rounded">chat:write</code> scopes.
@@ -236,7 +236,7 @@ export default function CompanySetupWizard({ onComplete, onCancel }: Props) {
                           value={slackChannelId}
                           onChange={(e) => setSlackChannelId(e.target.value)}
                           placeholder="C01234ABCDE"
-                          className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-shadow font-mono"
+                          className="w-full rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none transition-shadow font-mono"
                         />
                         <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
                           Right-click a channel in Slack &rarr; &ldquo;View channel details&rdquo; &rarr; copy the Channel ID at the bottom.
@@ -443,14 +443,14 @@ export default function CompanySetupWizard({ onComplete, onCancel }: Props) {
               {step === 0 ? (
                 <button
                   onClick={onCancel}
-                  className="px-4 py-2.5 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
+                  className="px-4 py-2.5 rounded-full text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
                 >
                   Cancel
                 </button>
               ) : (
                 <button
                   onClick={() => setStep(step - 1)}
-                  className="px-4 py-2.5 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
+                  className="px-4 py-2.5 rounded-full text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
                 >
                   Back
                 </button>
@@ -460,7 +460,7 @@ export default function CompanySetupWizard({ onComplete, onCancel }: Props) {
               {step > 0 && step < 3 && (
                 <button
                   onClick={() => setStep(step + 1)}
-                  className="px-4 py-2.5 rounded-xl text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
+                  className="px-4 py-2.5 rounded-full text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
                 >
                   Skip
                 </button>
@@ -469,7 +469,7 @@ export default function CompanySetupWizard({ onComplete, onCancel }: Props) {
                 <button
                   onClick={() => setStep(step + 1)}
                   disabled={!canNext}
-                  className="px-6 py-2.5 rounded-xl bg-brand-primary text-white text-sm font-medium hover:bg-brand-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl"
+                  className="px-6 py-2.5 rounded-full bg-brand-primary text-white text-sm font-medium hover:bg-brand-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow-md"
                 >
                   Next
                 </button>
@@ -477,7 +477,7 @@ export default function CompanySetupWizard({ onComplete, onCancel }: Props) {
                 <button
                   onClick={handleCreate}
                   disabled={creating}
-                  className="px-6 py-2.5 rounded-xl bg-brand-primary text-white text-sm font-medium hover:bg-brand-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl"
+                  className="px-6 py-2.5 rounded-full bg-brand-primary text-white text-sm font-medium hover:bg-brand-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow-md"
                 >
                   {creating ? "Creating..." : "Create Company"}
                 </button>

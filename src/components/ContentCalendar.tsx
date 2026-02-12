@@ -293,7 +293,7 @@ function DownloadButton({ src, filename }: { src: string; filename: string }) {
   return (
     <button
       onClick={() => downloadDataUrl(src, filename)}
-      className="mt-1.5 inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+      className="mt-1.5 inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-full border border-gray-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
       title="Download image"
     >
       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -356,7 +356,7 @@ function DetailModal({ item, images, onClose }: { item: CalendarItem; images: Re
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+            className="p-1.5 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -414,10 +414,10 @@ function DetailModal({ item, images, onClose }: { item: CalendarItem; images: Re
                 <h4 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Carousel Caption</h4>
                 <button
                   onClick={handleCopyCaption}
-                  className={`inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium rounded-md border transition-colors ${
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium rounded-full border transition-colors ${
                     captionCopied
                       ? "border-green-300 dark:border-green-600 text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/30"
-                      : "border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700"
+                      : "border-gray-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700"
                   }`}
                 >
                   {captionCopied ? (
@@ -451,7 +451,7 @@ function DetailModal({ item, images, onClose }: { item: CalendarItem; images: Re
                 const slideKey = `carousel-${item.carouselIndex}-slide-${j}`;
                 const slideImg = images[slideKey];
                 return (
-                  <div key={j} className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700">
+                  <div key={j} className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700">
                     <span className="font-semibold text-slate-800 dark:text-slate-200 text-sm">{j + 1}. {slide.title}</span>
                     <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{slide.body}</p>
                     {slideImg && (
@@ -653,7 +653,7 @@ export default function ContentCalendar({ content, startDate, companyName, compa
       <div className="flex items-center justify-between mb-4">
         <button
           onClick={() => setWeekOffset((o) => o - 1)}
-          className="p-2 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+          className="p-2 rounded-full text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -669,7 +669,7 @@ export default function ContentCalendar({ content, startDate, companyName, compa
           <button
             onClick={handleSendToSlack}
             disabled={totalItems === 0 || slackSending}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-purple-200 dark:border-purple-700 text-purple-600 dark:text-purple-300 bg-white dark:bg-slate-800 hover:bg-purple-50 dark:hover:bg-purple-900/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full border border-purple-200 dark:border-purple-700 text-purple-600 dark:text-purple-300 bg-white dark:bg-slate-800 hover:bg-purple-50 dark:hover:bg-purple-900/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             title="Send schedule to Slack"
           >
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
@@ -680,7 +680,7 @@ export default function ContentCalendar({ content, startDate, companyName, compa
           <button
             onClick={handleExportICS}
             disabled={totalItems === 0}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full border border-gray-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             title="Export to Calendar (.ics)"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -695,7 +695,7 @@ export default function ContentCalendar({ content, startDate, companyName, compa
           </button>
           <button
             onClick={() => setWeekOffset((o) => o + 1)}
-            className="p-2 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+            className="p-2 rounded-full text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -707,7 +707,7 @@ export default function ContentCalendar({ content, startDate, companyName, compa
       {/* Status feedback */}
       {slackStatus && (
         <div
-          className={`mb-3 px-4 py-2 rounded-lg text-sm font-medium ${
+          className={`mb-3 px-4 py-2 rounded-full text-sm font-medium ${
             slackStatus.type === "success"
               ? "bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800"
               : "bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800"
@@ -722,7 +722,7 @@ export default function ContentCalendar({ content, startDate, companyName, compa
         {DAY_NAMES.slice(0, 5).map((name, i) => (
           <div
             key={name}
-            className="text-center text-sm font-semibold py-2.5 rounded-lg text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-900/30"
+            className="text-center text-sm font-semibold py-2.5 rounded-full text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-900/30"
           >
             <div>{name}</div>
             <div className="text-xs font-normal text-slate-400 dark:text-slate-500 mt-0.5">{formatDate(weekDays[i])}</div>
@@ -739,7 +739,7 @@ export default function ContentCalendar({ content, startDate, companyName, compa
             className={`min-h-[160px] rounded-xl border p-2.5 transition-colors ${
               dragOverDay === dayIndex
                 ? "bg-brand-primary-light border-brand-primary ring-2 ring-brand-primary/20"
-                : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700"
+                : "bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700"
             }`}
           >
             {dayItems.length === 0 && (
@@ -756,7 +756,7 @@ export default function ContentCalendar({ content, startDate, companyName, compa
                   onDragStart={(e) => handleDragStart(e, dayIndex, item.id)}
                   onDragEnd={handleDragEnd}
                   onClick={() => setModalItem(item)}
-                  className={`w-full text-left mb-2 last:mb-0 rounded-lg border p-2.5 transition-all hover:shadow-md hover:scale-[1.02] cursor-pointer active:cursor-grabbing ${item.color}`}
+                  className={`w-full text-left mb-2 last:mb-0 rounded-xl border p-2.5 transition-all hover:shadow-md hover:scale-[1.02] cursor-pointer active:cursor-grabbing ${item.color}`}
                   role="button"
                   tabIndex={0}
                   onKeyDown={(e) => {
@@ -798,7 +798,7 @@ export default function ContentCalendar({ content, startDate, companyName, compa
       {/* Legend */}
       <div className="flex flex-wrap gap-3 mt-4 justify-center">
         {Object.entries(TYPE_COLORS).map(([type, color]) => (
-          <div key={type} className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-md border ${color}`}>
+          <div key={type} className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full border ${color}`}>
             {type}
           </div>
         ))}

@@ -41,7 +41,7 @@ export default function CompanySelector({ onSelect }: Props) {
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-primary-light dark:from-slate-900 dark:to-brand-primary-light">
+    <main className="min-h-screen bg-gray-50 dark:bg-slate-900">
       <div className="absolute top-4 right-4 flex items-center gap-1">
         <ThemeToggle variant="page" />
         <LogoutButton variant="page" />
@@ -69,11 +69,11 @@ export default function CompanySelector({ onSelect }: Props) {
               <button
                 key={company.id}
                 onClick={() => onSelect(company)}
-                className="group relative overflow-hidden rounded-2xl bg-white dark:bg-slate-800 p-8 shadow-lg hover:shadow-xl transition-all duration-300 border border-slate-200 dark:border-slate-700 hover:border-brand-primary"
+                className="group relative overflow-hidden rounded-2xl bg-white dark:bg-slate-800 p-8 shadow-sm hover:shadow-md transition-all duration-300 border border-slate-100 dark:border-slate-700 hover:border-brand-primary"
               >
                 <div className="absolute inset-0 bg-brand-primary/5 opacity-0 group-hover:opacity-100 transition-opacity" />
                 <div className="relative">
-                  <div className="w-14 h-14 rounded-xl bg-brand-primary flex items-center justify-center mb-4 shadow-lg">
+                  <div className="w-14 h-14 rounded-xl bg-brand-primary flex items-center justify-center mb-4 shadow-sm">
                     <span className="text-white font-bold text-xl">
                       {company.name.charAt(0)}
                     </span>

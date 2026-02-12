@@ -90,14 +90,14 @@ export default function LoginPage() {
 
   if (mode === "loading") {
     return (
-      <main className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-primary-light dark:from-slate-900 dark:to-brand-primary-light flex items-center justify-center px-6">
+      <main className="min-h-screen bg-gray-50 dark:bg-slate-900 flex items-center justify-center px-6">
         <div className="animate-spin h-8 w-8 border-4 border-brand-primary border-t-transparent rounded-full" />
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-primary-light dark:from-slate-900 dark:to-brand-primary-light flex items-center justify-center px-6">
+    <main className="min-h-screen bg-gray-50 dark:bg-slate-900 flex items-center justify-center px-6">
       <div className="absolute top-4 right-4">
         <ThemeToggle variant="page" />
       </div>
@@ -119,7 +119,7 @@ export default function LoginPage() {
         </div>
 
         {mode === "setup" ? (
-          <form onSubmit={handleSetup} className="rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-lg border border-slate-200 dark:border-slate-700">
+          <form onSubmit={handleSetup} className="rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-sm border border-slate-100 dark:border-slate-700">
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
               Setup Key
             </label>
@@ -129,7 +129,7 @@ export default function LoginPage() {
               onChange={(e) => setSetupKey(e.target.value)}
               placeholder="Enter ADMIN_PASSWORD from env"
               autoFocus
-              className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-3 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:border-transparent mb-4"
+              className="w-full rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-3 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none mb-4"
             />
 
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
@@ -140,7 +140,7 @@ export default function LoginPage() {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               placeholder="Choose a username"
-              className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-3 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:border-transparent mb-4"
+              className="w-full rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-3 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none mb-4"
             />
 
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
@@ -151,7 +151,7 @@ export default function LoginPage() {
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               placeholder="Your name (shown in app)"
-              className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-3 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:border-transparent mb-4"
+              className="w-full rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-3 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none mb-4"
             />
 
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
@@ -162,7 +162,7 @@ export default function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Choose a password"
-              className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-3 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:border-transparent mb-4"
+              className="w-full rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-3 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none mb-4"
             />
 
             {error && (
@@ -177,7 +177,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading || !setupKey.trim() || !username.trim() || !displayName.trim() || !password.trim()}
-              className="w-full rounded-xl bg-brand-primary text-white px-6 py-3 font-medium hover:bg-brand-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg"
+              className="w-full rounded-full bg-brand-primary text-white px-6 py-3 font-medium hover:bg-brand-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow-md"
             >
               {loading ? "Creating account..." : "Create Admin Account"}
             </button>
@@ -187,7 +187,7 @@ export default function LoginPage() {
             </p>
           </form>
         ) : (
-          <form onSubmit={handleLogin} className="rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-lg border border-slate-200 dark:border-slate-700">
+          <form onSubmit={handleLogin} className="rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-sm border border-slate-100 dark:border-slate-700">
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
               Username
             </label>
@@ -197,7 +197,7 @@ export default function LoginPage() {
               onChange={(e) => setUsername(e.target.value)}
               placeholder="Enter username"
               autoFocus
-              className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-3 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:border-transparent mb-4"
+              className="w-full rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-3 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none mb-4"
             />
 
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
@@ -208,7 +208,7 @@ export default function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Enter password"
-              className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-3 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:border-transparent mb-4"
+              className="w-full rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-3 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none mb-4"
             />
 
             {error && (
@@ -223,7 +223,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading || !username.trim() || !password.trim()}
-              className="w-full rounded-xl bg-brand-primary text-white px-6 py-3 font-medium hover:bg-brand-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg"
+              className="w-full rounded-full bg-brand-primary text-white px-6 py-3 font-medium hover:bg-brand-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow-md"
             >
               {loading ? "Signing in..." : "Sign in"}
             </button>

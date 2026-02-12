@@ -107,14 +107,14 @@ export default function AdminPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-primary-light dark:from-slate-900 dark:to-brand-primary-light flex items-center justify-center">
+      <main className="min-h-screen bg-gray-50 dark:bg-slate-900 flex items-center justify-center">
         <div className="animate-spin h-8 w-8 border-4 border-brand-primary border-t-transparent rounded-full" />
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-50 to-brand-primary-light dark:from-slate-900 dark:to-brand-primary-light">
+    <main className="min-h-screen bg-gray-50 dark:bg-slate-900">
       <header className="bg-brand-primary text-white">
         <div className="max-w-4xl mx-auto px-6 py-6">
           <button
@@ -146,14 +146,14 @@ export default function AdminPage() {
           </div>
         )}
 
-        <div className="rounded-2xl bg-white dark:bg-slate-800 shadow-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+        <div className="rounded-2xl bg-white dark:bg-slate-800 shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
           <div className="flex items-center justify-between p-6 border-b border-slate-200 dark:border-slate-700">
             <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-200">
               Users ({users.length})
             </h2>
             <button
               onClick={() => setShowForm(!showForm)}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-brand-primary text-white text-sm font-medium hover:bg-brand-primary-hover transition-colors shadow-md"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-brand-primary text-white text-sm font-medium hover:bg-brand-primary-hover transition-colors shadow-sm"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -173,7 +173,7 @@ export default function AdminPage() {
                       value={newUsername}
                       onChange={(e) => setNewUsername(e.target.value)}
                       placeholder="e.g. john"
-                      className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:border-transparent text-sm"
+                      className="w-full rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-2.5 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none text-sm"
                     />
                   </div>
                   <div>
@@ -183,7 +183,7 @@ export default function AdminPage() {
                       value={newDisplayName}
                       onChange={(e) => setNewDisplayName(e.target.value)}
                       placeholder="e.g. John Smith"
-                      className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:border-transparent text-sm"
+                      className="w-full rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-2.5 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none text-sm"
                     />
                   </div>
                   <div>
@@ -193,7 +193,7 @@ export default function AdminPage() {
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
                       placeholder="Min 4 characters"
-                      className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:border-transparent text-sm"
+                      className="w-full rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-2.5 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none text-sm"
                     />
                   </div>
                   <div>
@@ -201,7 +201,7 @@ export default function AdminPage() {
                     <select
                       value={newRole}
                       onChange={(e) => setNewRole(e.target.value as "admin" | "user")}
-                      className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:border-transparent text-sm"
+                      className="w-full rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-2.5 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none text-sm"
                     >
                       <option value="user">User</option>
                       <option value="admin">Admin</option>
@@ -222,14 +222,14 @@ export default function AdminPage() {
                   <button
                     type="submit"
                     disabled={creating || !newUsername.trim() || !newDisplayName.trim() || !newPassword.trim()}
-                    className="px-5 py-2.5 rounded-xl bg-brand-primary text-white text-sm font-medium hover:bg-brand-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="px-5 py-2.5 rounded-full bg-brand-primary text-white text-sm font-medium hover:bg-brand-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     {creating ? "Creating..." : "Create User"}
                   </button>
                   <button
                     type="button"
                     onClick={() => { setShowForm(false); setFormError(""); }}
-                    className="px-5 py-2.5 rounded-xl bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-sm font-medium hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
+                    className="px-5 py-2.5 rounded-full bg-white dark:bg-slate-700 border border-gray-200 dark:border-slate-600 text-slate-700 dark:text-slate-300 text-sm font-medium hover:bg-gray-50 dark:hover:bg-slate-600 transition-colors"
                   >
                     Cancel
                   </button>

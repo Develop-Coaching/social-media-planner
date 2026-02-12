@@ -45,7 +45,7 @@ export function SkeletonCircle({ size = "w-10 h-10", className = "" }: { size?: 
 
 export function SkeletonCard({ className = "" }: { className?: string }) {
   return (
-    <div className={`rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-lg border border-slate-200 dark:border-slate-700 ${className}`}>
+    <div className={`rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-sm border border-slate-100 dark:border-slate-700 ${className}`}>
       <div className="flex items-center gap-3 mb-4">
         <SkeletonCircle size="w-8 h-8" />
         <SkeletonLine width="w-40" />
@@ -95,7 +95,7 @@ export function SkeletonSavedItem() {
 
 export function SkeletonGenerating() {
   return (
-    <section className="mb-8 rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-lg border border-slate-200 dark:border-slate-700">
+    <section className="mb-8 rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-sm border border-slate-100 dark:border-slate-700">
       <div className="flex items-center gap-3 mb-4">
         <SkeletonCircle size="w-8 h-8" />
         <SkeletonLine width="w-48" className="h-6" />

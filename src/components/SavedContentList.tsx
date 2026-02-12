@@ -109,7 +109,7 @@ export default function SavedContentList({ items, currentSavedId, onLoad, onDele
   if (items.length === 0) return null;
 
   return (
-    <section className="mb-8 rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-lg border border-slate-200 dark:border-slate-700">
+    <section className="mb-8 rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-sm border border-slate-100 dark:border-slate-700">
       <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-200 mb-4 flex items-center gap-3">
         <svg className="w-6 h-6 text-brand-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
@@ -127,7 +127,7 @@ export default function SavedContentList({ items, currentSavedId, onLoad, onDele
           placeholder="Search saved content..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 pl-10 pr-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-shadow"
+          className="w-full rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 pl-10 pr-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:ring-2 focus:ring-brand-primary focus:outline-none transition-shadow"
         />
       </div>
 
@@ -148,7 +148,7 @@ export default function SavedContentList({ items, currentSavedId, onLoad, onDele
           {selectedIds.size > 0 && (
             <button
               onClick={() => setShowDeleteConfirm(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 text-sm font-medium hover:bg-red-200 dark:hover:bg-red-900 transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 text-sm font-medium hover:bg-red-200 dark:hover:bg-red-900 transition-colors"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -169,13 +169,13 @@ export default function SavedContentList({ items, currentSavedId, onLoad, onDele
             <button
               onClick={handleBulkDelete}
               disabled={bulkDeleting}
-              className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50 transition-colors"
+              className="px-4 py-2 rounded-full bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50 transition-colors"
             >
               {bulkDeleting ? "Deleting..." : "Yes, delete"}
             </button>
             <button
               onClick={() => setShowDeleteConfirm(false)}
-              className="px-4 py-2 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-sm font-medium border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors"
+              className="px-4 py-2 rounded-full bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-medium border border-gray-200 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
             >
               Cancel
             </button>
@@ -219,7 +219,7 @@ export default function SavedContentList({ items, currentSavedId, onLoad, onDele
             <div className="flex items-center gap-2 ml-4">
               <button
                 onClick={() => onLoad(item)}
-                className="px-3 py-1.5 rounded-lg bg-brand-primary-light text-brand-primary text-sm font-medium hover:bg-brand-primary-hover transition-colors"
+                className="px-3 py-1.5 rounded-full bg-brand-primary-light text-brand-primary text-sm font-medium hover:bg-brand-primary-hover transition-colors"
               >
                 Load
               </button>
@@ -227,7 +227,7 @@ export default function SavedContentList({ items, currentSavedId, onLoad, onDele
                 <button
                   onClick={() => handleComplete(item.id)}
                   disabled={completingId === item.id}
-                  className="px-3 py-1.5 rounded-lg bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300 text-sm font-medium hover:bg-green-200 dark:hover:bg-green-900 disabled:opacity-50 transition-colors"
+                  className="px-3 py-1.5 rounded-full bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300 text-sm font-medium hover:bg-green-200 dark:hover:bg-green-900 disabled:opacity-50 transition-colors"
                 >
                   {completingId === item.id ? "..." : "Done"}
                 </button>
@@ -235,7 +235,7 @@ export default function SavedContentList({ items, currentSavedId, onLoad, onDele
               <button
                 onClick={() => handleDelete(item.id)}
                 disabled={deletingId === item.id}
-                className="px-3 py-1.5 rounded-lg bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 text-sm font-medium hover:bg-red-200 dark:hover:bg-red-900 disabled:opacity-50 transition-colors"
+                className="px-3 py-1.5 rounded-full bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 text-sm font-medium hover:bg-red-200 dark:hover:bg-red-900 disabled:opacity-50 transition-colors"
               >
                 {deletingId === item.id ? "..." : "Delete"}
               </button>
@@ -285,14 +285,14 @@ export default function SavedContentList({ items, currentSavedId, onLoad, onDele
                     <div className="flex items-center gap-2 ml-4">
                       <button
                         onClick={() => onLoad(item)}
-                        className="px-3 py-1.5 rounded-lg bg-brand-primary-light text-brand-primary text-sm font-medium hover:bg-brand-primary-hover transition-colors"
+                        className="px-3 py-1.5 rounded-full bg-brand-primary-light text-brand-primary text-sm font-medium hover:bg-brand-primary-hover transition-colors"
                       >
                         Load
                       </button>
                       <button
                         onClick={() => handleDelete(item.id)}
                         disabled={deletingId === item.id}
-                        className="px-3 py-1.5 rounded-lg bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 text-sm font-medium hover:bg-red-200 dark:hover:bg-red-900 disabled:opacity-50 transition-colors"
+                        className="px-3 py-1.5 rounded-full bg-red-100 dark:bg-red-900/50 text-red-700 dark:text-red-300 text-sm font-medium hover:bg-red-200 dark:hover:bg-red-900 disabled:opacity-50 transition-colors"
                       >
                         {deletingId === item.id ? "..." : "Delete"}
                       </button>
