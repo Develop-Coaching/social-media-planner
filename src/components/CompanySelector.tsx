@@ -5,7 +5,6 @@ import Link from "next/link";
 import { Company } from "@/types";
 import ThemeToggle from "@/components/ThemeToggle";
 import LogoutButton from "@/components/LogoutButton";
-import CompanySetupWizard from "@/components/CompanySetupWizard";
 
 interface Props {
   onSelect: (company: Company) => void;
@@ -14,7 +13,6 @@ interface Props {
 export default function CompanySelector({ onSelect }: Props) {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showWizard, setShowWizard] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
@@ -31,6 +29,11 @@ export default function CompanySelector({ onSelect }: Props) {
       const res = await fetch("/api/companies");
       const data = await res.json();
       if (res.ok && data.companies) {
+        // Auto-select if user has exactly 1 company
+        if (data.companies.length === 1) {
+          onSelect(data.companies[0]);
+          return;
+        }
         setCompanies(data.companies);
       }
     } catch {
@@ -38,12 +41,6 @@ export default function CompanySelector({ onSelect }: Props) {
     } finally {
       setLoading(false);
     }
-  }
-
-  function handleWizardComplete(company: Company) {
-    setCompanies((prev) => [...prev, company]);
-    setShowWizard(false);
-    onSelect(company);
   }
 
   return (
@@ -80,6 +77,10 @@ export default function CompanySelector({ onSelect }: Props) {
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
             </svg>
           </div>
+        ) : companies.length === 0 ? (
+          <div className="text-center py-12">
+            <p className="text-slate-500 dark:text-slate-400">No companies found. Please complete onboarding first.</p>
+          </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2">
             {companies.map((company) => (
@@ -104,36 +105,9 @@ export default function CompanySelector({ onSelect }: Props) {
                 </div>
               </button>
             ))}
-
-            {/* Add New Company card */}
-            <button
-              onClick={() => setShowWizard(true)}
-              className="group rounded-2xl border-2 border-dashed border-slate-300 dark:border-slate-600 hover:border-brand-primary p-8 transition-all duration-300 hover:bg-brand-primary-light"
-            >
-              <div className="flex flex-col items-center justify-center text-center">
-                <div className="w-14 h-14 rounded-xl bg-slate-100 dark:bg-slate-700 flex items-center justify-center mb-4 group-hover:bg-brand-primary-light transition-colors">
-                  <svg className="w-7 h-7 text-slate-400 dark:text-slate-500 group-hover:text-brand-primary transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                </div>
-                <h2 className="text-lg font-semibold text-slate-600 dark:text-slate-400 group-hover:text-brand-primary transition-colors mb-1">
-                  Add New Company
-                </h2>
-                <p className="text-sm text-slate-400 dark:text-slate-500">
-                  Set up name, Slack & branding
-                </p>
-              </div>
-            </button>
           </div>
         )}
       </div>
-
-      {showWizard && (
-        <CompanySetupWizard
-          onComplete={handleWizardComplete}
-          onCancel={() => setShowWizard(false)}
-        />
-      )}
     </main>
   );
 }

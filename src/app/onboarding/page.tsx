@@ -4,10 +4,14 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import ThemeToggle from "@/components/ThemeToggle";
 
-const INDUSTRIES = [
-  "Marketing", "Health & Fitness", "Tech", "Finance", "Education",
-  "Food & Beverage", "Real Estate", "Fashion", "Other",
+const CONSTRUCTION_TYPES = [
+  "General Contractor", "Electrician", "Plumber", "Roofer", "HVAC",
+  "Landscaper", "Painter", "Flooring", "Concrete & Masonry",
+  "Framing & Carpentry", "Demolition", "Excavation", "Fencing",
+  "Siding & Gutters", "Solar & Renewable Energy", "Other",
 ];
+
+const TEAM_SIZES = ["Just me", "2-5", "6-15", "16-50", "50+"];
 
 const BRAND_VOICES = [
   "Professional", "Casual", "Playful", "Authoritative",
@@ -27,7 +31,7 @@ const CONTENT_TYPES = [
   "Quote graphics", "YouTube videos",
 ];
 
-const TOTAL_STEPS = 4;
+const TOTAL_STEPS = 5;
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -35,18 +39,36 @@ export default function OnboardingPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Form state
+  // Step 1: Business Basics
   const [businessName, setBusinessName] = useState("");
   const [industry, setIndustry] = useState("");
   const [customIndustry, setCustomIndustry] = useState("");
   const [targetAudience, setTargetAudience] = useState("");
+
+  // Step 2: About Your Company
+  const [teamSize, setTeamSize] = useState("");
+  const [serviceArea, setServiceArea] = useState("");
+
+  // Step 3: Brand Voice & Content
   const [brandVoice, setBrandVoice] = useState<string[]>([]);
   const [contentTopics, setContentTopics] = useState("");
   const [website, setWebsite] = useState("");
+
+  // Step 4: Social Media
   const [socialPlatforms, setSocialPlatforms] = useState<string[]>([]);
   const [postingFrequency, setPostingFrequency] = useState("");
   const [contentTypes, setContentTypes] = useState<string[]>([]);
+
+  // Step 5: Integrations & Finish
   const [uniqueValue, setUniqueValue] = useState("");
+  const [slackFilmingEnabled, setSlackFilmingEnabled] = useState(false);
+  const [slackFilmingWebhook, setSlackFilmingWebhook] = useState("");
+  const [slackEditorEnabled, setSlackEditorEnabled] = useState(false);
+  const [slackEditorWebhook, setSlackEditorWebhook] = useState("");
+  const [slackPostReadyEnabled, setSlackPostReadyEnabled] = useState(false);
+  const [slackPostReadyWebhook, setSlackPostReadyWebhook] = useState("");
+  const [slackBotToken, setSlackBotToken] = useState("");
+  const [slackChannelId, setSlackChannelId] = useState("");
 
   function toggleChip(value: string, list: string[], setter: (v: string[]) => void) {
     setter(list.includes(value) ? list.filter((v) => v !== value) : [...list, value]);
@@ -54,7 +76,7 @@ export default function OnboardingPage() {
 
   function canProceed(): boolean {
     if (step === 1) return !!businessName.trim();
-    return true; // Other steps are optional
+    return true;
   }
 
   async function handleSubmit() {
@@ -70,6 +92,8 @@ export default function OnboardingPage() {
           businessName: businessName.trim(),
           industry: industry === "Other" ? customIndustry.trim() || "Other" : industry,
           targetAudience: targetAudience.trim(),
+          teamSize,
+          serviceArea: serviceArea.trim(),
           brandVoice,
           contentTopics: contentTopics.trim(),
           website: website.trim(),
@@ -77,6 +101,10 @@ export default function OnboardingPage() {
           postingFrequency,
           contentTypes,
           uniqueValue: uniqueValue.trim(),
+          slackWebhookUrl: slackFilmingEnabled ? slackFilmingWebhook.trim() : undefined,
+          slackEditorWebhookUrl: slackEditorEnabled ? slackEditorWebhook.trim() : undefined,
+          slackBotToken: slackPostReadyEnabled ? slackBotToken.trim() : undefined,
+          slackChannelId: slackPostReadyEnabled ? slackChannelId.trim() : undefined,
         }),
       });
 
@@ -95,6 +123,18 @@ export default function OnboardingPage() {
   }
 
   const progress = (step / TOTAL_STEPS) * 100;
+
+  const inputClass = "w-full rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-3 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none";
+  const textareaClass = "w-full rounded-2xl border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-3 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none resize-none";
+  const labelClass = "block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2";
+
+  function chipClass(active: boolean) {
+    return `px-4 py-2 rounded-full text-sm font-medium transition-all border ${
+      active
+        ? "bg-brand-primary text-white border-brand-primary"
+        : "bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-600 hover:border-brand-primary"
+    }`;
+  }
 
   return (
     <main className="min-h-screen bg-gray-50 dark:bg-slate-900 flex items-center justify-center px-6 py-12">
@@ -126,35 +166,35 @@ export default function OnboardingPage() {
         </div>
 
         <div className="rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-sm border border-slate-100 dark:border-slate-700">
-          {/* Step 1: Business Name, Industry, Target Audience */}
+          {/* Step 1: Business Basics */}
           {step === 1 && (
             <div className="space-y-5">
               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                <label className={labelClass}>
                   What&apos;s your business/brand name? <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   value={businessName}
                   onChange={(e) => setBusinessName(e.target.value)}
-                  placeholder="e.g. Develop Coaching"
+                  placeholder="e.g. Smith Construction"
                   autoFocus
-                  className="w-full rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-3 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none"
+                  className={inputClass}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                  What industry are you in?
+                <label className={labelClass}>
+                  What type of construction work do you do?
                 </label>
                 <select
                   value={industry}
                   onChange={(e) => setIndustry(e.target.value)}
-                  className="w-full rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-3 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none"
+                  className={inputClass}
                 >
-                  <option value="">Select industry...</option>
-                  {INDUSTRIES.map((ind) => (
-                    <option key={ind} value={ind}>{ind}</option>
+                  <option value="">Select type...</option>
+                  {CONSTRUCTION_TYPES.map((t) => (
+                    <option key={t} value={t}>{t}</option>
                   ))}
                 </select>
                 {industry === "Other" && (
@@ -162,32 +202,69 @@ export default function OnboardingPage() {
                     type="text"
                     value={customIndustry}
                     onChange={(e) => setCustomIndustry(e.target.value)}
-                    placeholder="Enter your industry"
-                    className="w-full rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-3 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none mt-3"
+                    placeholder="Enter your specialty"
+                    className={`${inputClass} mt-3`}
                   />
                 )}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                <label className={labelClass}>
                   Who is your target audience?
                 </label>
                 <textarea
                   value={targetAudience}
                   onChange={(e) => setTargetAudience(e.target.value)}
-                  placeholder="Demographics, interests, pain points..."
+                  placeholder="Homeowners, commercial property managers, real estate developers..."
                   rows={3}
-                  className="w-full rounded-2xl border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-3 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none resize-none"
+                  className={textareaClass}
                 />
               </div>
             </div>
           )}
 
-          {/* Step 2: Brand Voice, Content Topics */}
+          {/* Step 2: About Your Company */}
           {step === 2 && (
             <div className="space-y-5">
               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                <label className={labelClass}>
+                  How big is your team?
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {TEAM_SIZES.map((size) => (
+                    <button
+                      key={size}
+                      type="button"
+                      onClick={() => setTeamSize(size)}
+                      className={chipClass(teamSize === size)}
+                    >
+                      {size}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className={labelClass}>
+                  What area do you serve?
+                </label>
+                <input
+                  type="text"
+                  value={serviceArea}
+                  onChange={(e) => setServiceArea(e.target.value)}
+                  placeholder="e.g. Greater Austin, TX"
+                  autoFocus
+                  className={inputClass}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Step 3: Brand Voice & Content */}
+          {step === 3 && (
+            <div className="space-y-5">
+              <div>
+                <label className={labelClass}>
                   What&apos;s your brand voice/personality?
                 </label>
                 <p className="text-xs text-slate-400 dark:text-slate-500 mb-3">Select all that apply</p>
@@ -197,11 +274,7 @@ export default function OnboardingPage() {
                       key={voice}
                       type="button"
                       onClick={() => toggleChip(voice, brandVoice, setBrandVoice)}
-                      className={`px-4 py-2 rounded-full text-sm font-medium transition-all border ${
-                        brandVoice.includes(voice)
-                          ? "bg-brand-primary text-white border-brand-primary"
-                          : "bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-600 hover:border-brand-primary"
-                      }`}
+                      className={chipClass(brandVoice.includes(voice))}
                     >
                       {voice}
                     </button>
@@ -210,20 +283,20 @@ export default function OnboardingPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                <label className={labelClass}>
                   What topics do you regularly create content about?
                 </label>
                 <textarea
                   value={contentTopics}
                   onChange={(e) => setContentTopics(e.target.value)}
-                  placeholder="Key themes, recurring topics, expertise areas..."
+                  placeholder="Project showcases, before/after transformations, tips & tricks..."
                   rows={3}
-                  className="w-full rounded-2xl border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-3 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none resize-none"
+                  className={textareaClass}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                <label className={labelClass}>
                   What&apos;s your website URL?
                 </label>
                 <input
@@ -231,17 +304,17 @@ export default function OnboardingPage() {
                   value={website}
                   onChange={(e) => setWebsite(e.target.value)}
                   placeholder="https://yourwebsite.com (optional)"
-                  className="w-full rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-3 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none"
+                  className={inputClass}
                 />
               </div>
             </div>
           )}
 
-          {/* Step 3: Platforms, Frequency */}
-          {step === 3 && (
+          {/* Step 4: Social Media */}
+          {step === 4 && (
             <div className="space-y-5">
               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                <label className={labelClass}>
                   What social media platforms do you use?
                 </label>
                 <div className="flex flex-wrap gap-2">
@@ -250,11 +323,7 @@ export default function OnboardingPage() {
                       key={platform}
                       type="button"
                       onClick={() => toggleChip(platform, socialPlatforms, setSocialPlatforms)}
-                      className={`px-4 py-2 rounded-full text-sm font-medium transition-all border ${
-                        socialPlatforms.includes(platform)
-                          ? "bg-brand-primary text-white border-brand-primary"
-                          : "bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-600 hover:border-brand-primary"
-                      }`}
+                      className={chipClass(socialPlatforms.includes(platform))}
                     >
                       {platform}
                     </button>
@@ -263,13 +332,13 @@ export default function OnboardingPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                <label className={labelClass}>
                   How often do you post content?
                 </label>
                 <select
                   value={postingFrequency}
                   onChange={(e) => setPostingFrequency(e.target.value)}
-                  className="w-full rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-3 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none"
+                  className={inputClass}
                 >
                   <option value="">Select frequency...</option>
                   {FREQUENCIES.map((f) => (
@@ -279,7 +348,7 @@ export default function OnboardingPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                <label className={labelClass}>
                   What content types do you create most?
                 </label>
                 <div className="flex flex-wrap gap-2">
@@ -288,11 +357,7 @@ export default function OnboardingPage() {
                       key={ct}
                       type="button"
                       onClick={() => toggleChip(ct, contentTypes, setContentTypes)}
-                      className={`px-4 py-2 rounded-full text-sm font-medium transition-all border ${
-                        contentTypes.includes(ct)
-                          ? "bg-brand-primary text-white border-brand-primary"
-                          : "bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-600 hover:border-brand-primary"
-                      }`}
+                      className={chipClass(contentTypes.includes(ct))}
                     >
                       {ct}
                     </button>
@@ -302,31 +367,139 @@ export default function OnboardingPage() {
             </div>
           )}
 
-          {/* Step 4: Unique Value */}
-          {step === 4 && (
+          {/* Step 5: Integrations & Finish */}
+          {step === 5 && (
             <div className="space-y-5">
               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                <label className={labelClass}>
                   What makes your brand unique? What sets you apart?
                 </label>
                 <textarea
                   value={uniqueValue}
                   onChange={(e) => setUniqueValue(e.target.value)}
                   placeholder="Your unique selling points, brand story, what makes you different..."
-                  rows={5}
+                  rows={4}
                   autoFocus
-                  className="w-full rounded-2xl border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-3 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none resize-none"
+                  className={textareaClass}
                 />
               </div>
 
+              {/* Slack Integrations */}
+              <div className="border-t border-slate-200 dark:border-slate-700 pt-5">
+                <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1">Slack Integrations</h3>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mb-4">Connect Slack to get notifications and send content to your team. You can set these up later in Brand Settings.</p>
+
+                <div className="space-y-4">
+                  {/* Filming Schedule */}
+                  <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+                    <label className="flex items-center justify-between cursor-pointer">
+                      <div>
+                        <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Filming Schedule</span>
+                        <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Get notified in Slack when filming needs to happen</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setSlackFilmingEnabled(!slackFilmingEnabled)}
+                        className={`relative w-11 h-6 rounded-full transition-colors ${slackFilmingEnabled ? "bg-brand-primary" : "bg-slate-300 dark:bg-slate-600"}`}
+                      >
+                        <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${slackFilmingEnabled ? "translate-x-5" : ""}`} />
+                      </button>
+                    </label>
+                    {slackFilmingEnabled && (
+                      <input
+                        type="url"
+                        value={slackFilmingWebhook}
+                        onChange={(e) => setSlackFilmingWebhook(e.target.value)}
+                        placeholder="https://hooks.slack.com/services/..."
+                        className={`${inputClass} mt-3 text-sm`}
+                      />
+                    )}
+                  </div>
+
+                  {/* Editor */}
+                  <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+                    <label className="flex items-center justify-between cursor-pointer">
+                      <div>
+                        <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Editor</span>
+                        <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Send reel scripts to your editor via Slack</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setSlackEditorEnabled(!slackEditorEnabled)}
+                        className={`relative w-11 h-6 rounded-full transition-colors ${slackEditorEnabled ? "bg-brand-primary" : "bg-slate-300 dark:bg-slate-600"}`}
+                      >
+                        <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${slackEditorEnabled ? "translate-x-5" : ""}`} />
+                      </button>
+                    </label>
+                    {slackEditorEnabled && (
+                      <input
+                        type="url"
+                        value={slackEditorWebhook}
+                        onChange={(e) => setSlackEditorWebhook(e.target.value)}
+                        placeholder="https://hooks.slack.com/services/..."
+                        className={`${inputClass} mt-3 text-sm`}
+                      />
+                    )}
+                  </div>
+
+                  {/* Post Ready */}
+                  <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+                    <label className="flex items-center justify-between cursor-pointer">
+                      <div>
+                        <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Post Ready</span>
+                        <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">Get notified when content is ready to post</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setSlackPostReadyEnabled(!slackPostReadyEnabled)}
+                        className={`relative w-11 h-6 rounded-full transition-colors ${slackPostReadyEnabled ? "bg-brand-primary" : "bg-slate-300 dark:bg-slate-600"}`}
+                      >
+                        <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${slackPostReadyEnabled ? "translate-x-5" : ""}`} />
+                      </button>
+                    </label>
+                    {slackPostReadyEnabled && (
+                      <div className="mt-3 space-y-3">
+                        <input
+                          type="url"
+                          value={slackPostReadyWebhook}
+                          onChange={(e) => setSlackPostReadyWebhook(e.target.value)}
+                          placeholder="Webhook URL: https://hooks.slack.com/services/..."
+                          className={`${inputClass} text-sm`}
+                        />
+                        <input
+                          type="text"
+                          value={slackBotToken}
+                          onChange={(e) => setSlackBotToken(e.target.value)}
+                          placeholder="Bot token: xoxb-..."
+                          className={`${inputClass} text-sm font-mono`}
+                        />
+                        <input
+                          type="text"
+                          value={slackChannelId}
+                          onChange={(e) => setSlackChannelId(e.target.value)}
+                          placeholder="Channel ID: C01234ABCDE"
+                          className={`${inputClass} text-sm font-mono`}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Summary */}
               <div className="bg-slate-50 dark:bg-slate-900/50 rounded-2xl p-4">
                 <h4 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Summary</h4>
                 <div className="text-sm text-slate-600 dark:text-slate-400 space-y-1">
                   <p><span className="font-medium">Business:</span> {businessName || "\u2014"}</p>
-                  <p><span className="font-medium">Industry:</span> {industry === "Other" ? customIndustry || "Other" : industry || "\u2014"}</p>
+                  <p><span className="font-medium">Type:</span> {industry === "Other" ? customIndustry || "Other" : industry || "\u2014"}</p>
+                  {teamSize && <p><span className="font-medium">Team:</span> {teamSize}</p>}
+                  {serviceArea && <p><span className="font-medium">Area:</span> {serviceArea}</p>}
                   {brandVoice.length > 0 && <p><span className="font-medium">Voice:</span> {brandVoice.join(", ")}</p>}
                   {socialPlatforms.length > 0 && <p><span className="font-medium">Platforms:</span> {socialPlatforms.join(", ")}</p>}
                   {postingFrequency && <p><span className="font-medium">Frequency:</span> {postingFrequency}</p>}
+                  {(slackFilmingEnabled || slackEditorEnabled || slackPostReadyEnabled) && (
+                    <p><span className="font-medium">Slack:</span> {[slackFilmingEnabled && "Filming", slackEditorEnabled && "Editor", slackPostReadyEnabled && "Post Ready"].filter(Boolean).join(", ")}</p>
+                  )}
                 </div>
               </div>
             </div>
