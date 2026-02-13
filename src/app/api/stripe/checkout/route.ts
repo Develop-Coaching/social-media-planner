@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
           price_data: {
             currency: "usd",
             product_data: {
-              name: `Post Creator Credits — ${validPackage.label}`,
+              name: `PostPilot Credits — ${validPackage.label}`,
               description: `${validPackage.label} credit top-up for AI content generation`,
             },
             unit_amount: packageCents,
@@ -44,6 +44,7 @@ export async function POST(request: NextRequest) {
         userId,
         packageCents: String(packageCents),
       },
+      allow_promotion_codes: true,
       success_url: `${appUrl}/billing?success=true`,
       cancel_url: `${appUrl}/billing?canceled=true`,
     });
