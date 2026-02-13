@@ -112,7 +112,7 @@ export default function LoginPage() {
               )}
             </svg>
           </div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-1">Post Creator</h1>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-1">PostPilot</h1>
           <p className="text-slate-500 dark:text-slate-400 text-sm">
             {mode === "setup" ? "Create your admin account to get started" : "Sign in to continue"}
           </p>

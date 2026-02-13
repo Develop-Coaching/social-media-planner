@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { Company } from "@/types";
 import ThemeToggle from "@/components/ThemeToggle";
 import LogoutButton from "@/components/LogoutButton";
@@ -14,9 +15,14 @@ export default function CompanySelector({ onSelect }: Props) {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
   const [showWizard, setShowWizard] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     loadCompanies();
+    fetch("/api/auth/me")
+      .then((res) => res.ok ? res.json() : null)
+      .then((data) => { if (data?.role === "admin") setIsAdmin(true); })
+      .catch(() => {});
   }, []);
 
   async function loadCompanies() {
@@ -43,13 +49,24 @@ export default function CompanySelector({ onSelect }: Props) {
   return (
     <main className="min-h-screen bg-gray-50 dark:bg-slate-900">
       <div className="absolute top-4 right-4 flex items-center gap-1">
+        {isAdmin && (
+          <Link
+            href="/admin"
+            className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:text-brand-primary hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            title="User management"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+            </svg>
+          </Link>
+        )}
         <ThemeToggle variant="page" />
         <LogoutButton variant="page" />
       </div>
       <div className="max-w-3xl mx-auto px-6 py-16">
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold text-brand-primary mb-3">
-            Post Creator
+            PostPilot
           </h1>
           <p className="text-slate-600 dark:text-slate-400 text-lg">
             Select a company to get started

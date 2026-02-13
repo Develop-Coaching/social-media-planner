@@ -60,7 +60,7 @@ export default function SignupPage() {
           </div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-1">Create your account</h1>
           <p className="text-slate-500 dark:text-slate-400 text-sm">
-            You've been invited to join Post Creator
+            You've been invited to join PostPilot
           </p>
         </div>
 

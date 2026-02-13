@@ -17,9 +17,9 @@ export async function sendInviteEmail(
 
   const htmlBody = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px;">
-      <h2 style="color: #1e293b; margin-bottom: 8px;">You're invited to Post Creator</h2>
+      <h2 style="color: #1e293b; margin-bottom: 8px;">You're invited to PostPilot</h2>
       <p style="color: #64748b; font-size: 15px; line-height: 1.6;">
-        ${inviterName} has invited you to join Post Creator — an AI-powered content generation platform.
+        ${inviterName} has invited you to join PostPilot — an AI-powered content generation platform.
       </p>
       <div style="margin: 24px 0;">
         <a href="${inviteUrl}" style="display: inline-block; background: #6366f1; color: white; text-decoration: none; padding: 12px 28px; border-radius: 9999px; font-weight: 600; font-size: 15px;">
@@ -47,7 +47,7 @@ export async function sendInviteEmail(
           locationId: GHL_LOCATION_ID,
           contactId: toEmail,
           emailTo: toEmail,
-          subject: `${inviterName} invited you to Post Creator`,
+          subject: `${inviterName} invited you to PostPilot`,
           html: htmlBody,
         }),
       }

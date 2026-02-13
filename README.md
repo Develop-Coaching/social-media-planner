@@ -1,4 +1,4 @@
-# Post Creator — Social content from your memory
+# PostPilot — Social content from your memory
 
 A small web app that uses **Claude** for themes and copy (posts, reels, LinkedIn articles, carousels, quotes, YouTube scripts) and **Gemini** for images. Your context is stored in “memory” so theme ideas and tone stay on-brand.
 
@@ -20,7 +20,7 @@ A small web app that uses **Claude** for themes and copy (posts, reels, LinkedIn
 
 1. **Clone and install**
    ```bash
-   cd "Post Creator Software"
+   cd "PostPilot"
    npm install
    ```
 

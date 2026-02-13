@@ -1,4 +1,4 @@
--- Supabase schema for Post Creator Software
+-- Supabase schema for PostPilot
 -- Run this in the Supabase SQL Editor (https://supabase.com/dashboard → SQL Editor)
 -- Also create a Storage bucket called "content-images" (private) in the Storage section
 

@@ -18,7 +18,7 @@ export function getSecret(): Uint8Array {
     );
   }
   return new TextEncoder().encode(
-    process.env.AUTH_SECRET || "post-creator-default-secret-change-me"
+    process.env.AUTH_SECRET || "postpilot-default-secret-change-me"
   );
 }
 

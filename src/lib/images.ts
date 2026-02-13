@@ -141,7 +141,7 @@ export function signImageParams(
   key: string,
   expires: number
 ): string {
-  const secret = process.env.AUTH_SECRET || "post-creator-default-secret-change-me";
+  const secret = process.env.AUTH_SECRET || "postpilot-default-secret-change-me";
   const data = `${userId}:${companyId}:${key}:${expires}`;
   return crypto
     .createHmac("sha256", secret)
