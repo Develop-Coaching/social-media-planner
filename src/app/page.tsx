@@ -35,6 +35,10 @@ const CONTENT_GROUPS: { keys: (keyof ContentCounts)[]; label: string }[] = [
   { keys: ["linkedinArticles", "youtube"], label: "articles & YouTube" },
 ];
 const CHUNK_THRESHOLD = 12000;
+const CONTENT_TYPE_LABELS: Record<keyof ContentCounts, string> = {
+  posts: "Posts", reels: "Reels", carousels: "Carousels",
+  quotesForX: "Quotes for X", linkedinArticles: "LinkedIn Articles", youtube: "YouTube Scripts",
+};
 
 type GenerationResult = { content: GeneratedContent | null; rawText: string; error?: string };
 
@@ -89,13 +93,23 @@ async function fetchGeneration(
     onStreamUpdate?.(fullText);
   }
 
-  try {
-    const cleaned = fullText.replace(/^```json?\s*|\s*```$/g, "").trim();
-    const parsed = JSON.parse(cleaned) as GeneratedContent;
-    return { content: parsed, rawText: fullText };
-  } catch {
-    return { content: null, rawText: fullText, error: "Failed to parse response" };
+  // Try multiple strategies to extract valid JSON
+  const candidates = [
+    fullText.replace(/^```json?\s*|\s*```$/g, "").trim(),
+  ];
+  // Also try extracting the outermost { ... } from the text
+  const firstBrace = fullText.indexOf("{");
+  const lastBrace = fullText.lastIndexOf("}");
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    candidates.push(fullText.slice(firstBrace, lastBrace + 1));
   }
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate) as GeneratedContent;
+      return { content: parsed, rawText: fullText };
+    } catch { /* try next candidate */ }
+  }
+  return { content: null, rawText: fullText, error: "Failed to parse response" };
 }
 
 export default function Home() {
@@ -545,6 +559,34 @@ export default function Home() {
     setCurrentSavedId(null);
     setStreamingText("");
 
+    // Helper: retry failed counts by generating each content type individually
+      async function retryIndividually(
+        failedCounts: ContentCounts,
+        merged: GeneratedContent,
+        startLabel: string,
+      ): Promise<boolean> {
+        const activeKeys = (Object.keys(failedCounts) as (keyof ContentCounts)[]).filter(k => failedCounts[k] > 0);
+        let anySucceeded = false;
+        for (let i = 0; i < activeKeys.length; i++) {
+          const key = activeKeys[i];
+          const subCounts: ContentCounts = { posts: 0, reels: 0, linkedinArticles: 0, carousels: 0, quotesForX: 0, youtube: 0 };
+          subCounts[key] = failedCounts[key];
+          const retryResult = await fetchGeneration(
+            selectedCompany!.id, selectedTheme!, subCounts, selectedTone, selectedLanguage,
+            (text) => setStreamingText(`${startLabel} — ${CONTENT_TYPE_LABELS[key]} (${i + 1}/${activeKeys.length})\n\n${text}`),
+          );
+          if (retryResult.content) {
+            anySucceeded = true;
+            for (const k of Object.keys(merged) as (keyof GeneratedContent)[]) {
+              (merged[k] as unknown[]) = [...(merged[k] as unknown[]), ...(retryResult.content[k] as unknown[])];
+            }
+          } else {
+            toast(`Failed to generate ${CONTENT_TYPE_LABELS[key]}`, "error");
+          }
+        }
+        return anySucceeded;
+      }
+
     try {
       const totalEstimated = (Object.keys(TOKEN_WEIGHTS) as (keyof ContentCounts)[]).reduce(
         (sum, k) => sum + TOKEN_WEIGHTS[k] * counts[k], 0
@@ -563,8 +605,25 @@ export default function Home() {
           setStreamingText("");
           toast("Content generated successfully", "success");
         } else {
-          setStreamingText(result.rawText);
-          toast(result.error ? result.error + (result.rawText ? " — raw output shown below" : "") : "Generation failed", "error");
+          // Auto-retry: generate each content type one at a time
+          const activeKeys = (Object.keys(counts) as (keyof ContentCounts)[]).filter(k => counts[k] > 0);
+          if (activeKeys.length > 1) {
+            toast("Response couldn't be parsed — retrying each content type individually...", "info");
+            const merged: GeneratedContent = { posts: [], reels: [], linkedinArticles: [], carousels: [], quotesForX: [], youtube: [] };
+            const anySucceeded = await retryIndividually(counts, merged, "Retrying");
+            if (anySucceeded) {
+              setContent(merged);
+              setStreamingText("");
+              toast("Content generated successfully", "success");
+            } else {
+              setStreamingText(result.rawText);
+              toast("Generation failed even with individual retries", "error");
+            }
+          } else {
+            // Only one content type and it still failed — show the error
+            setStreamingText(result.rawText);
+            toast(result.error ? result.error + (result.rawText ? " — raw output shown below" : "") : "Generation failed", "error");
+          }
         }
       } else {
         // Chunked generation — split by content type groups
@@ -586,8 +645,16 @@ export default function Home() {
               (merged[key] as unknown[]) = [...(merged[key] as unknown[]), ...(result.content[key] as unknown[])];
             }
           } else {
-            anyFailed = true;
-            toast(`Batch ${gi + 1} (${group.label}) failed: ${result.error}`, "error");
+            // Auto-retry: split this failed group into individual content types
+            const groupActiveKeys = group.keys.filter(k => subCounts[k] > 0);
+            if (groupActiveKeys.length > 1) {
+              toast(`Batch ${gi + 1} (${group.label}) failed — retrying individually...`, "info");
+              const retryOk = await retryIndividually(subCounts, merged, `Batch ${gi + 1} retry`);
+              if (!retryOk) anyFailed = true;
+            } else {
+              anyFailed = true;
+              toast(`Batch ${gi + 1} (${group.label}) failed: ${result.error}`, "error");
+            }
           }
         }
 
