@@ -1207,17 +1207,15 @@ export default function Home() {
     <main className="min-h-screen bg-gray-50 dark:bg-slate-900">
       <header className="bg-brand-primary">
         <div className={`max-w-4xl mx-auto px-6 py-6 ${headerTextLight ? "text-slate-900" : "text-white"}`}>
-          {isAdmin && (
-            <button
-              onClick={handleBackToCompanies}
-              className={`flex items-center gap-2 mb-4 transition-colors ${headerTextLight ? "text-slate-700 hover:text-slate-900" : "text-white/80 hover:text-white"}`}
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
-              Back to companies
-            </button>
-          )}
+          <button
+            onClick={handleBackToCompanies}
+            className={`flex items-center gap-2 mb-4 transition-colors ${headerTextLight ? "text-slate-700 hover:text-slate-900" : "text-white/80 hover:text-white"}`}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Back to companies
+          </button>
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold">{selectedCompany.name}</h1>
@@ -1270,7 +1268,7 @@ export default function Home() {
         )}
 
         {/* Brand Settings (admin only) */}
-        {isAdmin && <section className="mb-8">
+        <section className="mb-8">
           <button
             onClick={() => setShowBrandSettings(!showBrandSettings)}
             className="flex items-center gap-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
@@ -1478,29 +1476,23 @@ export default function Home() {
               />
             </div>
           )}
-        </section>}
+        </section>
 
-        {isAdmin && <MemoryManager companyId={selectedCompany.id} />}
+        <MemoryManager companyId={selectedCompany.id} />
 
         {savedContent.length > 0 && (
           <section className="mb-8">
-            {isAdmin ? (
-              <button
-                onClick={() => setShowSavedContent(!showSavedContent)}
-                className="flex items-center gap-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
-              >
-                <svg className={`w-4 h-4 transition-transform ${showSavedContent ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-                Saved Projects ({savedContent.filter(i => i.status !== "completed").length})
-              </button>
-            ) : (
-              <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200 mb-1">
-                Your Content ({savedContent.filter(i => i.status !== "completed").length})
-              </h2>
-            )}
-            {(showSavedContent || !isAdmin) && (
-              <div className={isAdmin ? "mt-3" : "mt-4"}>
+            <button
+              onClick={() => setShowSavedContent(!showSavedContent)}
+              className="flex items-center gap-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
+            >
+              <svg className={`w-4 h-4 transition-transform ${showSavedContent ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+              Saved Projects ({savedContent.filter(i => i.status !== "completed").length})
+            </button>
+            {showSavedContent && (
+              <div className="mt-3">
                 <SavedContentList
                   items={savedContent}
                   currentSavedId={currentSavedId}
@@ -1514,17 +1506,7 @@ export default function Home() {
           </section>
         )}
 
-        {!isAdmin && savedContent.length === 0 && !savedContentLoading && (
-          <div className="text-center py-16">
-            <svg className="w-12 h-12 mx-auto text-slate-300 dark:text-slate-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-            </svg>
-            <p className="text-slate-500 dark:text-slate-400 text-lg font-medium">No content yet</p>
-            <p className="text-slate-400 dark:text-slate-500 text-sm mt-1">Your content will appear here once it&apos;s been created for you.</p>
-          </div>
-        )}
-
-        {isAdmin && <>
+        <>
         <ErrorBoundary fallbackTitle="Failed to load theme selector">
           <ThemeSelector
             companyId={selectedCompany.id}
@@ -1689,11 +1671,10 @@ export default function Home() {
             </>
           </ErrorBoundary>
         )}
-        </>}
+        </>
       </div>
 
-      {/* Keyboard shortcuts help button (admin only) */}
-      {isAdmin &&
+      {/* Keyboard shortcuts help button */}
       <div className="fixed bottom-6 left-6 z-40">
         <div className="relative">
           <button
@@ -1724,7 +1705,7 @@ export default function Home() {
             </div>
           )}
         </div>
-      </div>}
+      </div>
     </main>
   );
 }
