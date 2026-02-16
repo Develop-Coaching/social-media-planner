@@ -9,11 +9,10 @@ export default function LogoutButton({ variant = "header" }: { variant?: "header
   const [showConfirm, setShowConfirm] = useState(false);
 
   useEffect(() => {
-    // Check if auth is enabled by trying the logout endpoint
-    // If we're on a page (not /login), auth must be enabled or disabled
-    // We show logout only if the session cookie exists
-    const hasCookie = document.cookie.includes("pc_session=");
-    setVisible(hasCookie);
+    // Check if user is authenticated via API (cookie is httpOnly so JS can't read it)
+    fetch("/api/auth/me")
+      .then((res) => setVisible(res.ok))
+      .catch(() => setVisible(false));
   }, []);
 
   async function handleLogout() {
