@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getImages, saveImage, saveAllImages, deleteImage } from "@/lib/images";
 import { requireAuth, AuthError } from "@/lib/auth-helpers";
+import { resolveCompanyAccess, CompanyAccessError } from "@/lib/company-access";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 export async function GET(request: NextRequest) {
   try {
-    const { userId } = await requireAuth();
+    const { userId, role } = await requireAuth();
     const { searchParams } = new URL(request.url);
     const companyId = searchParams.get("companyId");
     const savedContentId = searchParams.get("savedContentId");
@@ -16,10 +17,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "companyId and savedContentId are required" }, { status: 400 });
     }
 
-    const images = await getImages(userId, companyId, savedContentId);
+    const { effectiveUserId } = await resolveCompanyAccess(userId, role, companyId);
+    const images = await getImages(effectiveUserId, companyId, savedContentId);
     return NextResponse.json({ images });
   } catch (e) {
     if (e instanceof AuthError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
+    if (e instanceof CompanyAccessError) {
       return NextResponse.json({ error: e.message }, { status: e.status });
     }
     console.error(e);
@@ -29,7 +34,7 @@ export async function GET(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const { userId } = await requireAuth();
+    const { userId, role } = await requireAuth();
     const body = await request.json();
     const { companyId, savedContentId, key, dataUrl } = body as {
       companyId?: string;
@@ -42,10 +47,14 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "companyId, savedContentId, key, and dataUrl are required" }, { status: 400 });
     }
 
-    await saveImage(userId, companyId, savedContentId, key, dataUrl);
+    const { effectiveUserId } = await resolveCompanyAccess(userId, role, companyId);
+    await saveImage(effectiveUserId, companyId, savedContentId, key, dataUrl);
     return NextResponse.json({ success: true });
   } catch (e) {
     if (e instanceof AuthError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
+    if (e instanceof CompanyAccessError) {
       return NextResponse.json({ error: e.message }, { status: e.status });
     }
     console.error(e);
@@ -55,7 +64,7 @@ export async function PUT(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = await requireAuth();
+    const { userId, role } = await requireAuth();
     const body = await request.json();
     const { companyId, savedContentId, images } = body as {
       companyId?: string;
@@ -67,10 +76,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "companyId, savedContentId, and images are required" }, { status: 400 });
     }
 
-    await saveAllImages(userId, companyId, savedContentId, images);
+    const { effectiveUserId } = await resolveCompanyAccess(userId, role, companyId);
+    await saveAllImages(effectiveUserId, companyId, savedContentId, images);
     return NextResponse.json({ success: true });
   } catch (e) {
     if (e instanceof AuthError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
+    if (e instanceof CompanyAccessError) {
       return NextResponse.json({ error: e.message }, { status: e.status });
     }
     console.error(e);
@@ -80,7 +93,7 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const { userId } = await requireAuth();
+    const { userId, role } = await requireAuth();
     const { searchParams } = new URL(request.url);
     const companyId = searchParams.get("companyId");
     const savedContentId = searchParams.get("savedContentId");
@@ -90,10 +103,14 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "companyId, savedContentId, and key are required" }, { status: 400 });
     }
 
-    await deleteImage(userId, companyId, savedContentId, key);
+    const { effectiveUserId } = await resolveCompanyAccess(userId, role, companyId);
+    await deleteImage(effectiveUserId, companyId, savedContentId, key);
     return NextResponse.json({ success: true });
   } catch (e) {
     if (e instanceof AuthError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
+    if (e instanceof CompanyAccessError) {
       return NextResponse.json({ error: e.message }, { status: e.status });
     }
     console.error(e);

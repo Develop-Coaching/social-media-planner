@@ -8,7 +8,7 @@ CREATE TABLE users (
   username TEXT NOT NULL UNIQUE,
   display_name TEXT NOT NULL,
   password_hash TEXT NOT NULL,
-  role TEXT NOT NULL DEFAULT 'user',
+  role TEXT NOT NULL DEFAULT 'client',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   created_by TEXT
 );
@@ -128,7 +128,7 @@ CREATE TABLE invites (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   token TEXT NOT NULL UNIQUE,
   email TEXT,
-  role TEXT NOT NULL DEFAULT 'user',
+  role TEXT NOT NULL DEFAULT 'client',
   created_by TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   expires_at TIMESTAMPTZ NOT NULL,
@@ -181,6 +181,19 @@ CREATE TABLE payment_history (
 -- ALTER TABLE users ADD COLUMN onboarding_completed BOOLEAN NOT NULL DEFAULT false;
 -- ALTER TABLE users ADD COLUMN email TEXT;
 
+-- 15. Company assignments (agents assigned to client companies)
+CREATE TABLE company_assignments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_owner_id TEXT NOT NULL,
+  company_id TEXT NOT NULL,
+  agent_user_id TEXT NOT NULL,
+  assigned_by TEXT NOT NULL,
+  assigned_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  FOREIGN KEY (company_owner_id, company_id)
+    REFERENCES companies(user_id, id) ON DELETE CASCADE,
+  UNIQUE (company_owner_id, company_id, agent_user_id)
+);
+
 -- Indexes for common query patterns
 CREATE INDEX idx_companies_user ON companies(user_id);
 CREATE INDEX idx_memory_files_company ON memory_files(user_id, company_id);
@@ -192,3 +205,14 @@ CREATE INDEX idx_content_presets_company ON content_presets(user_id, company_id)
 CREATE INDEX idx_invites_token ON invites(token);
 CREATE INDEX idx_usage_logs_user ON usage_logs(user_id, created_at DESC);
 CREATE INDEX idx_payment_history_user ON payment_history(user_id, created_at DESC);
+CREATE INDEX idx_company_assignments_agent ON company_assignments(agent_user_id);
+
+-- Migration: role rename (user -> client) and company_assignments
+-- Run these on existing databases:
+--
+-- UPDATE users SET role = 'client' WHERE role = 'user';
+-- UPDATE invites SET role = 'client' WHERE role = 'user' AND used_at IS NULL;
+-- ALTER TABLE users ALTER COLUMN role SET DEFAULT 'client';
+-- ALTER TABLE invites ALTER COLUMN role SET DEFAULT 'client';
+-- CREATE TABLE company_assignments ( ... ); -- see above
+-- CREATE INDEX idx_company_assignments_agent ON company_assignments(agent_user_id);

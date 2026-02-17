@@ -10,6 +10,8 @@ export interface Company {
   slackEditorWebhookUrl?: string;
   slackBotToken?: string;
   slackChannelId?: string;
+  isAssigned?: boolean;
+  ownerId?: string;
 }
 
 export interface CompaniesData {
@@ -141,4 +143,41 @@ export async function deleteCompany(userId: string, id: string): Promise<boolean
     .eq("id", id);
 
   return !error;
+}
+
+/**
+ * Returns all companies a user can access:
+ * - Companies they own
+ * - Companies they are assigned to as an agent (with isAssigned=true, ownerId set)
+ */
+export async function getCompaniesWithAssignments(userId: string): Promise<Company[]> {
+  // Get owned companies
+  const owned = await getCompanies(userId);
+
+  // Get assigned companies
+  const { data: assignments } = await supabase
+    .from("company_assignments")
+    .select("company_owner_id, company_id")
+    .eq("agent_user_id", userId);
+
+  if (!assignments?.length) return owned;
+
+  // Fetch the actual company records for assigned companies
+  const assignedCompanies: Company[] = [];
+  for (const a of assignments) {
+    const { data } = await supabase
+      .from("companies")
+      .select("*")
+      .eq("user_id", a.company_owner_id)
+      .eq("id", a.company_id)
+      .single();
+    if (data) {
+      const company = rowToCompany(data);
+      company.isAssigned = true;
+      company.ownerId = a.company_owner_id;
+      assignedCompanies.push(company);
+    }
+  }
+
+  return [...owned, ...assignedCompanies];
 }

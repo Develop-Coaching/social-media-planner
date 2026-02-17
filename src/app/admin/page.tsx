@@ -9,7 +9,7 @@ interface UserInfo {
   id: string;
   username: string;
   displayName: string;
-  role: "admin" | "user";
+  role: "admin" | "agent" | "client";
   createdAt: string;
   createdBy: string | null;
 }
@@ -37,7 +37,7 @@ export default function AdminPage() {
   const [newUsername, setNewUsername] = useState("");
   const [newDisplayName, setNewDisplayName] = useState("");
   const [newPassword, setNewPassword] = useState("");
-  const [newRole, setNewRole] = useState<"admin" | "user">("user");
+  const [newRole, setNewRole] = useState<"admin" | "agent" | "client">("client");
   const [creating, setCreating] = useState(false);
   const [formError, setFormError] = useState("");
 
@@ -48,7 +48,7 @@ export default function AdminPage() {
   const [invites, setInvites] = useState<InviteInfo[]>([]);
   const [showInviteForm, setShowInviteForm] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState<"admin" | "user">("user");
+  const [inviteRole, setInviteRole] = useState<"admin" | "agent" | "client">("client");
   const [inviteSendEmail, setInviteSendEmail] = useState(false);
   const [creatingInvite, setCreatingInvite] = useState(false);
   const [inviteError, setInviteError] = useState("");
@@ -111,7 +111,7 @@ export default function AdminPage() {
         setNewUsername("");
         setNewDisplayName("");
         setNewPassword("");
-        setNewRole("user");
+        setNewRole("client");
         setShowForm(false);
         await loadUsers();
       } else {
@@ -162,7 +162,7 @@ export default function AdminPage() {
         setCopiedUrl(data.inviteUrl);
         navigator.clipboard.writeText(data.inviteUrl).catch(() => {});
         setInviteEmail("");
-        setInviteRole("user");
+        setInviteRole("client");
         setInviteSendEmail(false);
         setShowInviteForm(false);
         await loadInvites();
@@ -296,10 +296,11 @@ export default function AdminPage() {
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Role</label>
                     <select
                       value={inviteRole}
-                      onChange={(e) => setInviteRole(e.target.value as "admin" | "user")}
+                      onChange={(e) => setInviteRole(e.target.value as "admin" | "agent" | "client")}
                       className="w-full rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-2.5 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none text-sm"
                     >
-                      <option value="user">User</option>
+                      <option value="client">Client</option>
+                      <option value="agent">Agent</option>
                       <option value="admin">Admin</option>
                     </select>
                   </div>
@@ -358,6 +359,8 @@ export default function AdminPage() {
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                         inv.role === "admin"
                           ? "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300"
+                          : inv.role === "agent"
+                          ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300"
                           : "bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400"
                       }`}>
                         {inv.role}
@@ -469,10 +472,11 @@ export default function AdminPage() {
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Role</label>
                     <select
                       value={newRole}
-                      onChange={(e) => setNewRole(e.target.value as "admin" | "user")}
+                      onChange={(e) => setNewRole(e.target.value as "admin" | "agent" | "client")}
                       className="w-full rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-2.5 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none text-sm"
                     >
-                      <option value="user">User</option>
+                      <option value="client">Client</option>
+                      <option value="agent">Agent</option>
                       <option value="admin">Admin</option>
                     </select>
                   </div>
@@ -520,6 +524,8 @@ export default function AdminPage() {
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                         user.role === "admin"
                           ? "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300"
+                          : user.role === "agent"
+                          ? "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300"
                           : "bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400"
                       }`}>
                         {user.role}

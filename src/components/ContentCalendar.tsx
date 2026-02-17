@@ -505,6 +505,17 @@ export default function ContentCalendar({ content, startDate, companyName, compa
   const [dragOverDay, setDragOverDay] = useState<number | null>(null);
   const [slackStatus, setSlackStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [slackSending, setSlackSending] = useState(false);
+  const [doneItems, setDoneItems] = useState<Set<string>>(new Set());
+
+  const toggleDone = useCallback((itemId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setDoneItems((prev) => {
+      const next = new Set(prev);
+      if (next.has(itemId)) next.delete(itemId);
+      else next.add(itemId);
+      return next;
+    });
+  }, []);
 
   const items = useMemo(() => collectItems(content), [content]);
   const monday = getNextMonday(startDate);
@@ -749,6 +760,7 @@ export default function ContentCalendar({ content, startDate, companyName, compa
             )}
             {dayItems.map((item) => {
               const imgSrc = getItemThumbnail(item, images);
+              const isDone = doneItems.has(item.id);
               return (
                 <div
                   key={item.id}
@@ -756,7 +768,7 @@ export default function ContentCalendar({ content, startDate, companyName, compa
                   onDragStart={(e) => handleDragStart(e, dayIndex, item.id)}
                   onDragEnd={handleDragEnd}
                   onClick={() => setModalItem(item)}
-                  className={`w-full text-left mb-2 last:mb-0 rounded-xl border p-2.5 transition-all hover:shadow-md hover:scale-[1.02] cursor-pointer active:cursor-grabbing ${item.color}`}
+                  className={`relative w-full text-left mb-2 last:mb-0 rounded-xl border p-2.5 transition-all hover:shadow-md hover:scale-[1.02] cursor-pointer active:cursor-grabbing ${item.color} ${isDone ? "opacity-50" : ""}`}
                   role="button"
                   tabIndex={0}
                   onKeyDown={(e) => {
@@ -766,7 +778,23 @@ export default function ContentCalendar({ content, startDate, companyName, compa
                     }
                   }}
                 >
-                  <div className="flex items-center justify-between gap-1.5 mb-1">
+                  {/* Done tick button */}
+                  <button
+                    onClick={(e) => toggleDone(item.id, e)}
+                    className={`absolute top-1.5 right-1.5 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors ${
+                      isDone
+                        ? "bg-green-500 border-green-500 text-white"
+                        : "border-current opacity-30 hover:opacity-70 hover:border-green-500 hover:text-green-500"
+                    }`}
+                    title={isDone ? "Mark as not done" : "Mark as done"}
+                  >
+                    {isDone && (
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </button>
+                  <div className="flex items-center justify-between gap-1.5 mb-1 pr-5">
                     <div className="flex items-center gap-1.5">
                       <svg
                         className="w-3 h-3 opacity-40 flex-shrink-0"
@@ -786,8 +814,8 @@ export default function ContentCalendar({ content, startDate, companyName, compa
                       <img src={imgSrc} alt="" className="w-8 h-8 rounded object-cover flex-shrink-0 opacity-80" />
                     )}
                   </div>
-                  <p className="text-xs font-semibold mt-0.5 line-clamp-2 leading-snug">{item.title}</p>
-                  <p className="text-[11px] mt-1 opacity-70 line-clamp-2 leading-snug">{item.preview}</p>
+                  <p className={`text-xs font-semibold mt-0.5 line-clamp-2 leading-snug ${isDone ? "line-through" : ""}`}>{item.title}</p>
+                  <p className={`text-[11px] mt-1 opacity-70 line-clamp-2 leading-snug ${isDone ? "line-through" : ""}`}>{item.preview}</p>
                 </div>
               );
             })}

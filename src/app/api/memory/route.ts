@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getMemory, addToMemory, removeFromMemory } from "@/lib/memory";
 import { requireAuth, AuthError } from "@/lib/auth-helpers";
+import { resolveCompanyAccess, CompanyAccessError } from "@/lib/company-access";
 import { getAnthropicClient } from "@/lib/anthropic";
 import { supabase } from "@/lib/supabase";
 import mammoth from "mammoth";
@@ -160,7 +161,7 @@ export const maxDuration = 60;
 
 export async function GET(request: NextRequest) {
   try {
-    const { userId } = await requireAuth();
+    const { userId, role } = await requireAuth();
     const { searchParams } = new URL(request.url);
     const companyId = searchParams.get("companyId");
 
@@ -171,10 +172,14 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const memory = await getMemory(userId, companyId);
+    const { effectiveUserId } = await resolveCompanyAccess(userId, role, companyId);
+    const memory = await getMemory(effectiveUserId, companyId);
     return NextResponse.json(memory);
   } catch (e) {
     if (e instanceof AuthError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
+    if (e instanceof CompanyAccessError) {
       return NextResponse.json({ error: e.message }, { status: e.status });
     }
     console.error(e);
@@ -187,7 +192,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = await requireAuth();
+    const { userId, role } = await requireAuth();
     const body = await request.json();
     const { companyId } = body as { companyId?: string };
 
@@ -197,6 +202,8 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    const { effectiveUserId } = await resolveCompanyAccess(userId, role, companyId);
 
     if ((body.fileData || body.storagePath) && body.fileType) {
       const { name, fileData, storagePath, fileType, mimeType } = body as {
@@ -280,7 +287,7 @@ export async function POST(request: NextRequest) {
       }
 
       const contentWithMetadata = `[Extracted from ${sourceType}]\n\n${extractedText}`;
-      const file = await addToMemory(userId, companyId, name, contentWithMetadata);
+      const file = await addToMemory(effectiveUserId, companyId, name, contentWithMetadata);
       return NextResponse.json(file);
 
     } else {
@@ -293,11 +300,14 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const file = await addToMemory(userId, companyId, name, content);
+      const file = await addToMemory(effectiveUserId, companyId, name, content);
       return NextResponse.json(file);
     }
   } catch (e) {
     if (e instanceof AuthError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
+    if (e instanceof CompanyAccessError) {
       return NextResponse.json({ error: e.message }, { status: e.status });
     }
     console.error(e);
@@ -310,7 +320,7 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const { userId } = await requireAuth();
+    const { userId, role } = await requireAuth();
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
     const companyId = searchParams.get("companyId");
@@ -329,7 +339,8 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const removed = await removeFromMemory(userId, companyId, id);
+    const { effectiveUserId } = await resolveCompanyAccess(userId, role, companyId);
+    const removed = await removeFromMemory(effectiveUserId, companyId, id);
 
     if (!removed) {
       return NextResponse.json(
@@ -341,6 +352,9 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (e) {
     if (e instanceof AuthError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
+    if (e instanceof CompanyAccessError) {
       return NextResponse.json({ error: e.message }, { status: e.status });
     }
     console.error(e);

@@ -13,13 +13,13 @@ interface Props {
 export default function CompanySelector({ onSelect }: Props) {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [role, setRole] = useState<string>("");
 
   useEffect(() => {
     loadCompanies();
     fetch("/api/auth/me")
       .then((res) => res.ok ? res.json() : null)
-      .then((data) => { if (data?.role === "admin") setIsAdmin(true); })
+      .then((data) => { if (data?.role) setRole(data.role); })
       .catch(() => {});
   }, []);
 
@@ -29,11 +29,6 @@ export default function CompanySelector({ onSelect }: Props) {
       const res = await fetch("/api/companies");
       const data = await res.json();
       if (res.ok && data.companies) {
-        // Auto-select if user has exactly 1 company
-        if (data.companies.length === 1) {
-          onSelect(data.companies[0]);
-          return;
-        }
         setCompanies(data.companies);
       }
     } catch {
@@ -43,10 +38,17 @@ export default function CompanySelector({ onSelect }: Props) {
     }
   }
 
+  // Auto-select single company for clients only
+  useEffect(() => {
+    if (!loading && companies.length === 1 && role === "client") {
+      onSelect(companies[0]);
+    }
+  }, [loading, companies, role, onSelect]);
+
   return (
     <main className="min-h-screen bg-gray-50 dark:bg-slate-900">
       <div className="absolute top-4 right-4 flex items-center gap-1">
-        {isAdmin && (
+        {role === "admin" && (
           <Link
             href="/admin"
             className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:text-brand-primary hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
@@ -98,9 +100,14 @@ export default function CompanySelector({ onSelect }: Props) {
                   </div>
                   <h2 className="text-xl font-semibold text-slate-900 dark:text-white mb-1">
                     {company.name}
+                    {company.isAssigned && (
+                      <span className="ml-2 text-xs font-medium px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">
+                        assigned
+                      </span>
+                    )}
                   </h2>
                   <p className="text-sm text-slate-500 dark:text-slate-400">
-                    Click to manage content
+                    {company.isAssigned ? "Assigned to you" : "Click to manage content"}
                   </p>
                 </div>
               </button>

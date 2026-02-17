@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/auth-helpers";
+import { resolveCompanyAccess, CompanyAccessError } from "@/lib/company-access";
 import { sendSlackNotification } from "@/lib/slack";
 import { createAsanaTask } from "@/lib/asana";
 import { isDriveEnabled, getDriveClient, ensureFolder, DriveAuthError } from "@/lib/drive";
@@ -123,7 +124,7 @@ function buildAsanaNotes(body: SendBody, driveLink?: string): string {
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = await requireAuth();
+    const { userId, role } = await requireAuth();
 
     const body = (await request.json()) as SendBody;
     const target: Target = body.target === "filming" ? "filming" : "editor";
@@ -134,6 +135,13 @@ export async function POST(request: NextRequest) {
         { error: "Missing required fields" },
         { status: 400 }
       );
+    }
+
+    // Resolve company access for assigned agents
+    let effectiveUserId = userId;
+    if (body.companyId) {
+      const access = await resolveCompanyAccess(userId, role, body.companyId);
+      effectiveUserId = access.effectiveUserId;
     }
 
     // Drive link: only include for targets that want it (editor yes, filming no)
@@ -158,7 +166,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Look up per-company Slack settings (falls back to env vars)
-    const company = body.companyId ? await getCompanyById(userId, body.companyId) : null;
+    const company = body.companyId ? await getCompanyById(effectiveUserId, body.companyId) : null;
 
     // Build Slack message
     const slackBlocks = buildSlackBlocks(body, config, driveLink);
@@ -191,6 +199,9 @@ export async function POST(request: NextRequest) {
     );
   } catch (e) {
     if (e instanceof AuthError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
+    if (e instanceof CompanyAccessError) {
       return NextResponse.json({ error: e.message }, { status: e.status });
     }
     console.error("Send to editor error:", e);

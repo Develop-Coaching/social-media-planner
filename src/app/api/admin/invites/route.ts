@@ -23,11 +23,11 @@ export async function POST(request: NextRequest) {
     const { userId } = await requireAdmin();
     const { email, role, sendEmail } = (await request.json()) as {
       email?: string;
-      role?: "admin" | "user";
+      role?: "admin" | "agent" | "client";
       sendEmail?: boolean;
     };
 
-    const invite = await createInvite(email || null, role || "user", userId);
+    const invite = await createInvite(email || null, role || "client", userId);
 
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
     const inviteUrl = `${appUrl}/signup/${invite.token}`;

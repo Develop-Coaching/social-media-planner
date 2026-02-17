@@ -9,12 +9,13 @@ import {
 } from "@/lib/saved-content";
 import { saveAllImages } from "@/lib/images";
 import { requireAuth, AuthError } from "@/lib/auth-helpers";
+import { resolveCompanyAccess, CompanyAccessError } from "@/lib/company-access";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   try {
-    const { userId } = await requireAuth();
+    const { userId, role } = await requireAuth();
     const { searchParams } = new URL(request.url);
     const companyId = searchParams.get("companyId");
 
@@ -25,10 +26,14 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const items = await getSavedContent(userId, companyId);
+    const { effectiveUserId } = await resolveCompanyAccess(userId, role, companyId);
+    const items = await getSavedContent(effectiveUserId, companyId);
     return NextResponse.json({ items });
   } catch (e) {
     if (e instanceof AuthError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
+    if (e instanceof CompanyAccessError) {
       return NextResponse.json({ error: e.message }, { status: e.status });
     }
     console.error(e);
@@ -41,7 +46,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = await requireAuth();
+    const { userId, role } = await requireAuth();
     const body = await request.json();
     const { companyId, name, theme, content, images } = body as {
       companyId?: string;
@@ -65,16 +70,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const item = await addSavedContent(userId, companyId, name, theme, content);
+    const { effectiveUserId } = await resolveCompanyAccess(userId, role, companyId);
+    const item = await addSavedContent(effectiveUserId, companyId, name, theme, content);
 
     // If images were provided, bulk-save them scoped to the new saved content
     if (images && Object.keys(images).length > 0) {
-      await saveAllImages(userId, companyId, item.id, images);
+      await saveAllImages(effectiveUserId, companyId, item.id, images);
     }
 
     return NextResponse.json(item);
   } catch (e) {
     if (e instanceof AuthError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
+    if (e instanceof CompanyAccessError) {
       return NextResponse.json({ error: e.message }, { status: e.status });
     }
     console.error(e);
@@ -87,7 +96,7 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const { userId } = await requireAuth();
+    const { userId, role } = await requireAuth();
     const body = await request.json();
     const { companyId, id, content } = body as {
       companyId?: string;
@@ -102,7 +111,8 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    const updated = await updateSavedContent(userId, companyId, id, content);
+    const { effectiveUserId } = await resolveCompanyAccess(userId, role, companyId);
+    const updated = await updateSavedContent(effectiveUserId, companyId, id, content);
 
     if (!updated) {
       return NextResponse.json(
@@ -114,6 +124,9 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (e) {
     if (e instanceof AuthError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
+    if (e instanceof CompanyAccessError) {
       return NextResponse.json({ error: e.message }, { status: e.status });
     }
     console.error(e);
@@ -126,7 +139,7 @@ export async function PUT(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const { userId } = await requireAuth();
+    const { userId, role } = await requireAuth();
     const body = await request.json();
     const { companyId, id } = body as { companyId?: string; id?: string };
 
@@ -137,7 +150,8 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const updated = await markCompleted(userId, companyId, id);
+    const { effectiveUserId } = await resolveCompanyAccess(userId, role, companyId);
+    const updated = await markCompleted(effectiveUserId, companyId, id);
 
     if (!updated) {
       return NextResponse.json(
@@ -151,6 +165,9 @@ export async function PATCH(request: NextRequest) {
     if (e instanceof AuthError) {
       return NextResponse.json({ error: e.message }, { status: e.status });
     }
+    if (e instanceof CompanyAccessError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
     console.error(e);
     return NextResponse.json(
       { error: "Failed to mark content as completed" },
@@ -161,7 +178,7 @@ export async function PATCH(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const { userId } = await requireAuth();
+    const { userId, role } = await requireAuth();
     const { searchParams } = new URL(request.url);
     const companyId = searchParams.get("companyId");
     const id = searchParams.get("id");
@@ -173,7 +190,8 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const deleted = await deleteSavedContent(userId, companyId, id);
+    const { effectiveUserId } = await resolveCompanyAccess(userId, role, companyId);
+    const deleted = await deleteSavedContent(effectiveUserId, companyId, id);
 
     if (!deleted) {
       return NextResponse.json(
@@ -185,6 +203,9 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (e) {
     if (e instanceof AuthError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
+    if (e instanceof CompanyAccessError) {
       return NextResponse.json({ error: e.message }, { status: e.status });
     }
     console.error(e);

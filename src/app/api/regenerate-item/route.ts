@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getContextForAI } from "@/lib/memory";
 import { requireAuth, AuthError } from "@/lib/auth-helpers";
+import { resolveCompanyAccess, CompanyAccessError } from "@/lib/company-access";
 import { getAnthropicClient } from "@/lib/anthropic";
 import { getBalance, deductCredits, logUsage } from "@/lib/credits";
 import { calculateCost, isCreditsEnabled } from "@/lib/pricing";
@@ -21,7 +22,7 @@ const typePrompts: Record<ContentType, string> = {
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = await requireAuth();
+    const { userId, role } = await requireAuth();
     const body = await request.json();
     const { companyId, theme, contentType, currentItem, tone, language } = body as {
       companyId: string;
@@ -40,6 +41,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid contentType" }, { status: 400 });
     }
 
+    const { effectiveUserId } = await resolveCompanyAccess(userId, role, companyId);
+
     // Credit check
     if (isCreditsEnabled()) {
       const balance = await getBalance(userId);
@@ -48,7 +51,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const context = await getContextForAI(userId, companyId);
+    const context = await getContextForAI(effectiveUserId, companyId);
 
     const toneInstruction = tone?.prompt ? `\n\nTONE & STYLE: ${tone.prompt}` : "";
     const languageInstruction = language?.prompt ? `\n\nLANGUAGE: ${language.prompt}` : "";
@@ -133,6 +136,9 @@ Output ONLY valid JSON, no markdown or extra text.`;
     });
   } catch (e) {
     if (e instanceof AuthError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
+    if (e instanceof CompanyAccessError) {
       return NextResponse.json({ error: e.message }, { status: e.status });
     }
     console.error(e);

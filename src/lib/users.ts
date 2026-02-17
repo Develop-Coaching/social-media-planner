@@ -1,12 +1,13 @@
 import bcrypt from "bcryptjs";
 import { supabase } from "@/lib/supabase";
+import type { UserRole } from "@/lib/auth";
 
 export interface User {
   id: string;
   username: string;
   displayName: string;
   passwordHash: string;
-  role: "admin" | "user";
+  role: UserRole;
   createdAt: string;
   createdBy: string | null;
   onboardingCompleted: boolean;
@@ -69,7 +70,7 @@ export async function createUser(
   username: string,
   displayName: string,
   password: string,
-  role: "admin" | "user",
+  role: UserRole,
   createdBy: string | null
 ): Promise<Omit<User, "passwordHash">> {
   const existing = await getUserByUsername(username);
@@ -127,6 +128,9 @@ export async function deleteUser(id: string): Promise<boolean> {
 
   // Delete drive tokens (separate table, no cascade)
   await supabase.from("drive_tokens").delete().eq("user_id", id);
+
+  // Remove company assignments where this user is an agent
+  await supabase.from("company_assignments").delete().eq("agent_user_id", id);
 
   // Delete the user
   const { error } = await supabase.from("users").delete().eq("id", id);

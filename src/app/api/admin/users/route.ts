@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
       username?: string;
       displayName?: string;
       password?: string;
-      role?: "admin" | "user";
+      role?: "admin" | "agent" | "client";
     };
 
     if (!username || !displayName || !password) {
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
       username,
       displayName,
       password,
-      role || "user",
+      role || "client",
       admin.userId
     );
 

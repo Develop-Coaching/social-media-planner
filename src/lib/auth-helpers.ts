@@ -29,6 +29,14 @@ export async function requireAdmin(): Promise<TokenPayload> {
   return payload;
 }
 
+export async function requireAgentOrAdmin(): Promise<TokenPayload> {
+  const payload = await requireAuth();
+  if (payload.role !== "admin" && payload.role !== "agent") {
+    throw new AuthError("Agent or admin access required", 403);
+  }
+  return payload;
+}
+
 export class AuthError extends Error {
   status: number;
   constructor(message: string, status: number) {

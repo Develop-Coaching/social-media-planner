@@ -124,7 +124,7 @@ function RemoveButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-function PostingDatePicker({ itemId, date, onChange }: { itemId: string; date?: string; onChange?: (itemId: string, date: string | null) => void }) {
+function PostingDatePicker({ itemId, date, onChange, isDone, onToggleDone }: { itemId: string; date?: string; onChange?: (itemId: string, date: string | null) => void; isDone?: boolean; onToggleDone?: () => void }) {
   if (!onChange) return null;
   return (
     <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
@@ -150,6 +150,22 @@ function PostingDatePicker({ itemId, date, onChange }: { itemId: string; date?: 
       )}
       {!date && (
         <span className="text-xs text-slate-400 dark:text-slate-500">No posting date</span>
+      )}
+      {onToggleDone && (
+        <button
+          onClick={onToggleDone}
+          className={`ml-auto flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+            isDone
+              ? "bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-700"
+              : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-600 hover:border-green-300 hover:text-green-600 dark:hover:border-green-600 dark:hover:text-green-400"
+          }`}
+          title={isDone ? "Mark as not done" : "Mark as done"}
+        >
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+          {isDone ? "Done" : "Done"}
+        </button>
       )}
     </div>
   );
@@ -280,6 +296,17 @@ export default function ContentResults({
   const pendingDriveUploadRef = useRef<string | null>(null);
   const [driveBulkUploading, setDriveBulkUploading] = useState(false);
   const [driveBulkFolderPicker, setDriveBulkFolderPicker] = useState(false);
+
+  // Done items state (per content item)
+  const [doneItems, setDoneItems] = useState<Set<string>>(new Set());
+  const toggleDone = useCallback((itemId: string) => {
+    setDoneItems((prev) => {
+      const next = new Set(prev);
+      if (next.has(itemId)) next.delete(itemId);
+      else next.add(itemId);
+      return next;
+    });
+  }, []);
 
   // Send to Editor / Send for Filming state
   const [sentToEditor, setSentToEditor] = useState<Set<string>>(new Set());
@@ -1090,6 +1117,32 @@ export default function ContentResults({
     setDriveFolderPickerKey(key);
   }
 
+  function getDriveFileName(key: string): string {
+    const sanitize = (s: string) => s.replace(/[^a-zA-Z0-9 _-]/g, "").trim().replace(/\s+/g, "-").slice(0, 60);
+    const match = key.match(/^(post|article|quote|yt|carousel)-(\d+)(?:-slide-(\d+))?$/);
+    if (!match) return `${key}.png`;
+    const [, type, idxStr, slideStr] = match;
+    const idx = parseInt(idxStr, 10);
+    if (type === "post" && content.posts[idx]) {
+      return `${sanitize(content.posts[idx].title) || `post-${idx + 1}`}.png`;
+    }
+    if (type === "article" && content.linkedinArticles[idx]) {
+      return `${sanitize(content.linkedinArticles[idx].title) || `article-${idx + 1}`}.png`;
+    }
+    if (type === "quote" && content.quotesForX[idx]) {
+      return `${sanitize(content.quotesForX[idx].quote.slice(0, 40)) || `quote-${idx + 1}`}.png`;
+    }
+    if (type === "yt" && content.youtube[idx]) {
+      return `${sanitize(content.youtube[idx].title) || `youtube-${idx + 1}`}-thumbnail.png`;
+    }
+    if (type === "carousel" && content.carousels[idx]) {
+      const slide = slideStr ? parseInt(slideStr, 10) : 0;
+      const slideTitle = content.carousels[idx].slides[slide]?.title;
+      return `${sanitize(content.carousels[idx].slides[0]?.title || `carousel-${idx + 1}`)}-slide-${slide + 1}${slideTitle ? `-${sanitize(slideTitle)}` : ""}.png`;
+    }
+    return `${key}.png`;
+  }
+
   async function handleDriveSaveToFolder(key: string, targetFolderId: string) {
     setDriveSavingKey(key);
     try {
@@ -1102,7 +1155,7 @@ export default function ContentResults({
           savedContentId: currentSavedId,
           targetFolderId,
           imageKey: key,
-          fileName: `${key}.png`,
+          fileName: getDriveFileName(key),
         }),
       });
       const data = await res.json();
@@ -1143,25 +1196,25 @@ export default function ContentResults({
       const allImages: { key: string; fileName: string }[] = [];
       content.posts.forEach((_, i) => {
         const key = `post-${i}`;
-        if (images[key]) allImages.push({ key, fileName: `post-${i + 1}.png` });
+        if (images[key]) allImages.push({ key, fileName: getDriveFileName(key) });
       });
       content.linkedinArticles.forEach((_, i) => {
         const key = `article-${i}`;
-        if (images[key]) allImages.push({ key, fileName: `article-${i + 1}-hero.png` });
+        if (images[key]) allImages.push({ key, fileName: getDriveFileName(key) });
       });
       content.carousels.forEach((c, i) => {
         c.slides.forEach((_, j) => {
           const key = `carousel-${i}-slide-${j}`;
-          if (images[key]) allImages.push({ key, fileName: `carousel-${i + 1}-slide-${j + 1}.png` });
+          if (images[key]) allImages.push({ key, fileName: getDriveFileName(key) });
         });
       });
       content.quotesForX.forEach((_, i) => {
         const key = `quote-${i}`;
-        if (images[key]) allImages.push({ key, fileName: `quote-${i + 1}.png` });
+        if (images[key]) allImages.push({ key, fileName: getDriveFileName(key) });
       });
       content.youtube.forEach((_, i) => {
         const key = `yt-${i}`;
-        if (images[key]) allImages.push({ key, fileName: `youtube-${i + 1}-thumbnail.png` });
+        if (images[key]) allImages.push({ key, fileName: getDriveFileName(key) });
       });
 
       if (allImages.length === 0) {
@@ -1655,7 +1708,7 @@ export default function ContentResults({
             const isEditing = editingKey === key;
             const isFresh = freshlyRegenerated.has(key);
             return (
-              <div key={i} className={`mb-4 p-5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700 transition-all ${freshClass(key)}`}>
+              <div key={i} className={`mb-4 p-5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700 transition-all ${freshClass(key)} ${doneItems.has(key) ? "opacity-60 border-green-200 dark:border-green-800" : ""}`}>
                 <div className="flex items-center justify-between mb-3">
                   {renderFreshBadge(key)}
                   <div className={`flex items-center gap-3 ${isFresh ? "" : "ml-auto"}`}>
@@ -1682,7 +1735,7 @@ export default function ContentResults({
                 )}
                 {images[key] && renderImageWithRegenerate(key, p.imagePrompt, `post-${i + 1}.png`)}
                 {renderAlwaysVisiblePrompt(key, p.imagePrompt, (v) => updatePost(i, "imagePrompt", v), undefined, { type: "social media post", text: `${p.title}\n${p.caption}` })}
-                <PostingDatePicker itemId={key} date={postingDates[key]} onChange={onPostingDateChange} />
+                <PostingDatePicker itemId={key} date={postingDates[key]} onChange={onPostingDateChange} isDone={doneItems.has(key)} onToggleDone={() => toggleDone(key)} />
               </div>
             );
           })}
@@ -1712,7 +1765,7 @@ export default function ContentResults({
             const isEditing = editingKey === key;
             const isFresh = freshlyRegenerated.has(key);
             return (
-              <div key={i} className={`mb-4 p-5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700 transition-all ${freshClass(key)}`}>
+              <div key={i} className={`mb-4 p-5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700 transition-all ${freshClass(key)} ${doneItems.has(key) ? "opacity-60 border-green-200 dark:border-green-800" : ""}`}>
                 {r.title && !isEditing && (
                   <h4 className="font-semibold text-slate-800 dark:text-slate-200 mb-2">{r.title}</h4>
                 )}
@@ -1936,7 +1989,7 @@ export default function ContentResults({
                     Link Finished Video from Drive
                   </button>
                 ) : null}
-                <PostingDatePicker itemId={key} date={postingDates[key]} onChange={onPostingDateChange} />
+                <PostingDatePicker itemId={key} date={postingDates[key]} onChange={onPostingDateChange} isDone={doneItems.has(key)} onToggleDone={() => toggleDone(key)} />
               </div>
             );
           })}
@@ -1966,7 +2019,7 @@ export default function ContentResults({
             const isEditing = editingKey === key;
             const isFresh = freshlyRegenerated.has(key);
             return (
-              <div key={i} className={`mb-4 p-5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700 transition-all ${freshClass(key)}`}>
+              <div key={i} className={`mb-4 p-5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700 transition-all ${freshClass(key)} ${doneItems.has(key) ? "opacity-60 border-green-200 dark:border-green-800" : ""}`}>
                 <div className="flex items-center justify-between mb-3">
                   {renderFreshBadge(key)}
                   <div className={`flex items-center gap-3 ${isFresh ? "" : "ml-auto"}`}>
@@ -2002,7 +2055,7 @@ export default function ContentResults({
                 )}
                 {images[key] && renderImageWithRegenerate(key, a.imagePrompt, `article-${i + 1}-hero.png`, "16:9")}
                 {renderAlwaysVisiblePrompt(key, a.imagePrompt, (v) => updateArticle(i, "imagePrompt", v), "16:9", { type: "LinkedIn article hero image", text: `${a.title}\n${a.caption}` })}
-                <PostingDatePicker itemId={key} date={postingDates[key]} onChange={onPostingDateChange} />
+                <PostingDatePicker itemId={key} date={postingDates[key]} onChange={onPostingDateChange} isDone={doneItems.has(key)} onToggleDone={() => toggleDone(key)} />
               </div>
             );
           })}
@@ -2033,7 +2086,7 @@ export default function ContentResults({
             const carouselText = (c.caption ? `Caption:\n${c.caption}\n\n` : "") + c.slides.map((s, j) => `Slide ${j + 1}: ${s.title}\n${s.body}`).join("\n\n");
             const isFresh = freshlyRegenerated.has(key);
             return (
-              <div key={i} className={`mb-4 p-5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700 transition-all ${freshClass(key)}`}>
+              <div key={i} className={`mb-4 p-5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700 transition-all ${freshClass(key)} ${doneItems.has(key) ? "opacity-60 border-green-200 dark:border-green-800" : ""}`}>
                 <div className="flex items-center justify-between mb-3">
                   {renderFreshBadge(key)}
                   <div className={`flex items-center gap-3 ${isFresh ? "" : "ml-auto"}`}>
@@ -2123,7 +2176,7 @@ export default function ContentResults({
                     <p className="text-xs text-slate-500 mt-3 bg-slate-100 dark:bg-slate-800 p-2 rounded-2xl">Style: {c.imagePrompt}</p>
                   </>
                 )}
-                <PostingDatePicker itemId={key} date={postingDates[key]} onChange={onPostingDateChange} />
+                <PostingDatePicker itemId={key} date={postingDates[key]} onChange={onPostingDateChange} isDone={doneItems.has(key)} onToggleDone={() => toggleDone(key)} />
               </div>
             );
           })}
@@ -2153,7 +2206,7 @@ export default function ContentResults({
             const isEditing = editingKey === key;
             const isFresh = freshlyRegenerated.has(key);
             return (
-              <div key={i} className={`mb-4 p-5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700 transition-all ${freshClass(key)}`}>
+              <div key={i} className={`mb-4 p-5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700 transition-all ${freshClass(key)} ${doneItems.has(key) ? "opacity-60 border-green-200 dark:border-green-800" : ""}`}>
                 <div className="flex items-center justify-between mb-3">
                   {renderFreshBadge(key)}
                   <div className={`flex items-center gap-3 ${isFresh ? "" : "ml-auto"}`}>
@@ -2176,7 +2229,7 @@ export default function ContentResults({
                 )}
                 {images[key] && renderImageWithRegenerate(key, q.imagePrompt, `quote-${i + 1}.png`, "1:1")}
                 {renderAlwaysVisiblePrompt(key, q.imagePrompt, (v) => updateQuote(i, "imagePrompt", v), "1:1", { type: "quote card", text: q.quote })}
-                <PostingDatePicker itemId={key} date={postingDates[key]} onChange={onPostingDateChange} />
+                <PostingDatePicker itemId={key} date={postingDates[key]} onChange={onPostingDateChange} isDone={doneItems.has(key)} onToggleDone={() => toggleDone(key)} />
               </div>
             );
           })}
@@ -2206,7 +2259,7 @@ export default function ContentResults({
             const isEditing = editingKey === key;
             const isFresh = freshlyRegenerated.has(key);
             return (
-              <div key={i} className={`mb-4 p-5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700 transition-all ${freshClass(key)}`}>
+              <div key={i} className={`mb-4 p-5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700 transition-all ${freshClass(key)} ${doneItems.has(key) ? "opacity-60 border-green-200 dark:border-green-800" : ""}`}>
                 <div className="flex items-center justify-between mb-3">
                   {renderFreshBadge(key)}
                   <div className={`flex items-center gap-3 ${isFresh ? "" : "ml-auto"}`}>
@@ -2231,7 +2284,7 @@ export default function ContentResults({
                 )}
                 {images[key] && renderImageWithRegenerate(key, y.thumbnailPrompt || "", `youtube-${i + 1}-thumbnail.png`, "16:9")}
                 {renderAlwaysVisiblePrompt(key, y.thumbnailPrompt || "", (v) => updateYoutube(i, "thumbnailPrompt", v), "16:9", { type: "YouTube thumbnail", text: `${y.title}\n${y.script.slice(0, 500)}` })}
-                <PostingDatePicker itemId={`youtube-${i}`} date={postingDates[`youtube-${i}`]} onChange={onPostingDateChange} />
+                <PostingDatePicker itemId={`youtube-${i}`} date={postingDates[`youtube-${i}`]} onChange={onPostingDateChange} isDone={doneItems.has(key)} onToggleDone={() => toggleDone(key)} />
               </div>
             );
           })}

@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create user
-    const user = await createUser(username, displayName, password, invite.role as "admin" | "user", invite.createdBy);
+    const user = await createUser(username, displayName, password, invite.role, invite.createdBy);
 
     // Mark invite as used
     await markInviteUsed(token, user.id);

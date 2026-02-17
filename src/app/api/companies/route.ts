@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCompanies, addCompany, updateCompany, deleteCompany } from "@/lib/companies";
+import { getCompaniesWithAssignments, addCompany, updateCompany, deleteCompany } from "@/lib/companies";
 import { requireAuth, AuthError } from "@/lib/auth-helpers";
+import { resolveCompanyAccess, CompanyAccessError } from "@/lib/company-access";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
     const { userId } = await requireAuth();
-    const companies = await getCompanies(userId);
+    const companies = await getCompaniesWithAssignments(userId);
     return NextResponse.json({ companies });
   } catch (e) {
     if (e instanceof AuthError) {
@@ -69,7 +70,7 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const { userId } = await requireAuth();
+    const { userId, role } = await requireAuth();
     const body = await request.json();
     const { id, ...updates } = body as {
       id: string; name?: string; logo?: string; brandColors?: string[]; fontFamily?: string;
@@ -96,13 +97,17 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: "Invalid font family" }, { status: 400 });
     }
 
-    const updated = await updateCompany(userId, id, updates);
+    const { effectiveUserId } = await resolveCompanyAccess(userId, role, id);
+    const updated = await updateCompany(effectiveUserId, id, updates);
     if (!updated) {
       return NextResponse.json({ error: "Company not found" }, { status: 404 });
     }
     return NextResponse.json(updated);
   } catch (e) {
     if (e instanceof AuthError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
+    if (e instanceof CompanyAccessError) {
       return NextResponse.json({ error: e.message }, { status: e.status });
     }
     console.error("Failed to update company:", e);
@@ -113,7 +118,7 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const { userId } = await requireAuth();
+    const { userId, role } = await requireAuth();
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
 
@@ -124,7 +129,8 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const removed = await deleteCompany(userId, id);
+    const { effectiveUserId } = await resolveCompanyAccess(userId, role, id);
+    const removed = await deleteCompany(effectiveUserId, id);
 
     if (!removed) {
       return NextResponse.json(
@@ -136,6 +142,9 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (e) {
     if (e instanceof AuthError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
+    if (e instanceof CompanyAccessError) {
       return NextResponse.json({ error: e.message }, { status: e.status });
     }
     console.error(e);

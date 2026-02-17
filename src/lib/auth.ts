@@ -22,15 +22,17 @@ export function getSecret(): Uint8Array {
   );
 }
 
+export type UserRole = "admin" | "agent" | "client";
+
 export interface TokenPayload {
   userId: string;
-  role: "admin" | "user";
+  role: UserRole;
   onboardingCompleted?: boolean;
 }
 
 export async function createToken(
   userId: string,
-  role: "admin" | "user",
+  role: UserRole,
   onboardingCompleted = true
 ): Promise<string> {
   return new SignJWT({ userId, role, onboardingCompleted })
@@ -55,9 +57,11 @@ export async function getUserFromToken(token: string): Promise<TokenPayload | nu
     const userId = payload.userId as string | undefined;
     const role = payload.role as string | undefined;
     if (!userId || !role) return null;
+    // Migrate old "user" role JWTs to "client"
+    const normalizedRole = role === "user" ? "client" : role;
     return {
       userId,
-      role: role as "admin" | "user",
+      role: normalizedRole as UserRole,
       onboardingCompleted: payload.onboardingCompleted as boolean | undefined,
     };
   } catch {

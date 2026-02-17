@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/auth-helpers";
+import { resolveCompanyAccess, CompanyAccessError } from "@/lib/company-access";
 import { sendSlackNotification, uploadAndShareImage } from "@/lib/slack";
 import { getImages } from "@/lib/images";
 import { getCompanyById } from "@/lib/companies";
@@ -88,7 +89,7 @@ function buildSlackText(payload: SlackPayload, driveLink?: string): string {
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = await requireAuth();
+    const { userId, role } = await requireAuth();
 
     const body = (await request.json()) as SlackPayload;
 
@@ -99,8 +100,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Resolve company access for assigned agents
+    let effectiveUserId = userId;
+    if (body.companyId) {
+      const access = await resolveCompanyAccess(userId, role, body.companyId);
+      effectiveUserId = access.effectiveUserId;
+    }
+
     // Look up per-company Slack settings (falls back to env vars)
-    const company = body.companyId ? await getCompanyById(userId, body.companyId) : null;
+    const company = body.companyId ? await getCompanyById(effectiveUserId, body.companyId) : null;
 
     // Collect all image keys from the payload
     const imageKeys: string[] = [];
@@ -117,7 +125,7 @@ export async function POST(request: NextRequest) {
     if (body.driveEnabled && body.companyId && imageKeys.length > 0) {
       try {
         const drive = await getDriveClient(userId);
-        const images = await getImages(userId, body.companyId, body.savedContentId || "");
+        const images = await getImages(effectiveUserId, body.companyId, body.savedContentId || "");
         const companyFolder = await ensureFolder(drive, "root", body.companyName);
         const folderName = body.themeName || "Content";
         const targetFolder = await ensureFolder(drive, companyFolder, folderName);
@@ -163,7 +171,7 @@ export async function POST(request: NextRequest) {
       const channelId = company?.slackChannelId || process.env.SLACK_CHANNEL_ID;
 
       if (botToken && channelId && body.companyId && imageKeys.length > 0) {
-        const images = await getImages(userId, body.companyId, body.savedContentId || "");
+        const images = await getImages(effectiveUserId, body.companyId, body.savedContentId || "");
 
         for (const imageKey of imageKeys) {
           const keysToTry = imageKey.startsWith("carousel-")
@@ -192,6 +200,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true, imagesUploaded, driveLink: driveLink || undefined });
   } catch (e) {
     if (e instanceof AuthError) {
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    }
+    if (e instanceof CompanyAccessError) {
       return NextResponse.json({ error: e.message }, { status: e.status });
     }
     console.error("Slack notification error:", e);

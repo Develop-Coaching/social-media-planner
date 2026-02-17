@@ -1,10 +1,11 @@
 import { supabase } from "@/lib/supabase";
+import type { UserRole } from "@/lib/auth";
 
 export interface Invite {
   id: string;
   token: string;
   email: string | null;
-  role: "admin" | "user";
+  role: UserRole;
   createdBy: string;
   createdAt: string;
   expiresAt: string;
@@ -29,7 +30,7 @@ function rowToInvite(row: any): Invite {
 
 export async function createInvite(
   email: string | null,
-  role: "admin" | "user",
+  role: UserRole,
   createdBy: string
 ): Promise<Invite> {
   const token = crypto.randomUUID();
