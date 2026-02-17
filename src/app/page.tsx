@@ -17,6 +17,7 @@ import LogoutButton from "@/components/LogoutButton";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import LowBalanceBanner from "@/components/LowBalanceBanner";
 import BalanceDisplay from "@/components/BalanceDisplay";
+import CompanyAssignments from "@/components/CompanyAssignments";
 import { useToast } from "@/components/ToastProvider";
 import { SkeletonGenerating, ElapsedTimer } from "@/components/Skeleton";
 import { buildBrandCssVars, isLightColor } from "@/lib/brand-theme";
@@ -757,7 +758,7 @@ export default function Home() {
     const colors = selectedCompany?.brandColors;
     let enhanced = prompt;
     if (colors && colors.length > 0) {
-      enhanced += `. The brand colors are ${colors.join(", ")} — use these as a subtle reference for accents and design elements, but do not fill the entire image with these colors`;
+      enhanced += `. Use a color palette inspired by these hex values as subtle accents and design elements (do NOT display the hex codes or color names as visible text in the image): ${colors.join(", ")}`;
     }
     if (characters.length > 0) {
       const charDescs = characters.map((c) => `${c.name}: ${c.description}`).join(". ");
@@ -1198,6 +1199,7 @@ export default function Home() {
   // Compute header text contrast
   const headerTextLight = selectedCompany?.brandColors?.[0] ? isLightColor(selectedCompany.brandColors[0]) : false;
   const isAdmin = currentUser?.role === "admin";
+  const canManageContent = isAdmin || currentUser?.role === "agent";
 
   if (!selectedCompany) {
     return <CompanySelector onSelect={handleSelectCompany} />;
@@ -1267,7 +1269,8 @@ export default function Home() {
           />
         )}
 
-        {/* Brand Settings (admin only) */}
+        {/* Brand Settings (admin + agent only) */}
+        {canManageContent && (
         <section className="mb-8">
           <button
             onClick={() => setShowBrandSettings(!showBrandSettings)}
@@ -1474,11 +1477,19 @@ export default function Home() {
                 onUploadImage={handleUploadCharacterImage}
                 onRemoveImage={handleRemoveCharacterImage}
               />
+
+              <CompanyAssignments
+                companyId={selectedCompany.id}
+                isAssigned={selectedCompany.isAssigned}
+              />
             </div>
           )}
         </section>
+        )}
 
-        <MemoryManager companyId={selectedCompany.id} />
+        {canManageContent && (
+          <MemoryManager companyId={selectedCompany.id} />
+        )}
 
         {savedContent.length > 0 && (
           <section className="mb-8">
@@ -1506,6 +1517,7 @@ export default function Home() {
           </section>
         )}
 
+        {canManageContent && (
         <>
         <ErrorBoundary fallbackTitle="Failed to load theme selector">
           <ThemeSelector
@@ -1590,6 +1602,9 @@ export default function Home() {
           </section>
         )}
 
+        </>
+        )}
+
         {content && (
           <ErrorBoundary fallbackTitle="Failed to render content">
             <>
@@ -1671,10 +1686,10 @@ export default function Home() {
             </>
           </ErrorBoundary>
         )}
-        </>
       </div>
 
-      {/* Keyboard shortcuts help button */}
+      {/* Keyboard shortcuts help button (agent/admin only) */}
+      {canManageContent && (
       <div className="fixed bottom-6 left-6 z-40">
         <div className="relative">
           <button
@@ -1706,6 +1721,7 @@ export default function Home() {
           )}
         </div>
       </div>
+      )}
     </main>
   );
 }
