@@ -5,10 +5,8 @@ import { useRouter } from "next/navigation";
 import ThemeToggle from "@/components/ThemeToggle";
 
 const CONSTRUCTION_TYPES = [
-  "General Contractor", "Electrician", "Plumber", "Roofer", "HVAC",
-  "Landscaper", "Painter", "Flooring", "Concrete & Masonry",
-  "Framing & Carpentry", "Demolition", "Excavation", "Fencing",
-  "Siding & Gutters", "Solar & Renewable Energy", "Other",
+  "Builder", "Electrician", "Plumber", "Roofer", "HVAC",
+  "Decorator", "Carpenter", "Ground works", "Other",
 ];
 
 const TEAM_SIZES = ["Just me", "2-5", "6-15", "16-50", "50+"];

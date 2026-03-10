@@ -4,7 +4,7 @@ import "./globals.css";
 import ToastProvider from "@/components/ToastProvider";
 
 export const metadata: Metadata = {
-  title: "PostPilot — Social content from your memory",
+  title: "Social Post Pro",
   description: "Generate weekly themes, posts, reels, articles, carousels & quotes with Claude + Gemini.",
 };
 

@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
           price_data: {
             currency: "usd",
             product_data: {
-              name: `PostPilot Credits — ${validPackage.label}`,
+              name: `Social Post Pro Credits — ${validPackage.label}`,
               description: `${validPackage.label} credit top-up for AI content generation`,
             },
             unit_amount: packageCents,

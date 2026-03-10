@@ -65,7 +65,7 @@ export default function CompanySelector({ onSelect }: Props) {
       <div className="max-w-3xl mx-auto px-6 py-16">
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold text-brand-primary mb-3">
-            PostPilot
+            Social Post Pro
           </h1>
           <p className="text-slate-600 dark:text-slate-400 text-lg">
             Select a company to get started
