@@ -164,7 +164,7 @@ function PostingDatePicker({ itemId, date, onChange, isDone, onToggleDone }: { i
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
           </svg>
-          {isDone ? "Done" : "Done"}
+          {isDone ? "Done ✓" : "Mark done"}
         </button>
       )}
     </div>
@@ -1727,11 +1727,11 @@ export default function ContentResults({
                     <div className="flex gap-3 mb-3"><CharCount text={p.caption} limit={2200} label="IG" /> <CharCount text={p.caption} limit={3000} label="LinkedIn" /></div>
                   </>
                 ) : (
-                  <>
+                  <div onClick={() => setEditingKey(key)} className="cursor-text rounded-lg p-2 -mx-2 border border-dashed border-transparent hover:border-slate-300 dark:hover:border-slate-600 transition-colors" title="Click to edit">
                     <h4 className="font-semibold text-brand-primary mb-2">{p.title}</h4>
                     <p className="text-slate-800 dark:text-slate-200 whitespace-pre-wrap">{p.caption}</p>
                     <div className="flex gap-3 mt-1"><CharCount text={p.caption} limit={2200} label="IG" /> <CharCount text={p.caption} limit={3000} label="LinkedIn" /></div>
-                  </>
+                  </div>
                 )}
                 {images[key] && renderImageWithRegenerate(key, p.imagePrompt, `post-${i + 1}.png`)}
                 {renderAlwaysVisiblePrompt(key, p.imagePrompt, (v) => updatePost(i, "imagePrompt", v), undefined, { type: "social media post", text: `${p.title}\n${p.caption}` })}
@@ -1842,7 +1842,7 @@ export default function ContentResults({
                     <div className="flex gap-3 mb-3"><CharCount text={r.caption || ""} limit={2200} label="IG" /></div>
                   </>
                 ) : (
-                  <>
+                  <div onClick={() => setEditingKey(key)} className="cursor-text rounded-lg p-2 -mx-2 border border-dashed border-transparent hover:border-slate-300 dark:hover:border-slate-600 transition-colors" title="Click to edit">
                     <p className="text-slate-800 dark:text-slate-200 whitespace-pre-wrap">{r.script}</p>
                     <div className="mt-1"><WordCount text={r.script} label="Script" /></div>
                     {(r.caption || "") && (
@@ -1852,7 +1852,7 @@ export default function ContentResults({
                         <div className="mt-1"><CharCount text={r.caption || ""} limit={2200} label="IG" /></div>
                       </div>
                     )}
-                  </>
+                  </div>
                 )}
                 {/* Raw video — hidden once finished video is linked */}
                 {!r.finishedVideoFileId && (
@@ -2041,7 +2041,7 @@ export default function ContentResults({
                     <div className="mb-3"><WordCount text={a.body} label="Article" /></div>
                   </>
                 ) : (
-                  <>
+                  <div onClick={() => setEditingKey(key)} className="cursor-text rounded-lg p-2 -mx-2 border border-dashed border-transparent hover:border-slate-300 dark:hover:border-slate-600 transition-colors" title="Click to edit">
                     <h4 className="font-semibold text-slate-900 dark:text-white text-lg">{a.title}</h4>
                     {a.caption && (
                       <div className="mt-2 p-3 rounded-lg bg-brand-primary-light border border-brand-primary">
@@ -2051,7 +2051,7 @@ export default function ContentResults({
                     )}
                     <p className="text-slate-700 dark:text-slate-300 mt-3 whitespace-pre-wrap text-sm">{a.body}</p>
                     <div className="mt-1"><WordCount text={a.body} label="Article" /></div>
-                  </>
+                  </div>
                 )}
                 {images[key] && renderImageWithRegenerate(key, a.imagePrompt, `article-${i + 1}-hero.png`, "16:9")}
                 {renderAlwaysVisiblePrompt(key, a.imagePrompt, (v) => updateArticle(i, "imagePrompt", v), "16:9", { type: "LinkedIn article hero image", text: `${a.title}\n${a.caption}` })}
@@ -2152,8 +2152,10 @@ export default function ContentResults({
                       const slideKey = `carousel-${i}-slide-${j}`;
                       return (
                         <div key={j} className="mb-4 pb-4 border-b border-slate-200 dark:border-slate-700 last:border-0 last:pb-0 last:mb-0">
-                          <span className="font-semibold text-slate-800 dark:text-slate-200">{s.title}</span>
-                          <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{s.body}</p>
+                          <div onClick={() => setEditingKey(key)} className="cursor-text rounded-lg p-1 -mx-1 border border-dashed border-transparent hover:border-slate-300 dark:hover:border-slate-600 transition-colors" title="Click to edit">
+                            <span className="font-semibold text-slate-800 dark:text-slate-200">{s.title}</span>
+                            <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{s.body}</p>
+                          </div>
                           {images[slideKey] ? (
                             renderImageWithRegenerate(slideKey, buildCarouselSlidePrompt(c, j), `carousel-${i + 1}-slide-${j + 1}.png`, "1:1")
                           ) : (
@@ -2222,10 +2224,10 @@ export default function ContentResults({
                     <div className="mb-3"><CharCount text={q.quote} limit={280} label="X" /></div>
                   </>
                 ) : (
-                  <>
+                  <div onClick={() => setEditingKey(key)} className="cursor-text rounded-lg p-2 -mx-2 border border-dashed border-transparent hover:border-slate-300 dark:hover:border-slate-600 transition-colors" title="Click to edit">
                     <blockquote className="text-slate-800 dark:text-slate-200 text-lg italic">&ldquo;{q.quote}&rdquo;</blockquote>
                     <div className="mt-1"><CharCount text={q.quote} limit={280} label="X" /></div>
-                  </>
+                  </div>
                 )}
                 {images[key] && renderImageWithRegenerate(key, q.imagePrompt, `quote-${i + 1}.png`, "1:1")}
                 {renderAlwaysVisiblePrompt(key, q.imagePrompt, (v) => updateQuote(i, "imagePrompt", v), "1:1", { type: "quote card", text: q.quote })}
@@ -2276,11 +2278,11 @@ export default function ContentResults({
                     <div className="mb-3"><WordCount text={y.script} label="Script" /></div>
                   </>
                 ) : (
-                  <>
+                  <div onClick={() => setEditingKey(key)} className="cursor-text rounded-lg p-2 -mx-2 border border-dashed border-transparent hover:border-slate-300 dark:hover:border-slate-600 transition-colors" title="Click to edit">
                     <h4 className="font-semibold text-slate-900 dark:text-white text-lg">{y.title}</h4>
                     <p className="text-slate-700 dark:text-slate-300 mt-3 whitespace-pre-wrap text-sm">{y.script}</p>
                     <div className="mt-1"><WordCount text={y.script} label="Script" /></div>
-                  </>
+                  </div>
                 )}
                 {images[key] && renderImageWithRegenerate(key, y.thumbnailPrompt || "", `youtube-${i + 1}-thumbnail.png`, "16:9")}
                 {renderAlwaysVisiblePrompt(key, y.thumbnailPrompt || "", (v) => updateYoutube(i, "thumbnailPrompt", v), "16:9", { type: "YouTube thumbnail", text: `${y.title}\n${y.script.slice(0, 500)}` })}

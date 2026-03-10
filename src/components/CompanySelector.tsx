@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Company } from "@/types";
 import ThemeToggle from "@/components/ThemeToggle";
 import LogoutButton from "@/components/LogoutButton";
+import CompanySetupWizard from "@/components/CompanySetupWizard";
 
 interface Props {
   onSelect: (company: Company) => void;
@@ -14,6 +15,7 @@ export default function CompanySelector({ onSelect }: Props) {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState<string>("");
+  const [showCreateWizard, setShowCreateWizard] = useState(false);
 
   useEffect(() => {
     loadCompanies();
@@ -81,7 +83,43 @@ export default function CompanySelector({ onSelect }: Props) {
           </div>
         ) : companies.length === 0 ? (
           <div className="text-center py-12">
-            <p className="text-slate-500 dark:text-slate-400">No companies found. Please complete onboarding first.</p>
+            {showCreateWizard ? (
+              <CompanySetupWizard
+                onComplete={(company) => {
+                  setShowCreateWizard(false);
+                  onSelect(company);
+                }}
+                onCancel={() => setShowCreateWizard(false)}
+              />
+            ) : (
+              <>
+                <div className="w-16 h-16 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto mb-4">
+                  <svg className="w-8 h-8 text-slate-400 dark:text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                  </svg>
+                </div>
+                {role === "client" ? (
+                  <>
+                    <p className="text-slate-700 dark:text-slate-200 font-medium mb-1">No companies assigned yet</p>
+                    <p className="text-slate-500 dark:text-slate-400 text-sm">Your admin needs to assign a company to your account. Contact them to get set up.</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-slate-700 dark:text-slate-200 font-medium mb-1">No companies yet</p>
+                    <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">Create your first company profile to start generating content.</p>
+                    <button
+                      onClick={() => setShowCreateWizard(true)}
+                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-brand-primary text-white font-medium hover:bg-brand-primary/90 transition-colors text-sm shadow-sm"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      Create Company
+                    </button>
+                  </>
+                )}
+              </>
+            )}
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2">

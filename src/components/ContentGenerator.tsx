@@ -19,6 +19,14 @@ const contentPresets: ContentPreset[] = [
   { id: "written-content", label: "Written Content", counts: { posts: 3, reels: 0, carousels: 0, quotesForX: 5, linkedinArticles: 3, youtube: 2 } },
 ];
 
+function formatCountSummary(counts: ContentCounts): string {
+  const labels: [keyof ContentCounts, string][] = [
+    ["posts", "posts"], ["reels", "reels"], ["carousels", "carousels"],
+    ["quotesForX", "quotes"], ["linkedinArticles", "articles"], ["youtube", "YouTube"],
+  ];
+  return labels.filter(([k]) => counts[k] > 0).map(([k, l]) => `${counts[k]} ${l}`).join(" · ");
+}
+
 function countsMatch(a: ContentCounts, b: ContentCounts): boolean {
   return (
     a.posts === b.posts &&
@@ -95,7 +103,7 @@ export default function ContentGenerator({ selectedTheme, counts, onCountsChange
       });
       const data = await res.json();
       if (!res.ok) {
-        toast(data.error || "Failed to import Google Doc", "error");
+        toast(data.error || "Failed to import Google Doc. Make sure sharing is set to 'Anyone with the link can view'.", "error");
         return;
       }
       onAddCustomTone(gdocName.trim(), data.text);
@@ -103,7 +111,7 @@ export default function ContentGenerator({ selectedTheme, counts, onCountsChange
       setGdocName("");
       setShowCustomForm(false);
     } catch {
-      toast("Failed to import Google Doc", "error");
+      toast("Failed to import Google Doc. Check that sharing is set to 'Anyone with the link can view'.", "error");
     } finally {
       setImportingGdoc(false);
     }
@@ -127,13 +135,16 @@ export default function ContentGenerator({ selectedTheme, counts, onCountsChange
               <button
                 key={preset.id}
                 onClick={() => onCountsChange({ ...preset.counts })}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all border ${
+                className={`px-3 py-2 rounded-xl text-xs font-medium transition-all border flex flex-col items-center gap-0.5 ${
                   activePresetId === preset.id
                     ? "bg-brand-primary text-white border-brand-primary shadow-md"
                     : "bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-600 hover:border-brand-primary hover:text-brand-primary"
                 }`}
               >
-                {preset.label}
+                <span>{preset.label}</span>
+                <span className={`text-[10px] font-normal ${activePresetId === preset.id ? "text-white/75" : "text-slate-400 dark:text-slate-500"}`}>
+                  {formatCountSummary(preset.counts)}
+                </span>
               </button>
             ))}
 
@@ -141,22 +152,24 @@ export default function ContentGenerator({ selectedTheme, counts, onCountsChange
               <button
                 key={preset.id}
                 onClick={() => onCountsChange({ ...preset.counts })}
-                className={`group relative px-3 py-1.5 rounded-full text-xs font-medium transition-all border ${
+                className={`relative px-3 py-2 rounded-xl text-xs font-medium transition-all border flex flex-col items-center gap-0.5 ${
                   activePresetId === preset.id
                     ? "bg-indigo-600 text-white border-indigo-600 shadow-md"
                     : "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-600 hover:border-indigo-400 dark:hover:border-indigo-500"
                 }`}
-                title={`${preset.label}: ${preset.counts.posts}P ${preset.counts.reels}R ${preset.counts.carousels}C ${preset.counts.quotesForX}Q ${preset.counts.linkedinArticles}A ${preset.counts.youtube}Y`}
               >
-                {preset.label}
+                <span>{preset.label}</span>
+                <span className={`text-[10px] font-normal ${activePresetId === preset.id ? "text-white/75" : "text-indigo-400 dark:text-indigo-500"}`}>
+                  {formatCountSummary(preset.counts)}
+                </span>
                 <span
                   onClick={(e) => {
                     e.stopPropagation();
                     onDeleteCustomPreset(preset.id);
                   }}
-                  className="absolute -top-1.5 -right-1.5 hidden group-hover:flex items-center justify-center w-4 h-4 rounded-full bg-red-500 text-white text-[10px] leading-none cursor-pointer hover:bg-red-600"
+                  className="absolute -top-1.5 -right-1.5 flex items-center justify-center w-4 h-4 rounded-full bg-slate-300 dark:bg-slate-600 text-slate-500 dark:text-slate-400 text-[10px] leading-none cursor-pointer hover:bg-red-500 hover:text-white transition-colors"
                 >
-                  x
+                  ×
                 </span>
               </button>
             ))}
@@ -240,7 +253,7 @@ export default function ContentGenerator({ selectedTheme, counts, onCountsChange
               <button
                 key={tone.id}
                 onClick={() => onToneChange(tone)}
-                className={`group relative px-3 py-2 rounded-full text-sm font-medium transition-all border ${
+                className={`relative px-3 py-2 rounded-full text-sm font-medium transition-all border ${
                   selectedTone.id === tone.id
                     ? "bg-teal-600 text-white border-teal-600 shadow-sm"
                     : "bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 border-teal-300 dark:border-teal-600 hover:border-teal-400 dark:hover:border-teal-500"
@@ -253,9 +266,9 @@ export default function ContentGenerator({ selectedTheme, counts, onCountsChange
                     e.stopPropagation();
                     onDeleteCustomTone(tone.id);
                   }}
-                  className="absolute -top-1.5 -right-1.5 hidden group-hover:flex items-center justify-center w-4 h-4 rounded-full bg-red-500 text-white text-[10px] leading-none cursor-pointer hover:bg-red-600"
+                  className="absolute -top-1.5 -right-1.5 flex items-center justify-center w-4 h-4 rounded-full bg-slate-300 dark:bg-slate-600 text-slate-500 dark:text-slate-400 text-[10px] leading-none cursor-pointer hover:bg-red-500 hover:text-white transition-colors"
                 >
-                  x
+                  ×
                 </span>
               </button>
             ))}

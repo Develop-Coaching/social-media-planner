@@ -44,6 +44,9 @@ export default function AdminPage() {
   // Delete confirmation
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
+  // Revoke invite confirmation
+  const [revokingId, setRevokingId] = useState<string | null>(null);
+
   // Invites
   const [invites, setInvites] = useState<InviteInfo[]>([]);
   const [showInviteForm, setShowInviteForm] = useState(false);
@@ -180,10 +183,12 @@ export default function AdminPage() {
     try {
       const res = await fetch(`/api/admin/invites?id=${id}`, { method: "DELETE" });
       if (res.ok) {
-        setInvites((prev) => prev.filter((inv) => inv.id !== id));
+        await loadInvites();
       }
     } catch {
       // ignore
+    } finally {
+      setRevokingId(null);
     }
   }
 
@@ -373,15 +378,33 @@ export default function AdminPage() {
                       Expires {new Date(inv.expiresAt).toLocaleDateString()}
                     </p>
                   </div>
-                  <button
-                    onClick={() => handleRevokeInvite(inv.id)}
-                    className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
-                    title="Revoke invite"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
+                  {revokingId === inv.id ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-red-600 dark:text-red-400">Revoke?</span>
+                      <button
+                        onClick={() => handleRevokeInvite(inv.id)}
+                        className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-medium hover:bg-red-700 transition-colors"
+                      >
+                        Yes
+                      </button>
+                      <button
+                        onClick={() => setRevokingId(null)}
+                        className="px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-medium hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
+                      >
+                        No
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setRevokingId(inv.id)}
+                      className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
+                      title="Revoke invite"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
@@ -464,7 +487,7 @@ export default function AdminPage() {
                       type="password"
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
-                      placeholder="Min 4 characters"
+                      placeholder="Min 8 characters"
                       className="w-full rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-2.5 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none text-sm"
                     />
                   </div>
