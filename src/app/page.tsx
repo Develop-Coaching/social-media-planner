@@ -1209,7 +1209,7 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-gray-50 dark:bg-slate-900">
       <header className="bg-brand-primary">
-        <div className={`max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 ${headerTextLight ? "text-slate-900" : "text-white"}`}>
+        <div className={`px-4 sm:px-6 lg:px-10 py-4 sm:py-6 ${headerTextLight ? "text-slate-900" : "text-white"}`}>
           <div className="flex items-center gap-2 mb-3 sm:mb-4">
             <button
               onClick={() => setSidebarOpen(true)}
@@ -1293,7 +1293,7 @@ export default function Home() {
         />
       )}
 
-      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-24 lg:flex lg:gap-8 lg:items-start">
+      <div className="px-4 sm:px-6 lg:px-10 py-6 pb-24 lg:flex lg:gap-8 lg:items-start">
         {/* Sidebar — fixed drawer on mobile, always visible on desktop */}
         <aside className={`fixed inset-y-0 left-0 z-40 w-80 bg-white dark:bg-slate-900 shadow-2xl overflow-y-auto transition-transform duration-300 ease-in-out lg:relative lg:inset-auto lg:z-auto lg:shadow-none lg:bg-transparent lg:overflow-visible lg:translate-x-0 lg:w-72 xl:w-80 lg:flex-shrink-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
           {/* Mobile close button */}
