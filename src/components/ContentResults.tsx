@@ -124,9 +124,13 @@ function RemoveButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-function PostingDatePicker({ itemId, date, onChange, isDone, onToggleDone }: { itemId: string; date?: string; onChange?: (itemId: string, date: string | null) => void; isDone?: boolean; onToggleDone?: () => void }) {
+function PostingDatePicker({ itemId, date, onChange, isDone, onToggleDone, postingDates }: { itemId: string; date?: string; onChange?: (itemId: string, date: string | null) => void; isDone?: boolean; onToggleDone?: () => void; postingDates?: Record<string, string> }) {
   if (!onChange) return null;
   const maxDate = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+  // Count how many OTHER items are on the same date
+  const othersOnDate = date && postingDates
+    ? Object.entries(postingDates).filter(([id, d]) => d === date && id !== itemId).length
+    : 0;
   return (
     <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
       <svg className="w-4 h-4 text-slate-400 dark:text-slate-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -137,8 +141,17 @@ function PostingDatePicker({ itemId, date, onChange, isDone, onToggleDone }: { i
         value={date || ""}
         max={maxDate}
         onChange={(e) => onChange(itemId, e.target.value || null)}
-        className="text-sm rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-2 py-1 text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-brand-primary focus:outline-none"
+        className={`text-sm rounded-full border-0 px-2 py-1 text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-brand-primary focus:outline-none ${
+          othersOnDate > 0
+            ? "bg-amber-50 dark:bg-amber-900/30 ring-1 ring-amber-300 dark:ring-amber-700"
+            : "bg-indigo-50/60 dark:bg-slate-800/80"
+        }`}
       />
+      {date && othersOnDate > 0 && (
+        <span className="text-[11px] font-medium text-amber-600 dark:text-amber-400 whitespace-nowrap" title={`${othersOnDate} other item${othersOnDate > 1 ? "s" : ""} scheduled for this date`}>
+          +{othersOnDate} on this day
+        </span>
+      )}
       {date && (
         <button
           onClick={() => onChange(itemId, null)}
@@ -1869,7 +1882,7 @@ export default function ContentResults({
                 )}
                 {images[key] && renderImageWithRegenerate(key, p.imagePrompt, `post-${i + 1}.png`)}
                 {renderAlwaysVisiblePrompt(key, p.imagePrompt, (v) => updatePost(i, "imagePrompt", v), undefined, { type: "social media post", text: `${p.title}\n${p.caption}` })}
-                <PostingDatePicker itemId={key} date={postingDates[key]} onChange={onPostingDateChange} isDone={doneItems.has(key)} onToggleDone={() => toggleDone(key)} />
+                <PostingDatePicker itemId={key} date={postingDates[key]} onChange={onPostingDateChange} isDone={doneItems.has(key)} onToggleDone={() => toggleDone(key)} postingDates={postingDates} />
               </div>
             );
           })}
@@ -2123,7 +2136,7 @@ export default function ContentResults({
                     Link Finished Video from Drive
                   </button>
                 ) : null}
-                <PostingDatePicker itemId={key} date={postingDates[key]} onChange={onPostingDateChange} isDone={doneItems.has(key)} onToggleDone={() => toggleDone(key)} />
+                <PostingDatePicker itemId={key} date={postingDates[key]} onChange={onPostingDateChange} isDone={doneItems.has(key)} onToggleDone={() => toggleDone(key)} postingDates={postingDates} />
               </div>
             );
           })}
@@ -2189,7 +2202,7 @@ export default function ContentResults({
                 )}
                 {images[key] && renderImageWithRegenerate(key, a.imagePrompt, `article-${i + 1}-hero.png`, "16:9")}
                 {renderAlwaysVisiblePrompt(key, a.imagePrompt, (v) => updateArticle(i, "imagePrompt", v), "16:9", { type: "LinkedIn article hero image", text: `${a.title}\n${a.caption}` })}
-                <PostingDatePicker itemId={key} date={postingDates[key]} onChange={onPostingDateChange} isDone={doneItems.has(key)} onToggleDone={() => toggleDone(key)} />
+                <PostingDatePicker itemId={key} date={postingDates[key]} onChange={onPostingDateChange} isDone={doneItems.has(key)} onToggleDone={() => toggleDone(key)} postingDates={postingDates} />
               </div>
             );
           })}
@@ -2312,7 +2325,7 @@ export default function ContentResults({
                     <p className="text-xs text-slate-500 mt-3 bg-slate-100 dark:bg-slate-800 p-2 rounded-2xl">Style: {c.imagePrompt}</p>
                   </>
                 )}
-                <PostingDatePicker itemId={key} date={postingDates[key]} onChange={onPostingDateChange} isDone={doneItems.has(key)} onToggleDone={() => toggleDone(key)} />
+                <PostingDatePicker itemId={key} date={postingDates[key]} onChange={onPostingDateChange} isDone={doneItems.has(key)} onToggleDone={() => toggleDone(key)} postingDates={postingDates} />
               </div>
             );
           })}
@@ -2365,7 +2378,7 @@ export default function ContentResults({
                 )}
                 {images[key] && renderImageWithRegenerate(key, q.imagePrompt, `quote-${i + 1}.png`, "1:1")}
                 {renderAlwaysVisiblePrompt(key, q.imagePrompt, (v) => updateQuote(i, "imagePrompt", v), "1:1", { type: "quote card", text: q.quote })}
-                <PostingDatePicker itemId={key} date={postingDates[key]} onChange={onPostingDateChange} isDone={doneItems.has(key)} onToggleDone={() => toggleDone(key)} />
+                <PostingDatePicker itemId={key} date={postingDates[key]} onChange={onPostingDateChange} isDone={doneItems.has(key)} onToggleDone={() => toggleDone(key)} postingDates={postingDates} />
               </div>
             );
           })}
@@ -2420,7 +2433,7 @@ export default function ContentResults({
                 )}
                 {images[key] && renderImageWithRegenerate(key, y.thumbnailPrompt || "", `youtube-${i + 1}-thumbnail.png`, "16:9")}
                 {renderAlwaysVisiblePrompt(key, y.thumbnailPrompt || "", (v) => updateYoutube(i, "thumbnailPrompt", v), "16:9", { type: "YouTube thumbnail", text: `${y.title}\n${y.script.slice(0, 500)}` })}
-                <PostingDatePicker itemId={`youtube-${i}`} date={postingDates[`youtube-${i}`]} onChange={onPostingDateChange} isDone={doneItems.has(key)} onToggleDone={() => toggleDone(key)} />
+                <PostingDatePicker itemId={`youtube-${i}`} date={postingDates[`youtube-${i}`]} onChange={onPostingDateChange} isDone={doneItems.has(key)} onToggleDone={() => toggleDone(key)} postingDates={postingDates} />
               </div>
             );
           })}
