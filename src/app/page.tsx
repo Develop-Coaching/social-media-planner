@@ -1209,7 +1209,7 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-gray-50 dark:bg-slate-900">
       <header className="bg-brand-primary">
-        <div className={`px-4 sm:px-6 lg:px-10 py-4 sm:py-6 ${headerTextLight ? "text-slate-900" : "text-white"}`}>
+        <div className={`max-w-4xl mx-auto px-6 py-6 ${headerTextLight ? "text-slate-900" : "text-white"}`}>
           <div className="flex items-center gap-2 mb-3 sm:mb-4">
             <button
               onClick={() => setSidebarOpen(true)}
@@ -1293,475 +1293,489 @@ export default function Home() {
         />
       )}
 
-      <div className="px-4 sm:px-6 lg:px-10 py-6 pb-24 lg:flex lg:gap-8 lg:items-start">
-        {/* Sidebar — fixed drawer on mobile, always visible on desktop */}
-        <aside className={`fixed inset-y-0 left-0 z-40 w-80 bg-white dark:bg-slate-900 shadow-2xl overflow-y-auto transition-transform duration-300 ease-in-out lg:relative lg:inset-auto lg:z-auto lg:shadow-none lg:bg-transparent lg:overflow-visible lg:translate-x-0 lg:w-72 xl:w-80 lg:flex-shrink-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
-          {/* Mobile close button */}
-          <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700 sticky top-0 bg-white dark:bg-slate-900 z-10 lg:hidden">
-            <span className="font-semibold text-slate-800 dark:text-slate-200 text-sm truncate pr-2">{selectedCompany.name}</span>
-            <button
-              onClick={() => setSidebarOpen(false)}
-              className="p-2 rounded-lg text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex-shrink-0"
-              aria-label="Close menu"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-          <div className="p-4 pt-6 lg:p-0 lg:pt-2">
-
-        {/* Brand Settings (admin + agent only) */}
-        {canManageContent && (
-        <section className="mb-8">
-          <button
-            onClick={() => setShowBrandSettings(!showBrandSettings)}
-            className="flex items-center gap-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
-          >
-            <svg className={`w-4 h-4 transition-transform ${showBrandSettings ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-            Brand Settings
-            {(selectedCompany.logo || (selectedCompany.brandColors && selectedCompany.brandColors.length > 0) || selectedCompany.fontFamily || characters.length > 0 || selectedCompany.slackWebhookUrl || selectedCompany.slackEditorWebhookUrl) && (
-              <span className="w-2 h-2 rounded-full bg-green-500" />
-            )}
-          </button>
-          {showBrandSettings && (
-            <div className="mt-3 rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-sm border border-slate-100 dark:border-slate-700">
-              <div className="grid grid-cols-1 gap-6">
-                {/* Logo */}
-                <div>
-                  <h4 className="font-medium text-slate-700 dark:text-slate-300 mb-3">Logo</h4>
-                  {selectedCompany.logo ? (
-                    <div className="flex items-center gap-4">
-                      <img src={selectedCompany.logo} alt="Logo" className="w-16 h-16 rounded-lg object-contain border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-1" />
-                      <button
-                        onClick={() => updateCompanyBrand({ logo: "" })}
-                        className="text-sm text-red-500 hover:text-red-700 dark:hover:text-red-400 font-medium"
-                      >
-                        Remove
-                      </button>
+      {(() => {
+        const sidebarContent = (
+          <>
+            {/* Brand Settings (admin + agent only) */}
+            {canManageContent && (
+            <section className="mb-8">
+              <button
+                onClick={() => setShowBrandSettings(!showBrandSettings)}
+                className="flex items-center gap-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
+              >
+                <svg className={`w-4 h-4 transition-transform ${showBrandSettings ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+                Brand Settings
+                {(selectedCompany.logo || (selectedCompany.brandColors && selectedCompany.brandColors.length > 0) || selectedCompany.fontFamily || characters.length > 0 || selectedCompany.slackWebhookUrl || selectedCompany.slackEditorWebhookUrl) && (
+                  <span className="w-2 h-2 rounded-full bg-green-500" />
+                )}
+              </button>
+              {showBrandSettings && (
+                <div className="mt-3 rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-sm border border-slate-100 dark:border-slate-700">
+                  <div className="grid grid-cols-1 gap-6">
+                    {/* Logo */}
+                    <div>
+                      <h4 className="font-medium text-slate-700 dark:text-slate-300 mb-3">Logo</h4>
+                      {selectedCompany.logo ? (
+                        <div className="flex items-center gap-4">
+                          <img src={selectedCompany.logo} alt="Logo" className="w-16 h-16 rounded-lg object-contain border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-1" />
+                          <button
+                            onClick={() => updateCompanyBrand({ logo: "" })}
+                            className="text-sm text-red-500 hover:text-red-700 dark:hover:text-red-400 font-medium"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-slate-500 dark:text-slate-400 mb-2">No logo uploaded</p>
+                      )}
+                      <label className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-full border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-slate-700 dark:text-slate-300 cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        Upload logo
+                        <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
+                      </label>
+                      <p className="text-xs text-slate-400 mt-1">Max 2MB, PNG or JPG</p>
                     </div>
-                  ) : (
-                    <p className="text-sm text-slate-500 dark:text-slate-400 mb-2">No logo uploaded</p>
-                  )}
-                  <label className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-full border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-slate-700 dark:text-slate-300 cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                    Upload logo
-                    <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
-                  </label>
-                  <p className="text-xs text-slate-400 mt-1">Max 2MB, PNG or JPG</p>
-                </div>
 
-                {/* Brand Colors */}
-                <div>
-                  <h4 className="font-medium text-slate-700 dark:text-slate-300 mb-3">Brand Colors</h4>
-                  <div className="flex flex-wrap gap-3 mb-3">
-                    {(selectedCompany.brandColors || []).map((color, i) => (
-                      <div
-                        key={i}
-                        draggable
-                        onDragStart={(e) => e.dataTransfer.setData("brand-color-index", String(i))}
-                        onDragOver={(e) => e.preventDefault()}
-                        onDrop={(e) => {
-                          e.preventDefault();
-                          const from = parseInt(e.dataTransfer.getData("brand-color-index"), 10);
-                          handleReorderBrandColors(from, i);
-                        }}
-                        className="flex flex-col items-center gap-1 cursor-grab active:cursor-grabbing"
-                      >
-                        <button
-                          onClick={() => handleRemoveBrandColor(i)}
-                          title={`${color} — click to remove, drag to reorder`}
-                          className={`w-9 h-9 rounded-full border-2 transition-colors hover:scale-110 hover:border-red-400 dark:hover:border-red-500 ${
-                            i === 0
-                              ? "border-brand-primary ring-2 ring-brand-primary/30"
-                              : "border-slate-300 dark:border-slate-600"
-                          }`}
-                          style={{ backgroundColor: color }}
-                        />
-                        {i <= 1 && (
-                          <span className={`text-[10px] font-medium ${
-                            i === 0 ? "text-brand-primary" : "text-slate-400 dark:text-slate-500"
-                          }`}>
-                            {i === 0 ? "Main" : "Accent"}
-                          </span>
+                    {/* Brand Colors */}
+                    <div>
+                      <h4 className="font-medium text-slate-700 dark:text-slate-300 mb-3">Brand Colors</h4>
+                      <div className="flex flex-wrap gap-3 mb-3">
+                        {(selectedCompany.brandColors || []).map((color, i) => (
+                          <div
+                            key={i}
+                            draggable
+                            onDragStart={(e) => e.dataTransfer.setData("brand-color-index", String(i))}
+                            onDragOver={(e) => e.preventDefault()}
+                            onDrop={(e) => {
+                              e.preventDefault();
+                              const from = parseInt(e.dataTransfer.getData("brand-color-index"), 10);
+                              handleReorderBrandColors(from, i);
+                            }}
+                            className="flex flex-col items-center gap-1 cursor-grab active:cursor-grabbing"
+                          >
+                            <button
+                              onClick={() => handleRemoveBrandColor(i)}
+                              title={`${color} — click to remove, drag to reorder`}
+                              className={`w-9 h-9 rounded-full border-2 transition-colors hover:scale-110 hover:border-red-400 dark:hover:border-red-500 ${
+                                i === 0
+                                  ? "border-brand-primary ring-2 ring-brand-primary/30"
+                                  : "border-slate-300 dark:border-slate-600"
+                              }`}
+                              style={{ backgroundColor: color }}
+                            />
+                            {i <= 1 && (
+                              <span className={`text-[10px] font-medium ${
+                                i === 0 ? "text-brand-primary" : "text-slate-400 dark:text-slate-500"
+                              }`}>
+                                {i === 0 ? "Main" : "Accent"}
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                        {(selectedCompany.brandColors || []).length < 6 && (
+                          <div className="flex flex-col items-center gap-1">
+                            <label className="w-9 h-9 rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center cursor-pointer hover:border-brand-primary transition-colors">
+                              <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                              </svg>
+                              <input
+                                type="color"
+                                className="hidden"
+                                onChange={(e) => handleAddBrandColor(e.target.value)}
+                              />
+                            </label>
+                          </div>
                         )}
                       </div>
-                    ))}
-                    {(selectedCompany.brandColors || []).length < 6 && (
-                      <div className="flex flex-col items-center gap-1">
-                        <label className="w-9 h-9 rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center cursor-pointer hover:border-brand-primary transition-colors">
-                          <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                          </svg>
-                          <input
-                            type="color"
-                            className="hidden"
-                            onChange={(e) => handleAddBrandColor(e.target.value)}
-                          />
+                      <p className="text-xs text-slate-400">
+                        {(selectedCompany.brandColors || []).length}/6 colors. Drag to reorder, click to remove.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Font Family */}
+                  <div className="mt-6">
+                    <FontPicker
+                      value={selectedCompany.fontFamily || ""}
+                      onChange={(font) => updateCompanyBrand({ fontFamily: font })}
+                    />
+                  </div>
+
+                  {/* Slack Integration */}
+                  <div className="mt-6 pt-6 border-t border-slate-200 dark:border-slate-700">
+                    <h4 className="font-medium text-slate-700 dark:text-slate-300 mb-4">Slack Integration</h4>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">
+                          Content Schedule Webhook URL
                         </label>
+                        <input
+                          type="url"
+                          defaultValue={selectedCompany.slackWebhookUrl || ""}
+                          onBlur={(e) => {
+                            const val = e.target.value.trim();
+                            if (val !== (selectedCompany.slackWebhookUrl || "")) {
+                              updateCompanySlack({ slackWebhookUrl: val });
+                            }
+                          }}
+                          placeholder="https://hooks.slack.com/services/..."
+                          className="w-full rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none transition-shadow"
+                        />
+                        <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                          Leave blank to use system defaults.
+                        </p>
                       </div>
-                    )}
-                  </div>
-                  <p className="text-xs text-slate-400">
-                    {(selectedCompany.brandColors || []).length}/6 colors. Drag to reorder, click to remove.
-                  </p>
-                </div>
-              </div>
-
-              {/* Font Family */}
-              <div className="mt-6">
-                <FontPicker
-                  value={selectedCompany.fontFamily || ""}
-                  onChange={(font) => updateCompanyBrand({ fontFamily: font })}
-                />
-              </div>
-
-              {/* Slack Integration */}
-              <div className="mt-6 pt-6 border-t border-slate-200 dark:border-slate-700">
-                <h4 className="font-medium text-slate-700 dark:text-slate-300 mb-4">Slack Integration</h4>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">
-                      Content Schedule Webhook URL
-                    </label>
-                    <input
-                      type="url"
-                      defaultValue={selectedCompany.slackWebhookUrl || ""}
-                      onBlur={(e) => {
-                        const val = e.target.value.trim();
-                        if (val !== (selectedCompany.slackWebhookUrl || "")) {
-                          updateCompanySlack({ slackWebhookUrl: val });
-                        }
-                      }}
-                      placeholder="https://hooks.slack.com/services/..."
-                      className="w-full rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none transition-shadow"
-                    />
-                    <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-                      Leave blank to use system defaults.
-                    </p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">
-                      Editor Webhook URL
-                    </label>
-                    <input
-                      type="url"
-                      defaultValue={selectedCompany.slackEditorWebhookUrl || ""}
-                      onBlur={(e) => {
-                        const val = e.target.value.trim();
-                        if (val !== (selectedCompany.slackEditorWebhookUrl || "")) {
-                          updateCompanySlack({ slackEditorWebhookUrl: val });
-                        }
-                      }}
-                      placeholder="https://hooks.slack.com/services/..."
-                      className="w-full rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none transition-shadow"
-                    />
-                  </div>
-                  <div>
-                    <button
-                      type="button"
-                      onClick={() => setShowAdvancedSlack(!showAdvancedSlack)}
-                      className="flex items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
-                    >
-                      <svg className={`w-3.5 h-3.5 transition-transform ${showAdvancedSlack ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                      Advanced: Image upload settings
-                    </button>
-                    {showAdvancedSlack && (
-                      <div className="mt-3 space-y-4 pl-5 border-l-2 border-slate-200 dark:border-slate-700">
-                        <div>
-                          <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Bot Token</label>
-                          <input
-                            type="text"
-                            defaultValue={selectedCompany.slackBotToken || ""}
-                            onBlur={(e) => {
-                              const val = e.target.value.trim();
-                              if (val !== (selectedCompany.slackBotToken || "")) {
-                                updateCompanySlack({ slackBotToken: val });
-                              }
-                            }}
-                            placeholder="xoxb-..."
-                            className="w-full rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none transition-shadow font-mono"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Channel ID</label>
-                          <input
-                            type="text"
-                            defaultValue={selectedCompany.slackChannelId || ""}
-                            onBlur={(e) => {
-                              const val = e.target.value.trim();
-                              if (val !== (selectedCompany.slackChannelId || "")) {
-                                updateCompanySlack({ slackChannelId: val });
-                              }
-                            }}
-                            placeholder="C01234ABCDE"
-                            className="w-full rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none transition-shadow font-mono"
-                          />
-                        </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">
+                          Editor Webhook URL
+                        </label>
+                        <input
+                          type="url"
+                          defaultValue={selectedCompany.slackEditorWebhookUrl || ""}
+                          onBlur={(e) => {
+                            const val = e.target.value.trim();
+                            if (val !== (selectedCompany.slackEditorWebhookUrl || "")) {
+                              updateCompanySlack({ slackEditorWebhookUrl: val });
+                            }
+                          }}
+                          placeholder="https://hooks.slack.com/services/..."
+                          className="w-full rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none transition-shadow"
+                        />
                       </div>
-                    )}
+                      <div>
+                        <button
+                          type="button"
+                          onClick={() => setShowAdvancedSlack(!showAdvancedSlack)}
+                          className="flex items-center gap-1.5 text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
+                        >
+                          <svg className={`w-3.5 h-3.5 transition-transform ${showAdvancedSlack ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                          Advanced: Image upload settings
+                        </button>
+                        {showAdvancedSlack && (
+                          <div className="mt-3 space-y-4 pl-5 border-l-2 border-slate-200 dark:border-slate-700">
+                            <div>
+                              <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Bot Token</label>
+                              <input
+                                type="text"
+                                defaultValue={selectedCompany.slackBotToken || ""}
+                                onBlur={(e) => {
+                                  const val = e.target.value.trim();
+                                  if (val !== (selectedCompany.slackBotToken || "")) {
+                                    updateCompanySlack({ slackBotToken: val });
+                                  }
+                                }}
+                                placeholder="xoxb-..."
+                                className="w-full rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none transition-shadow font-mono"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Channel ID</label>
+                              <input
+                                type="text"
+                                defaultValue={selectedCompany.slackChannelId || ""}
+                                onBlur={(e) => {
+                                  const val = e.target.value.trim();
+                                  if (val !== (selectedCompany.slackChannelId || "")) {
+                                    updateCompanySlack({ slackChannelId: val });
+                                  }
+                                }}
+                                placeholder="C01234ABCDE"
+                                className="w-full rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none transition-shadow font-mono"
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
+
+                  <CharacterManager
+                    characters={characters}
+                    loading={charactersLoading}
+                    onAdd={handleAddCharacter}
+                    onUpdate={handleUpdateCharacter}
+                    onDelete={handleDeleteCharacter}
+                    onUploadImage={handleUploadCharacterImage}
+                    onRemoveImage={handleRemoveCharacterImage}
+                  />
+
+                  <CompanyAssignments
+                    companyId={selectedCompany.id}
+                    isAssigned={selectedCompany.isAssigned}
+                  />
                 </div>
-              </div>
-
-              <CharacterManager
-                characters={characters}
-                loading={charactersLoading}
-                onAdd={handleAddCharacter}
-                onUpdate={handleUpdateCharacter}
-                onDelete={handleDeleteCharacter}
-                onUploadImage={handleUploadCharacterImage}
-                onRemoveImage={handleRemoveCharacterImage}
-              />
-
-              <CompanyAssignments
-                companyId={selectedCompany.id}
-                isAssigned={selectedCompany.isAssigned}
-              />
-            </div>
-          )}
-        </section>
-        )}
-
-        {canManageContent && (
-          <MemoryManager companyId={selectedCompany.id} />
-        )}
-
-        {savedContent.length > 0 && (
-          <section className="mb-8">
-            <button
-              onClick={() => setShowSavedContent(!showSavedContent)}
-              className="flex items-center gap-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
-            >
-              <svg className={`w-4 h-4 transition-transform ${showSavedContent ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-              Saved Projects ({savedContent.filter(i => i.status !== "completed").length})
-            </button>
-            {showSavedContent && (
-              <div className="mt-3">
-                <SavedContentList
-                  items={savedContent}
-                  currentSavedId={currentSavedId}
-                  onLoad={handleLoadProject}
-                  onDelete={handleDeleteSaved}
-                  onBulkDelete={handleBulkDeleteSaved}
-                  onComplete={handleCompleteSaved}
-                />
-              </div>
+              )}
+            </section>
             )}
-          </section>
-        )}
 
-        {canManageContent && (
-        <>
-        <ErrorBoundary fallbackTitle="Failed to load theme selector">
-          <ThemeSelector
-            companyId={selectedCompany.id}
-            selectedTheme={selectedTheme}
-            onSelectTheme={handleSelectTheme}
-          />
-        </ErrorBoundary>
+            {canManageContent && (
+              <MemoryManager companyId={selectedCompany.id} />
+            )}
 
-        {selectedTheme && (
-          <ErrorBoundary fallbackTitle="Failed to load content generator">
-            <ContentGenerator
-              selectedTheme={selectedTheme}
-              counts={counts}
-              onCountsChange={setCounts}
-              selectedTone={selectedTone}
-              onToneChange={setSelectedTone}
-              selectedLanguage={selectedLanguage}
-              onLanguageChange={setSelectedLanguage}
-              onGenerate={handleGenerateContent}
-              loading={contentLoading}
-              customTones={customTones}
-              onAddCustomTone={handleAddCustomTone}
-              onDeleteCustomTone={handleDeleteCustomTone}
-              customPresets={customPresets}
-              onAddCustomPreset={handleAddCustomPreset}
-              onDeleteCustomPreset={handleDeleteCustomPreset}
-            />
-          </ErrorBoundary>
-        )}
-        </>
-        )}
-          </div>
-        </aside>
-
-        {/* Main content area */}
-        <div className="flex-1 min-w-0 mt-6 lg:mt-0">
-          {creditsEnabled && !balanceDismissed && (
-            <LowBalanceBanner
-              balanceCents={balanceCents}
-              onDismiss={() => setBalanceDismissed(true)}
-            />
-          )}
-
-        {canManageContent && (
-        <>
-        {contentLoading && !streamingText && (
-          <SkeletonGenerating />
-        )}
-
-        {contentLoading && streamingText && (
-          <section className="mb-8 rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-sm border border-slate-100 dark:border-slate-700">
-            <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-200 mb-4 flex items-center gap-3">
-              <svg className="animate-spin h-5 w-5 text-brand-primary" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-              </svg>
-              Generating content... <ElapsedTimer />
-            </h2>
-            <pre className="text-xs text-slate-500 dark:text-slate-400 whitespace-pre-wrap max-h-64 overflow-y-auto bg-slate-50 dark:bg-slate-900/50 rounded-2xl p-4 font-mono">
-              {streamingText}
-            </pre>
-          </section>
-        )}
-
-        {!contentLoading && !content && streamingText && (
-          <section className="mb-8 rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-sm border border-amber-200 dark:border-amber-700">
-            <h2 className="text-lg font-semibold text-amber-700 dark:text-amber-400 mb-2 flex items-center gap-2">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-              </svg>
-              Content could not be processed
-            </h2>
-            <p className="text-sm text-slate-600 dark:text-slate-400 mb-3">
-              The AI response could not be parsed. This can happen with large content batches. You can copy the raw output below or try generating again.
-            </p>
-            <div className="flex gap-2 mb-3">
-              <button
-                onClick={() => { navigator.clipboard.writeText(streamingText); toast("Copied to clipboard", "success"); }}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-700 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                </svg>
-                Copy raw output
-              </button>
-              <button
-                onClick={() => { setStreamingText(""); }}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-slate-500 dark:text-slate-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
-              >
-                Dismiss
-              </button>
-            </div>
-            <pre className="text-xs text-slate-500 dark:text-slate-400 whitespace-pre-wrap max-h-96 overflow-y-auto bg-slate-50 dark:bg-slate-900/50 rounded-2xl p-4 font-mono">
-              {streamingText}
-            </pre>
-          </section>
-        )}
-
-        </>
-        )}
-
-        {content && (
-          <ErrorBoundary fallbackTitle="Failed to render content">
-            <>
-              <div className="flex items-center gap-2 mb-4">
+            {savedContent.length > 0 && (
+              <section className="mb-8">
                 <button
-                  onClick={() => setViewMode("list")}
-                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all border ${
-                    viewMode === "list"
-                      ? "bg-brand-primary text-white border-brand-primary shadow-sm"
-                      : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-gray-200 dark:border-slate-600 hover:border-brand-primary"
-                  }`}
+                  onClick={() => setShowSavedContent(!showSavedContent)}
+                  className="flex items-center gap-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                  <svg className={`w-4 h-4 transition-transform ${showSavedContent ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
-                  List
+                  Saved Projects ({savedContent.filter(i => i.status !== "completed").length})
                 </button>
+                {showSavedContent && (
+                  <div className="mt-3">
+                    <SavedContentList
+                      items={savedContent}
+                      currentSavedId={currentSavedId}
+                      onLoad={handleLoadProject}
+                      onDelete={handleDeleteSaved}
+                      onBulkDelete={handleBulkDeleteSaved}
+                      onComplete={handleCompleteSaved}
+                    />
+                  </div>
+                )}
+              </section>
+            )}
+
+            {canManageContent && (
+            <>
+            <ErrorBoundary fallbackTitle="Failed to load theme selector">
+              <ThemeSelector
+                companyId={selectedCompany.id}
+                selectedTheme={selectedTheme}
+                onSelectTheme={handleSelectTheme}
+              />
+            </ErrorBoundary>
+
+            {selectedTheme && (
+              <ErrorBoundary fallbackTitle="Failed to load content generator">
+                <ContentGenerator
+                  selectedTheme={selectedTheme}
+                  counts={counts}
+                  onCountsChange={setCounts}
+                  selectedTone={selectedTone}
+                  onToneChange={setSelectedTone}
+                  selectedLanguage={selectedLanguage}
+                  onLanguageChange={setSelectedLanguage}
+                  onGenerate={handleGenerateContent}
+                  loading={contentLoading}
+                  customTones={customTones}
+                  onAddCustomTone={handleAddCustomTone}
+                  onDeleteCustomTone={handleDeleteCustomTone}
+                  customPresets={customPresets}
+                  onAddCustomPreset={handleAddCustomPreset}
+                  onDeleteCustomPreset={handleDeleteCustomPreset}
+                />
+              </ErrorBoundary>
+            )}
+            </>
+            )}
+          </>
+        );
+
+        return (
+          <>
+            {/* Mobile sidebar drawer */}
+            <aside className={`fixed inset-y-0 left-0 z-40 w-80 bg-white dark:bg-slate-900 shadow-2xl overflow-y-auto transition-transform duration-300 ease-in-out lg:hidden ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
+              {/* Mobile close button */}
+              <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700 sticky top-0 bg-white dark:bg-slate-900 z-10">
+                <span className="font-semibold text-slate-800 dark:text-slate-200 text-sm truncate pr-2">{selectedCompany.name}</span>
                 <button
-                  onClick={() => setViewMode("calendar")}
-                  className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all border ${
-                    viewMode === "calendar"
-                      ? "bg-brand-primary text-white border-brand-primary shadow-sm"
-                      : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-gray-200 dark:border-slate-600 hover:border-brand-primary"
-                  }`}
+                  onClick={() => setSidebarOpen(false)}
+                  className="p-2 rounded-lg text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex-shrink-0"
+                  aria-label="Close menu"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
-                  Calendar
                 </button>
               </div>
+              <div className="p-4 pt-6">
+                {sidebarContent}
+              </div>
+            </aside>
 
-              {viewMode === "calendar" ? (
-                <ErrorBoundary fallbackTitle="Failed to render calendar">
-                  <section className="mb-8 rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-sm border border-slate-100 dark:border-slate-700">
-                    <ContentCalendar content={content} startDate={new Date()} companyName={selectedCompany.name} companyId={selectedCompany.id} savedContentId={currentSavedId} themeName={selectedTheme?.title || ""} images={images} postingDates={postingDates} onPostingDateChange={handlePostingDateChange} />
-                  </section>
-                </ErrorBoundary>
-              ) : (
-                <ContentResults
-                  content={content}
-                  onChange={setContent}
-                  companyId={selectedCompany.id}
-                  companyName={selectedCompany.name}
-                  theme={selectedTheme!}
-                  tone={selectedTone}
-                  language={selectedLanguage}
-                  images={images}
-                  imageLoading={imageLoading}
-                  onGenerateImage={generateImage}
-                  onGenerateAllImages={generateAllImages}
-                  currentSavedId={currentSavedId}
-                  savingContent={savingContent}
-                  onSave={handleSaveContent}
-                  onUpdate={handleUpdateSavedContent}
-                  showSaveDialog={showSaveDialog}
-                  onShowSaveDialog={setShowSaveDialog}
-                  saveContentName={saveContentName}
-                  onSaveContentNameChange={setSaveContentName}
-                  onSaveContent={handleSaveContent}
-                  brandColors={selectedCompany.brandColors}
-                  characters={characters}
-                  onDeleteImage={(key) => {
-                    setImages((prev) => { const next = { ...prev }; delete next[key]; return next; });
-                    if (selectedCompany && currentSavedId) {
-                      fetch(`/api/images?companyId=${selectedCompany.id}&savedContentId=${currentSavedId}&key=${encodeURIComponent(key)}`, { method: "DELETE" }).catch(() => {});
-                    }
-                  }}
-                  onGenerateCarouselImages={generateCarouselImages}
-                  onRemoveItem={handleRemoveItem}
-                  driveStatus={driveStatus}
-                  onDriveAuth={handleDriveAuth}
-                  onDriveImport={handleDriveImport}
-                  themeName={selectedTheme?.title || ""}
-                  postingDates={postingDates}
-                  onPostingDateChange={handlePostingDateChange}
+            <div className="max-w-4xl mx-auto px-6 py-8 pb-20">
+              {/* Desktop: sidebar sections in normal flow */}
+              <div className="hidden lg:block">
+                {sidebarContent}
+              </div>
+
+              {/* Mobile: prompt to open menu when no content */}
+              {!content && !contentLoading && !streamingText && (
+                <div className="text-center py-16 px-4 lg:hidden">
+                  <svg className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <p className="text-slate-500 dark:text-slate-400 text-sm mb-4">
+                    Open the menu to set up and generate your content
+                  </p>
+                  <button
+                    onClick={() => setSidebarOpen(true)}
+                    className="px-6 py-3 rounded-full bg-brand-primary text-white font-medium hover:bg-brand-primary-hover transition-colors"
+                  >
+                    Open Setup Menu
+                  </button>
+                </div>
+              )}
+
+              {creditsEnabled && !balanceDismissed && (
+                <LowBalanceBanner
+                  balanceCents={balanceCents}
+                  onDismiss={() => setBalanceDismissed(true)}
                 />
               )}
-            </>
-          </ErrorBoundary>
-        )}
 
-        {!content && !contentLoading && !streamingText && (
-          <div className="text-center py-16 px-4 lg:hidden">
-            <svg className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            <p className="text-slate-500 dark:text-slate-400 text-sm mb-4">
-              Open the menu to set up and generate your content
-            </p>
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="px-6 py-3 rounded-full bg-brand-primary text-white font-medium hover:bg-brand-primary-hover transition-colors"
-            >
-              Open Setup Menu
-            </button>
-          </div>
-        )}
-        </div>
-      </div>
+              {canManageContent && (
+              <>
+              {contentLoading && !streamingText && (
+                <SkeletonGenerating />
+              )}
+
+              {contentLoading && streamingText && (
+                <section className="mb-8 rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-sm border border-slate-100 dark:border-slate-700">
+                  <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-200 mb-4 flex items-center gap-3">
+                    <svg className="animate-spin h-5 w-5 text-brand-primary" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    Generating content... <ElapsedTimer />
+                  </h2>
+                  <pre className="text-xs text-slate-500 dark:text-slate-400 whitespace-pre-wrap max-h-64 overflow-y-auto bg-slate-50 dark:bg-slate-900/50 rounded-2xl p-4 font-mono">
+                    {streamingText}
+                  </pre>
+                </section>
+              )}
+
+              {!contentLoading && !content && streamingText && (
+                <section className="mb-8 rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-sm border border-amber-200 dark:border-amber-700">
+                  <h2 className="text-lg font-semibold text-amber-700 dark:text-amber-400 mb-2 flex items-center gap-2">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                    </svg>
+                    Content could not be processed
+                  </h2>
+                  <p className="text-sm text-slate-600 dark:text-slate-400 mb-3">
+                    The AI response could not be parsed. This can happen with large content batches. You can copy the raw output below or try generating again.
+                  </p>
+                  <div className="flex gap-2 mb-3">
+                    <button
+                      onClick={() => { navigator.clipboard.writeText(streamingText); toast("Copied to clipboard", "success"); }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-700 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                      Copy raw output
+                    </button>
+                    <button
+                      onClick={() => { setStreamingText(""); }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-slate-500 dark:text-slate-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                  <pre className="text-xs text-slate-500 dark:text-slate-400 whitespace-pre-wrap max-h-96 overflow-y-auto bg-slate-50 dark:bg-slate-900/50 rounded-2xl p-4 font-mono">
+                    {streamingText}
+                  </pre>
+                </section>
+              )}
+
+              </>
+              )}
+
+              {content && (
+                <ErrorBoundary fallbackTitle="Failed to render content">
+                  <>
+                    <div className="flex items-center gap-2 mb-4">
+                      <button
+                        onClick={() => setViewMode("list")}
+                        className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all border ${
+                          viewMode === "list"
+                            ? "bg-brand-primary text-white border-brand-primary shadow-sm"
+                            : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-gray-200 dark:border-slate-600 hover:border-brand-primary"
+                        }`}
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                        </svg>
+                        List
+                      </button>
+                      <button
+                        onClick={() => setViewMode("calendar")}
+                        className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all border ${
+                          viewMode === "calendar"
+                            ? "bg-brand-primary text-white border-brand-primary shadow-sm"
+                            : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-gray-200 dark:border-slate-600 hover:border-brand-primary"
+                        }`}
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        Calendar
+                      </button>
+                    </div>
+
+                    {viewMode === "calendar" ? (
+                      <ErrorBoundary fallbackTitle="Failed to render calendar">
+                        <section className="mb-8 rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-sm border border-slate-100 dark:border-slate-700">
+                          <ContentCalendar content={content} startDate={new Date()} companyName={selectedCompany.name} companyId={selectedCompany.id} savedContentId={currentSavedId} themeName={selectedTheme?.title || ""} images={images} postingDates={postingDates} onPostingDateChange={handlePostingDateChange} />
+                        </section>
+                      </ErrorBoundary>
+                    ) : (
+                      <ContentResults
+                        content={content}
+                        onChange={setContent}
+                        companyId={selectedCompany.id}
+                        companyName={selectedCompany.name}
+                        theme={selectedTheme!}
+                        tone={selectedTone}
+                        language={selectedLanguage}
+                        images={images}
+                        imageLoading={imageLoading}
+                        onGenerateImage={generateImage}
+                        onGenerateAllImages={generateAllImages}
+                        currentSavedId={currentSavedId}
+                        savingContent={savingContent}
+                        onSave={handleSaveContent}
+                        onUpdate={handleUpdateSavedContent}
+                        showSaveDialog={showSaveDialog}
+                        onShowSaveDialog={setShowSaveDialog}
+                        saveContentName={saveContentName}
+                        onSaveContentNameChange={setSaveContentName}
+                        onSaveContent={handleSaveContent}
+                        brandColors={selectedCompany.brandColors}
+                        characters={characters}
+                        onDeleteImage={(key) => {
+                          setImages((prev) => { const next = { ...prev }; delete next[key]; return next; });
+                          if (selectedCompany && currentSavedId) {
+                            fetch(`/api/images?companyId=${selectedCompany.id}&savedContentId=${currentSavedId}&key=${encodeURIComponent(key)}`, { method: "DELETE" }).catch(() => {});
+                          }
+                        }}
+                        onGenerateCarouselImages={generateCarouselImages}
+                        onRemoveItem={handleRemoveItem}
+                        driveStatus={driveStatus}
+                        onDriveAuth={handleDriveAuth}
+                        onDriveImport={handleDriveImport}
+                        themeName={selectedTheme?.title || ""}
+                        postingDates={postingDates}
+                        onPostingDateChange={handlePostingDateChange}
+                      />
+                    )}
+                  </>
+                </ErrorBoundary>
+              )}
+            </div>
+          </>
+        );
+      })()}
 
       {/* Keyboard shortcuts help button (agent/admin only) */}
       {canManageContent && (
