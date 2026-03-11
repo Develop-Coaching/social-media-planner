@@ -41,6 +41,46 @@ export default function ThemeSelector({ companyId, selectedTheme, onSelectTheme 
     }
   }
 
+  function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const maxSize = 5 * 1024 * 1024; // 5MB
+    if (file.size > maxSize) {
+      setDocError("File must be under 5MB");
+      return;
+    }
+    setDocLoading(true);
+    setDocError("");
+
+    if (file.name.endsWith(".txt") || file.type === "text/plain") {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setDocText(reader.result as string);
+        setDocLoading(false);
+        toast("File attached", "success");
+      };
+      reader.onerror = () => { setDocError("Failed to read file"); setDocLoading(false); };
+      reader.readAsText(file);
+    } else {
+      // For .docx, .doc, .pdf — send to server to extract text
+      const formData = new FormData();
+      formData.append("file", file);
+      fetch("/api/extract-text", { method: "POST", body: formData })
+        .then(async (res) => {
+          const data = await res.json();
+          if (!res.ok) {
+            setDocError(data.error || "Failed to extract text from file");
+          } else {
+            setDocText(data.text);
+            toast("File attached", "success");
+          }
+        })
+        .catch(() => setDocError("Failed to upload file"))
+        .finally(() => setDocLoading(false));
+    }
+    e.target.value = "";
+  }
+
   async function handleFetchDoc() {
     if (!docUrl.trim()) return;
     setDocLoading(true);
@@ -131,13 +171,27 @@ export default function ThemeSelector({ companyId, selectedTheme, onSelectTheme 
                 Attach a reference document <span className="text-slate-400 dark:text-slate-500 font-normal">(optional)</span>
               </p>
               <p className="text-xs text-slate-400 dark:text-slate-500 mb-3">
-                Paste a Google Doc URL — its content will be used as extra context for this theme only.
-                The document must be set to &ldquo;Anyone with the link can view&rdquo;.
+                Upload a file or paste a Google Doc URL — its content will be used as extra context for this theme only.
               </p>
+              <div className="flex gap-2 items-center mb-2">
+                <label className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-slate-100 dark:bg-slate-700 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 cursor-pointer transition-colors">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                  </svg>
+                  Upload file
+                  <input
+                    type="file"
+                    accept=".txt,.doc,.docx,.pdf"
+                    className="hidden"
+                    onChange={handleFileUpload}
+                  />
+                </label>
+                <span className="text-xs text-slate-400">or</span>
+              </div>
               <div className="flex gap-2">
                 <input
                   type="url"
-                  placeholder="https://docs.google.com/document/d/..."
+                  placeholder="Paste a Google Doc URL..."
                   value={docUrl}
                   onChange={(e) => { setDocUrl(e.target.value); setDocError(""); }}
                   className="flex-1 rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none transition-shadow"
@@ -151,6 +205,9 @@ export default function ThemeSelector({ companyId, selectedTheme, onSelectTheme 
                   {docLoading ? "Fetching..." : "Attach"}
                 </button>
               </div>
+              <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
+                Supports .txt, .docx, .pdf, or Google Docs (must be set to &ldquo;Anyone with the link can view&rdquo;)
+              </p>
               {docError && (
                 <p className="text-sm text-red-500 mt-2">{docError}</p>
               )}
