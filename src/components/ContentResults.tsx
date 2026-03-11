@@ -240,6 +240,16 @@ export default function ContentResults({
   postingDates = {},
   onPostingDateChange,
 }: Props) {
+  // Normalize content — ensure all keys are arrays (protects against malformed AI responses or old saved data)
+  content = {
+    posts: Array.isArray(content.posts) ? content.posts : [],
+    reels: Array.isArray(content.reels) ? content.reels : [],
+    linkedinArticles: Array.isArray(content.linkedinArticles) ? content.linkedinArticles : [],
+    carousels: Array.isArray(content.carousels) ? content.carousels : [],
+    quotesForX: Array.isArray(content.quotesForX) ? content.quotesForX : [],
+    youtube: Array.isArray(content.youtube) ? content.youtube : [],
+  };
+
   const { toast } = useToast();
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [regeneratingKey, setRegeneratingKey] = useState<string | null>(null);
