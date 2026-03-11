@@ -7,7 +7,7 @@ import { calculateCost, isCreditsEnabled } from "@/lib/pricing";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const IMAGE_MODEL = "gemini-3-pro-image-preview";
+const IMAGE_MODEL = "gemini-3.1-flash-image-preview";
 
 export async function POST(request: NextRequest) {
   const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
       // Log image generation usage
       if (isCreditsEnabled()) {
         const cost = calculateCost("gemini", 0, 0);
-        await logUsage(userId, "/api/generate-image", "gemini-3-pro-image-preview", 0, 0, cost);
+        await logUsage(userId, "/api/generate-image", IMAGE_MODEL, 0, 0, cost);
         await deductCredits(userId, cost);
       }
 
