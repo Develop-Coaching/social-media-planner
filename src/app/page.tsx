@@ -28,7 +28,7 @@ function isMobileDevice(): boolean {
 }
 
 const TOKEN_WEIGHTS: Record<keyof ContentCounts, number> = {
-  posts: 200, reels: 400, carousels: 600, quotesForX: 150, linkedinArticles: 1200, youtube: 2500,
+  posts: 300, reels: 700, carousels: 800, quotesForX: 200, linkedinArticles: 1500, youtube: 3000,
 };
 const CONTENT_GROUPS: { keys: (keyof ContentCounts)[]; label: string }[] = [
   { keys: ["posts", "quotesForX"], label: "posts & quotes" },

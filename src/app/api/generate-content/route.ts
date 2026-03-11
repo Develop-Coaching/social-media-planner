@@ -96,13 +96,13 @@ Respond with a single JSON object with keys: posts, reels, linkedinArticles, car
 
     // Dynamically size max_tokens based on estimated output
     const tokenEstimate =
-      counts.posts * 200 +
-      counts.reels * 400 +
-      counts.carousels * 600 +
-      counts.quotesForX * 150 +
-      counts.linkedinArticles * 1200 +
-      counts.youtube * 2500;
-    const maxTokens = Math.min(Math.max(Math.round(tokenEstimate * 1.5) + 2048, 8192), 65536);
+      counts.posts * 300 +
+      counts.reels * 700 +
+      counts.carousels * 800 +
+      counts.quotesForX * 200 +
+      counts.linkedinArticles * 1500 +
+      counts.youtube * 3000;
+    const maxTokens = Math.min(Math.max(Math.round(tokenEstimate * 2) + 2048, 8192), 65536);
 
     if (!useStreaming) {
       const message = await anthropic.messages.create({
