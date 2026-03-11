@@ -106,8 +106,19 @@ async function fetchGeneration(
   }
   for (const candidate of candidates) {
     try {
-      const parsed = JSON.parse(candidate) as GeneratedContent;
-      return { content: parsed, rawText: fullText };
+      const parsed = JSON.parse(candidate);
+      // Ensure all content type keys exist as arrays (AI sometimes omits types with 0 count)
+      const content: GeneratedContent = {
+        posts: Array.isArray(parsed.posts) ? parsed.posts : [],
+        reels: Array.isArray(parsed.reels) ? parsed.reels : [],
+        linkedinArticles: Array.isArray(parsed.linkedinArticles) ? parsed.linkedinArticles : [],
+        carousels: Array.isArray(parsed.carousels) ? parsed.carousels : [],
+        quotesForX: Array.isArray(parsed.quotesForX) ? parsed.quotesForX : [],
+        youtube: Array.isArray(parsed.youtube) ? parsed.youtube : [],
+      };
+      // Check that at least one array has items
+      const hasContent = Object.values(content).some(arr => arr.length > 0);
+      if (hasContent) return { content, rawText: fullText };
     } catch { /* try next candidate */ }
   }
   return { content: null, rawText: fullText, error: "Failed to parse response" };
