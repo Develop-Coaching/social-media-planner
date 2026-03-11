@@ -94,19 +94,9 @@ Respond with a single JSON object with keys: posts, reels, linkedinArticles, car
     const anthropic = getAnthropicClient();
     const useStreaming = request.nextUrl.searchParams.get("stream") !== "false";
 
-    // When credits aren't enabled, use max tokens freely (no risk of truncation).
-    // When credits are active, size dynamically to avoid unnecessary spend.
-    let maxTokens = 65536;
-    if (isCreditsEnabled()) {
-      const tokenEstimate =
-        counts.posts * 300 +
-        counts.reels * 700 +
-        counts.carousels * 800 +
-        counts.quotesForX * 200 +
-        counts.linkedinArticles * 1500 +
-        counts.youtube * 3000;
-      maxTokens = Math.min(Math.max(Math.round(tokenEstimate * 2) + 2048, 8192), 65536);
-    }
+    // Always use max token limit — users are charged for actual tokens used, not the limit.
+    // Setting it high just prevents the response from being truncated.
+    const maxTokens = 65536;
 
     if (!useStreaming) {
       const message = await anthropic.messages.create({
