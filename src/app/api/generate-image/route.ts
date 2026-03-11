@@ -7,7 +7,7 @@ import { calculateCost, isCreditsEnabled } from "@/lib/pricing";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const IMAGE_MODEL = "gemini-3.1-flash-image-preview";
+const IMAGE_MODEL = "gemini-2.0-flash-preview-image-generation";
 
 export async function POST(request: NextRequest) {
   const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
