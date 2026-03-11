@@ -126,6 +126,7 @@ function RemoveButton({ onClick }: { onClick: () => void }) {
 
 function PostingDatePicker({ itemId, date, onChange, isDone, onToggleDone }: { itemId: string; date?: string; onChange?: (itemId: string, date: string | null) => void; isDone?: boolean; onToggleDone?: () => void }) {
   if (!onChange) return null;
+  const maxDate = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
   return (
     <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate-200 dark:border-slate-700">
       <svg className="w-4 h-4 text-slate-400 dark:text-slate-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -134,6 +135,7 @@ function PostingDatePicker({ itemId, date, onChange, isDone, onToggleDone }: { i
       <input
         type="date"
         value={date || ""}
+        max={maxDate}
         onChange={(e) => onChange(itemId, e.target.value || null)}
         className="text-sm rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-2 py-1 text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-brand-primary focus:outline-none"
       />
@@ -241,6 +243,7 @@ export default function ContentResults({
   const { toast } = useToast();
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [regeneratingKey, setRegeneratingKey] = useState<string | null>(null);
+  const [copyAllDone, setCopyAllDone] = useState(false);
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
   const [slackSending, setSlackSending] = useState(false);
   const [activeSection, setActiveSection] = useState<SectionKey | null>(null);
@@ -1070,6 +1073,62 @@ export default function ContentResults({
     }
   }
 
+  function handleCopyAll() {
+    const sections: string[] = [];
+    if (content.posts.length > 0) {
+      sections.push("=== POSTS ===");
+      content.posts.forEach((p) => {
+        sections.push(`${p.title}\n\n${p.caption}`);
+      });
+    }
+    if (content.reels.length > 0) {
+      sections.push("=== REELS ===");
+      content.reels.forEach((r, i) => {
+        const parts: string[] = [r.title || `Reel ${i + 1}`];
+        if (r.caption) parts.push(`Caption: ${r.caption}`);
+        parts.push(`Script:\n${r.script}`);
+        sections.push(parts.join("\n\n"));
+      });
+    }
+    if (content.linkedinArticles.length > 0) {
+      sections.push("=== LINKEDIN ARTICLES ===");
+      content.linkedinArticles.forEach((a) => {
+        const parts: string[] = [a.title];
+        if (a.caption) parts.push(`Caption: ${a.caption}`);
+        parts.push(a.body);
+        sections.push(parts.join("\n\n"));
+      });
+    }
+    if (content.carousels.length > 0) {
+      sections.push("=== CAROUSELS ===");
+      content.carousels.forEach((c, i) => {
+        const parts: string[] = [c.slides[0]?.title || `Carousel ${i + 1}`];
+        if (c.caption) parts.push(`Caption: ${c.caption}`);
+        c.slides.forEach((s, j) => {
+          parts.push(`Slide ${j + 1}: ${s.title}\n${s.body}`);
+        });
+        sections.push(parts.join("\n\n"));
+      });
+    }
+    if (content.quotesForX.length > 0) {
+      sections.push("=== QUOTES FOR X ===");
+      content.quotesForX.forEach((q) => {
+        sections.push(q.quote);
+      });
+    }
+    if (content.youtube.length > 0) {
+      sections.push("=== YOUTUBE ===");
+      content.youtube.forEach((y) => {
+        sections.push(`${y.title}\n\n${y.script}`);
+      });
+    }
+    const text = sections.join("\n\n---\n\n");
+    navigator.clipboard.writeText(text).then(() => {
+      setCopyAllDone(true);
+      setTimeout(() => setCopyAllDone(false), 2000);
+    }).catch(() => toast("Failed to copy to clipboard", "error"));
+  }
+
   async function downloadAllAsWord() {
     const children: Paragraph[] = [
       new Paragraph({ text: `Content: ${theme.title}`, heading: HeadingLevel.TITLE }),
@@ -1600,6 +1659,26 @@ export default function ContentResults({
             </button>
           )}
           {imageLoading.size > 0 && <ElapsedTimer />}
+          <button
+            onClick={handleCopyAll}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-slate-700 dark:bg-slate-600 text-white font-medium hover:bg-slate-800 dark:hover:bg-slate-500 transition-colors text-sm shadow-sm"
+          >
+            {copyAllDone ? (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                Copied!
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                Copy all
+              </>
+            )}
+          </button>
           <button
             onClick={downloadAllAsWord}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors text-sm shadow-sm"

@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
   const { allowed, retryAfterMs } = loginLimiter.check(ip);
   if (!allowed) {
     return NextResponse.json(
-      { error: "Too many login attempts. Please try again later." },
+      { error: "Too many sign-in attempts. Please try again later." },
       {
         status: 429,
         headers: { "Retry-After": String(Math.ceil(retryAfterMs / 1000)) },
@@ -52,6 +52,6 @@ export async function POST(request: NextRequest) {
 
     return response;
   } catch {
-    return NextResponse.json({ error: "Login failed" }, { status: 500 });
+    return NextResponse.json({ error: "Sign in failed" }, { status: 500 });
   }
 }

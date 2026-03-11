@@ -127,7 +127,7 @@ export default function LoginPage() {
               type="password"
               value={setupKey}
               onChange={(e) => setSetupKey(e.target.value)}
-              placeholder="Enter ADMIN_PASSWORD from env"
+              placeholder="Enter your setup key"
               autoFocus
               className="w-full rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-3 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none mb-4"
             />
@@ -227,6 +227,9 @@ export default function LoginPage() {
             >
               {loading ? "Signing in..." : "Sign in"}
             </button>
+            <p className="text-xs text-slate-400 dark:text-slate-500 mt-3 text-center">
+              Forgot your password? Contact your admin.
+            </p>
           </form>
         )}
       </div>
