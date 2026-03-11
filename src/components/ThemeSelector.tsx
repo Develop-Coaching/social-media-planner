@@ -18,6 +18,10 @@ export default function ThemeSelector({ companyId, selectedTheme, onSelectTheme 
   const [useCustom, setUseCustom] = useState(false);
   const [customTitle, setCustomTitle] = useState("");
   const [customDescription, setCustomDescription] = useState("");
+  const [docUrl, setDocUrl] = useState("");
+  const [docText, setDocText] = useState("");
+  const [docLoading, setDocLoading] = useState(false);
+  const [docError, setDocError] = useState("");
 
   async function handleGetThemes() {
     setLoading(true);
@@ -37,12 +41,38 @@ export default function ThemeSelector({ companyId, selectedTheme, onSelectTheme 
     }
   }
 
+  async function handleFetchDoc() {
+    if (!docUrl.trim()) return;
+    setDocLoading(true);
+    setDocError("");
+    try {
+      const res = await fetch("/api/fetch-gdoc", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: docUrl.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setDocError(data.error || "Failed to fetch document");
+        setDocText("");
+      } else {
+        setDocText(data.text);
+        toast("Document attached", "success");
+      }
+    } catch {
+      setDocError("Failed to fetch document. Make sure it's set to 'Anyone with the link can view'.");
+    } finally {
+      setDocLoading(false);
+    }
+  }
+
   function handleUseCustomTheme() {
     if (!customTitle.trim()) return;
     const customTheme: Theme = {
       id: `custom-${Date.now()}`,
       title: customTitle.trim(),
       description: customDescription.trim() || customTitle.trim(),
+      referenceDoc: docText || undefined,
     };
     onSelectTheme(customTheme);
   }
@@ -96,6 +126,52 @@ export default function ThemeSelector({ companyId, selectedTheme, onSelectTheme 
               rows={3}
               className="w-full rounded-2xl border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-3 text-slate-900 dark:text-slate-100 resize-y focus:ring-2 focus:ring-brand-primary focus:outline-none transition-shadow"
             />
+            <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-600 p-4">
+              <p className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">
+                Attach a reference document <span className="text-slate-400 dark:text-slate-500 font-normal">(optional)</span>
+              </p>
+              <p className="text-xs text-slate-400 dark:text-slate-500 mb-3">
+                Paste a Google Doc URL — its content will be used as extra context for this theme only.
+                The document must be set to &ldquo;Anyone with the link can view&rdquo;.
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="url"
+                  placeholder="https://docs.google.com/document/d/..."
+                  value={docUrl}
+                  onChange={(e) => { setDocUrl(e.target.value); setDocError(""); }}
+                  className="flex-1 rounded-full border-0 bg-indigo-50/60 dark:bg-slate-800/80 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-brand-primary focus:outline-none transition-shadow"
+                />
+                <button
+                  type="button"
+                  onClick={handleFetchDoc}
+                  disabled={!docUrl.trim() || docLoading}
+                  className="px-4 py-2.5 rounded-full bg-slate-100 dark:bg-slate-700 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {docLoading ? "Fetching..." : "Attach"}
+                </button>
+              </div>
+              {docError && (
+                <p className="text-sm text-red-500 mt-2">{docError}</p>
+              )}
+              {docText && (
+                <div className="mt-3 flex items-center gap-2">
+                  <svg className="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  <span className="text-sm text-green-600 dark:text-green-400 font-medium">Document attached</span>
+                  <span className="text-xs text-slate-400">({docText.length.toLocaleString()} chars)</span>
+                  <button
+                    type="button"
+                    onClick={() => { setDocText(""); setDocUrl(""); }}
+                    className="text-xs text-slate-400 hover:text-red-500 transition-colors ml-auto"
+                  >
+                    Remove
+                  </button>
+                </div>
+              )}
+            </div>
+
             <button
               onClick={handleUseCustomTheme}
               disabled={!customTitle.trim()}

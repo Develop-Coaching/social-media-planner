@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
     const { userId, role } = await requireAuth();
     const body = await request.json();
     const { theme, counts, companyId, tone, language } = body as {
-      theme: { id: string; title: string; description: string };
+      theme: { id: string; title: string; description: string; referenceDoc?: string };
       counts: ContentCounts;
       companyId?: string;
       tone?: { id: string; label: string; prompt: string };
@@ -67,11 +67,12 @@ export async function POST(request: NextRequest) {
 
     const toneInstruction = tone?.prompt ? `\n\nTONE & STYLE: ${tone.prompt}` : "";
     const languageInstruction = language?.prompt ? `\n\nLANGUAGE: ${language.prompt}` : "";
+    const referenceDocSection = theme.referenceDoc ? `\n\nREFERENCE DOCUMENT (use this as key context and inspiration for this theme — draw specific facts, examples, and talking points from it):\n${theme.referenceDoc}` : "";
 
     const prompt = `You are a social media content writer. Generate content that is DIRECTLY tied to and inspired by the weekly theme below. Every piece of content must clearly relate to and explore an aspect of this theme.${toneInstruction}${languageInstruction}
 
 WEEKLY THEME: ${theme.title}
-Theme Description: ${theme.description}
+Theme Description: ${theme.description}${referenceDocSection}
 
 IMPORTANT: All content must be specifically about this theme. Each post, article, reel, etc. should explore a different angle, tip, insight, or story related to "${theme.title}". Do not generate generic content - make it obvious how each piece connects to the theme.
 

@@ -8,7 +8,7 @@ export type Company = {
 };
 export type Character = { id: string; name: string; description: string; imageUrl?: string; imageMimeType?: string; createdAt: string };
 export type MemoryFile = { id: string; name: string; content: string; addedAt: string };
-export type Theme = { id: string; title: string; description: string };
+export type Theme = { id: string; title: string; description: string; referenceDoc?: string };
 export type ContentCounts = {
   posts: number;
   reels: number;
