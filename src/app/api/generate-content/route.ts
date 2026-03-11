@@ -175,10 +175,13 @@ Respond with a single JSON object with keys: posts, reels, linkedinArticles, car
     if (e instanceof CompanyAccessError) {
       return NextResponse.json({ error: e.message }, { status: e.status });
     }
-    console.error(e);
+    const errMsg = e instanceof Error ? e.message : String(e);
+    console.error("generate-content error:", errMsg, e);
+    // Pass through Anthropic API errors (model not found, rate limit, etc.)
+    const status = (e as { status?: number })?.status || 500;
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Failed to generate content" },
-      { status: 500 }
+      { error: errMsg || "Failed to generate content" },
+      { status }
     );
   }
 }

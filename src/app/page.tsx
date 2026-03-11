@@ -61,7 +61,8 @@ async function fetchGeneration(
 
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    return { content: null, rawText: "", error: data.error || "Failed to generate content" };
+    const statusInfo = res.status === 500 ? " (server error)" : res.status === 402 ? " (insufficient credits)" : res.status === 429 ? " (rate limited — wait a moment)" : "";
+    return { content: null, rawText: "", error: (data.error || "Failed to generate content") + statusInfo };
   }
 
   let fullText: string;
