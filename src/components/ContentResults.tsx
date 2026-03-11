@@ -258,11 +258,15 @@ export default function ContentResults({
   const [slackSending, setSlackSending] = useState(false);
   const [activeSection, setActiveSection] = useState<SectionKey | null>(null);
 
-  // Set active section to first non-empty section when content changes
+  // Set active section to first non-empty section only on initial load (not on every edit)
   useEffect(() => {
-    const order: SectionKey[] = ["posts", "reels", "linkedinArticles", "carousels", "quotesForX", "youtube"];
-    const first = order.find((k) => content[k].length > 0) ?? null;
-    setActiveSection(first);
+    setActiveSection((prev) => {
+      // If already set to a valid section that still has content, keep it
+      if (prev && content[prev] && content[prev].length > 0) return prev;
+      // Otherwise pick the first non-empty section
+      const order: SectionKey[] = ["posts", "reels", "linkedinArticles", "carousels", "quotesForX", "youtube"];
+      return order.find((k) => content[k].length > 0) ?? null;
+    });
   }, [content]);
 
   // Close fullscreen on Escape
