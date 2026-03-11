@@ -67,8 +67,8 @@ export async function GET() {
     // Collect all user IDs that appear in usage or credits (plus all users)
     const allIds = new Set<string>([
       ...(users ?? []).map((u) => u.id),
-      ...usageMap.keys(),
-      ...creditMap.keys(),
+      ...Array.from(usageMap.keys()),
+      ...Array.from(creditMap.keys()),
     ]);
 
     const summaries: UserUsageSummary[] = Array.from(allIds)
