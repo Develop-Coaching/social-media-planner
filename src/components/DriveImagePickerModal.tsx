@@ -79,7 +79,7 @@ export default function DriveImagePickerModal({ companyId, savedContentId, targe
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || "Failed to load Drive files");
+        setError(data.error || "Failed to load Drive files. Try reconnecting your Google Drive account in Settings.");
         return;
       }
 
@@ -90,7 +90,7 @@ export default function DriveImagePickerModal({ companyId, savedContentId, targe
       }
       setNextPageToken(data.nextPageToken);
     } catch {
-      setError("Network error loading Drive files");
+      setError("Network error loading Drive files. Try reconnecting your Google Drive account in Settings.");
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -143,7 +143,7 @@ export default function DriveImagePickerModal({ companyId, savedContentId, targe
 
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Import failed");
+        setError(data.error || "Import failed. Try reconnecting your Google Drive account in Settings.");
         return;
       }
 
@@ -152,7 +152,7 @@ export default function DriveImagePickerModal({ companyId, savedContentId, targe
       }
       onClose();
     } catch {
-      setError("Network error during import");
+      setError("Network error during import. Try reconnecting your Google Drive account in Settings.");
     } finally {
       setImporting(false);
     }

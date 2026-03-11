@@ -1170,10 +1170,10 @@ export default function ContentResults({
         pendingDriveUploadRef.current = key;
         googleCodeClientRef.current?.requestCode();
       } else {
-        toast(data.error || "Failed to save to Drive", "error");
+        toast(data.error || "Failed to save to Drive. Try reconnecting your Google Drive account in Settings.", "error");
       }
     } catch {
-      toast("Failed to save to Drive", "error");
+      toast("Failed to save to Drive. Try reconnecting your Google Drive account in Settings.", "error");
     } finally {
       setDriveSavingKey(null);
     }
@@ -1247,10 +1247,10 @@ export default function ContentResults({
         pendingDriveUploadRef.current = "__bulk__";
         googleCodeClientRef.current?.requestCode();
       } else {
-        toast(data.error || "Failed to upload to Drive", "error");
+        toast(data.error || "Failed to upload to Drive. Try reconnecting your Google Drive account in Settings.", "error");
       }
     } catch {
-      toast("Failed to upload to Drive", "error");
+      toast("Failed to upload to Drive. Try reconnecting your Google Drive account in Settings.", "error");
     } finally {
       setDriveBulkUploading(false);
     }

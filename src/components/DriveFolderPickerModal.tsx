@@ -46,12 +46,12 @@ export default function DriveFolderPickerModal({ onSelect, onClose }: Props) {
       const res = await fetch(url);
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Failed to load folders");
+        setError(data.error || "Failed to load folders. Try reconnecting your Google Drive account in Settings.");
         return;
       }
       setFolders(data.folders || []);
     } catch {
-      setError("Network error loading folders");
+      setError("Network error loading folders. Try reconnecting your Google Drive account in Settings.");
     } finally {
       setLoading(false);
     }
@@ -115,13 +115,13 @@ export default function DriveFolderPickerModal({ onSelect, onClose }: Props) {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || "Failed to create folder");
+        setError(data.error || "Failed to create folder. Try reconnecting your Google Drive account in Settings.");
         return;
       }
       // Navigate into the new folder
       navigateInto({ id: data.folderId, name: data.name });
     } catch {
-      setError("Network error creating folder");
+      setError("Network error creating folder. Try reconnecting your Google Drive account in Settings.");
     } finally {
       setCreatingFolder(false);
     }

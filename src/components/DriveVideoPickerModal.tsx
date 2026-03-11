@@ -63,7 +63,7 @@ export default function DriveVideoPickerModal({ companyName, onSelect, onClose }
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || "Failed to load Drive files");
+        setError(data.error || "Failed to load Drive files. Try reconnecting your Google Drive account in Settings.");
         return;
       }
 
@@ -74,7 +74,7 @@ export default function DriveVideoPickerModal({ companyName, onSelect, onClose }
       }
       setNextPageToken(data.nextPageToken);
     } catch {
-      setError("Network error loading Drive files");
+      setError("Network error loading Drive files. Try reconnecting your Google Drive account in Settings.");
     } finally {
       setLoading(false);
       setLoadingMore(false);

@@ -41,7 +41,7 @@ export default class ErrorBoundary extends React.Component<Props, State> {
                 {this.props.fallbackTitle || "Something went wrong"}
               </h3>
               <p className="text-sm text-slate-500 dark:text-slate-400">
-                An unexpected error occurred in this section.
+                An unexpected error occurred. Click &quot;Try Again&quot; or reload the page if the problem persists.
               </p>
             </div>
           </div>

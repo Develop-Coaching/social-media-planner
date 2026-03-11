@@ -665,11 +665,11 @@ export default function Home() {
           setStreamingText("");
           toast(anyFailed ? "Some content generated — some batches failed" : "Content generated successfully", anyFailed ? "info" : "success");
         } else {
-          toast("Failed to generate any content", "error");
+          toast("Failed to generate any content. Check your credit balance and try again.", "error");
         }
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to generate content";
+      const msg = err instanceof Error ? err.message : "Failed to generate content. Check your credit balance and try again.";
       toast(msg, "error");
     } finally {
       setContentLoading(false);
