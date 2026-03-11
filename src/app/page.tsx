@@ -729,6 +729,7 @@ export default function Home() {
         }
         return data.imageBase64;
       }
+      toast(data.error || "Image generation failed", "error");
       return null;
     } finally {
       setImageLoading((prev) => {

@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
       model: IMAGE_MODEL,
       contents,
       config: {
-        responseModalities: ["IMAGE"],
+        responseModalities: ["TEXT", "IMAGE"],
         imageConfig: {
           aspectRatio,
         },
@@ -105,6 +105,11 @@ export async function POST(request: NextRequest) {
     // Find the image part in the response
     const parts = response.candidates?.[0]?.content?.parts;
     const imagePart = parts?.find((p) => p.inlineData);
+
+    if (!parts || parts.length === 0) {
+      console.error("Gemini response had no parts:", JSON.stringify(response.candidates?.[0]));
+      return NextResponse.json({ error: "Image generation returned empty response" }, { status: 502 });
+    }
 
     if (imagePart?.inlineData?.data) {
       // Log image generation usage
