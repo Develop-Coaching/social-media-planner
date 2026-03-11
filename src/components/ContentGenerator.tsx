@@ -135,7 +135,7 @@ export default function ContentGenerator({ selectedTheme, counts, onCountsChange
               <button
                 key={preset.id}
                 onClick={() => onCountsChange({ ...preset.counts })}
-                className={`px-3 py-2 rounded-xl text-xs font-medium transition-all border flex flex-col items-center gap-0.5 ${
+                className={`px-3 py-2 rounded-xl text-xs font-medium transition-all border flex flex-col items-center justify-center gap-0.5 min-h-[44px] ${
                   activePresetId === preset.id
                     ? "bg-brand-primary text-white border-brand-primary shadow-md"
                     : "bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-600 hover:border-brand-primary hover:text-brand-primary"
@@ -152,7 +152,7 @@ export default function ContentGenerator({ selectedTheme, counts, onCountsChange
               <button
                 key={preset.id}
                 onClick={() => onCountsChange({ ...preset.counts })}
-                className={`relative px-3 py-2 rounded-xl text-xs font-medium transition-all border flex flex-col items-center gap-0.5 ${
+                className={`relative px-3 py-2 rounded-xl text-xs font-medium transition-all border flex flex-col items-center justify-center gap-0.5 min-h-[44px] ${
                   activePresetId === preset.id
                     ? "bg-indigo-600 text-white border-indigo-600 shadow-md"
                     : "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 border-indigo-300 dark:border-indigo-600 hover:border-indigo-400 dark:hover:border-indigo-500"
@@ -238,7 +238,7 @@ export default function ContentGenerator({ selectedTheme, counts, onCountsChange
               <button
                 key={tone.id}
                 onClick={() => onToneChange(tone)}
-                className={`px-3 py-2 rounded-full text-sm font-medium transition-all border ${
+                className={`px-3 py-2 rounded-full text-sm font-medium transition-all border min-h-[44px] ${
                   selectedTone.id === tone.id
                     ? "bg-brand-primary text-white border-brand-primary shadow-sm"
                     : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-gray-200 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700 hover:border-brand-primary"
@@ -253,7 +253,7 @@ export default function ContentGenerator({ selectedTheme, counts, onCountsChange
               <button
                 key={tone.id}
                 onClick={() => onToneChange(tone)}
-                className={`relative px-3 py-2 rounded-full text-sm font-medium transition-all border ${
+                className={`relative px-3 py-2 rounded-full text-sm font-medium transition-all border min-h-[44px] ${
                   selectedTone.id === tone.id
                     ? "bg-teal-600 text-white border-teal-600 shadow-sm"
                     : "bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 border-teal-300 dark:border-teal-600 hover:border-teal-400 dark:hover:border-teal-500"
@@ -294,7 +294,7 @@ export default function ContentGenerator({ selectedTheme, counts, onCountsChange
               <button
                 key={lang.id}
                 onClick={() => onLanguageChange(lang)}
-                className={`px-3 py-2 rounded-full text-sm font-medium transition-all border ${
+                className={`px-3 py-2 rounded-full text-sm font-medium transition-all border min-h-[44px] ${
                   selectedLanguage.id === lang.id
                     ? "bg-brand-primary text-white border-brand-primary shadow-sm"
                     : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-gray-200 dark:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-700 hover:border-brand-primary"
@@ -389,7 +389,7 @@ export default function ContentGenerator({ selectedTheme, counts, onCountsChange
         <button
           onClick={onGenerate}
           disabled={loading}
-          className="rounded-full bg-brand-primary text-white px-6 py-3 font-medium hover:bg-brand-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow-lg"
+          className="rounded-full bg-brand-primary text-white px-6 py-3 font-medium hover:bg-brand-primary-hover disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm hover:shadow-lg min-h-[44px]"
         >
           {loading ? (
             <span className="inline-flex items-center gap-2">

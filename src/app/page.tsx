@@ -128,6 +128,7 @@ export default function Home() {
   const [streamingText, setStreamingText] = useState("");
   const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
   const [postingDates, setPostingDates] = useState<Record<string, string>>({});
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Saved content state
   const [savedContent, setSavedContent] = useState<SavedContentItem[]>([]);
@@ -1208,20 +1209,31 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-gray-50 dark:bg-slate-900">
       <header className="bg-brand-primary">
-        <div className={`max-w-4xl mx-auto px-6 py-6 ${headerTextLight ? "text-slate-900" : "text-white"}`}>
-          <button
-            onClick={handleBackToCompanies}
-            className={`flex items-center gap-2 mb-4 transition-colors ${headerTextLight ? "text-slate-700 hover:text-slate-900" : "text-white/80 hover:text-white"}`}
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-            Back to companies
-          </button>
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold">{selectedCompany.name}</h1>
-              <p className={`mt-1 ${headerTextLight ? "text-slate-600" : "text-white/80"}`}>Content themes from your memory - scripts, captions, articles & images</p>
+        <div className={`max-w-6xl mx-auto px-4 sm:px-6 py-4 sm:py-6 ${headerTextLight ? "text-slate-900" : "text-white"}`}>
+          <div className="flex items-center gap-2 mb-3 sm:mb-4">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className={`lg:hidden p-2 rounded-lg hover:bg-white/10 transition-colors flex-shrink-0 ${headerTextLight ? "text-slate-700" : "text-white"}`}
+              aria-label="Open menu"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
+            <button
+              onClick={handleBackToCompanies}
+              className={`flex items-center gap-2 transition-colors ${headerTextLight ? "text-slate-700 hover:text-slate-900" : "text-white/80 hover:text-white"}`}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              Back to companies
+            </button>
+          </div>
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <h1 className="text-2xl sm:text-3xl font-bold truncate">{selectedCompany.name}</h1>
+              <p className={`mt-1 text-sm sm:text-base hidden sm:block ${headerTextLight ? "text-slate-600" : "text-white/80"}`}>Content themes from your memory - scripts, captions, articles & images</p>
             </div>
             <div className="flex items-center gap-2">
               {creditsEnabled && (
@@ -1261,13 +1273,32 @@ export default function Home() {
         </div>
       </header>
 
-      <div className="max-w-4xl mx-auto px-6 py-8 pb-20">
-        {creditsEnabled && !balanceDismissed && (
-          <LowBalanceBanner
-            balanceCents={balanceCents}
-            onDismiss={() => setBalanceDismissed(true)}
-          />
-        )}
+      {/* Mobile sidebar backdrop */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/50 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 pb-24 lg:flex lg:gap-8 lg:items-start">
+        {/* Sidebar — fixed drawer on mobile, always visible on desktop */}
+        <aside className={`fixed inset-y-0 left-0 z-40 w-80 bg-white dark:bg-slate-900 shadow-2xl overflow-y-auto transition-transform duration-300 ease-in-out lg:relative lg:inset-auto lg:z-auto lg:shadow-none lg:bg-transparent lg:overflow-visible lg:translate-x-0 lg:w-72 xl:w-80 lg:flex-shrink-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
+          {/* Mobile close button */}
+          <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700 sticky top-0 bg-white dark:bg-slate-900 z-10 lg:hidden">
+            <span className="font-semibold text-slate-800 dark:text-slate-200 text-sm truncate pr-2">{selectedCompany.name}</span>
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="p-2 rounded-lg text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex-shrink-0"
+              aria-label="Close menu"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <div className="p-4 pt-6 lg:p-0 lg:pt-2">
 
         {/* Brand Settings (admin + agent only) */}
         {canManageContent && (
@@ -1286,7 +1317,7 @@ export default function Home() {
           </button>
           {showBrandSettings && (
             <div className="mt-3 rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-sm border border-slate-100 dark:border-slate-700">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 gap-6">
                 {/* Logo */}
                 <div>
                   <h4 className="font-medium text-slate-700 dark:text-slate-300 mb-3">Logo</h4>
@@ -1548,7 +1579,22 @@ export default function Home() {
             />
           </ErrorBoundary>
         )}
+        </>
+        )}
+          </div>
+        </aside>
 
+        {/* Main content area */}
+        <div className="flex-1 min-w-0 mt-6 lg:mt-0">
+          {creditsEnabled && !balanceDismissed && (
+            <LowBalanceBanner
+              balanceCents={balanceCents}
+              onDismiss={() => setBalanceDismissed(true)}
+            />
+          )}
+
+        {canManageContent && (
+        <>
         {contentLoading && !streamingText && (
           <SkeletonGenerating />
         )}
@@ -1686,6 +1732,24 @@ export default function Home() {
             </>
           </ErrorBoundary>
         )}
+
+        {!content && !contentLoading && !streamingText && (
+          <div className="text-center py-16 px-4 lg:hidden">
+            <svg className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <p className="text-slate-500 dark:text-slate-400 text-sm mb-4">
+              Open the menu to set up and generate your content
+            </p>
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="px-6 py-3 rounded-full bg-brand-primary text-white font-medium hover:bg-brand-primary-hover transition-colors"
+            >
+              Open Setup Menu
+            </button>
+          </div>
+        )}
+        </div>
       </div>
 
       {/* Keyboard shortcuts help button (agent/admin only) */}

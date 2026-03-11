@@ -243,6 +243,14 @@ export default function ContentResults({
   const [regeneratingKey, setRegeneratingKey] = useState<string | null>(null);
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
   const [slackSending, setSlackSending] = useState(false);
+  const [activeSection, setActiveSection] = useState<SectionKey | null>(null);
+
+  // Set active section to first non-empty section when content changes
+  useEffect(() => {
+    const order: SectionKey[] = ["posts", "reels", "linkedinArticles", "carousels", "quotesForX", "youtube"];
+    const first = order.find((k) => content[k].length > 0) ?? null;
+    setActiveSection(first);
+  }, [content]);
 
   // Close fullscreen on Escape
   useEffect(() => {
@@ -1570,7 +1578,7 @@ export default function ContentResults({
         </div>
       )}
 
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-3">
           <span className="flex items-center justify-center w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/50 text-green-600 dark:text-green-400 text-sm font-bold">4</span>
           Your content
@@ -1686,8 +1694,41 @@ export default function ContentResults({
         </div>
       )}
 
+      {/* Section tabs — horizontally scrollable on mobile */}
+      {(() => {
+        const allTabs: { key: SectionKey; label: string }[] = [
+          { key: "posts", label: "Posts" },
+          { key: "reels", label: "Reels" },
+          { key: "linkedinArticles", label: "LinkedIn" },
+          { key: "carousels", label: "Carousels" },
+          { key: "quotesForX", label: "Quotes" },
+          { key: "youtube", label: "YouTube" },
+        ];
+        const tabs = allTabs.filter(({ key }) => (content[key] as unknown[]).length > 0);
+        if (tabs.length <= 1) return null;
+        return (
+          <div className="mb-6 overflow-x-auto -mx-1 px-1">
+            <div className="flex gap-2 min-w-max pb-1">
+              {tabs.map(({ key, label }) => (
+                <button
+                  key={key}
+                  onClick={() => setActiveSection(key)}
+                  className={`px-4 py-2.5 rounded-full text-sm font-medium whitespace-nowrap transition-all border flex-shrink-0 min-h-[44px] ${
+                    activeSection === key
+                      ? "bg-brand-primary text-white border-brand-primary shadow-sm"
+                      : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-gray-200 dark:border-slate-600 hover:border-brand-primary"
+                  }`}
+                >
+                  {label} ({(content[key] as unknown[]).length})
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Posts */}
-      {content.posts.length > 0 && (
+      {(activeSection === "posts" || !activeSection) && content.posts.length > 0 && (
         <div className="mb-8">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-3">
@@ -1709,9 +1750,9 @@ export default function ContentResults({
             const isFresh = freshlyRegenerated.has(key);
             return (
               <div key={i} className={`mb-4 p-5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700 transition-all ${freshClass(key)} ${doneItems.has(key) ? "opacity-60 border-green-200 dark:border-green-800" : ""}`}>
-                <div className="flex items-center justify-between mb-3">
+                <div className="flex items-start justify-between mb-3 gap-2">
                   {renderFreshBadge(key)}
-                  <div className={`flex items-center gap-3 ${isFresh ? "" : "ml-auto"}`}>
+                  <div className={`flex items-center flex-wrap gap-x-3 gap-y-2 ${isFresh ? "" : "ml-auto"}`}>
                     <RegenerateButton loading={regeneratingKey === key} onClick={() => handleRegenerate(key, "post", p, (item) => { const newPosts = [...content.posts]; newPosts[i] = item; onChange({ ...content, posts: newPosts }); }, "posts")} />
                     <CopyButton text={p.caption} label="Copy caption" />
                     <EditButton isEditing={isEditing} onToggle={() => setEditingKey(isEditing ? null : key)} />
@@ -1744,7 +1785,7 @@ export default function ContentResults({
       )}
 
       {/* Reels */}
-      {content.reels.length > 0 && (
+      {activeSection === "reels" && content.reels.length > 0 && (
         <div className="mb-8">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-3">
@@ -1769,9 +1810,9 @@ export default function ContentResults({
                 {r.title && !isEditing && (
                   <h4 className="font-semibold text-slate-800 dark:text-slate-200 mb-2">{r.title}</h4>
                 )}
-                <div className="flex items-center justify-between mb-3">
+                <div className="flex items-start justify-between mb-3 gap-2">
                   {renderFreshBadge(key)}
-                  <div className={`flex items-center gap-3 ${isFresh ? "" : "ml-auto"}`}>
+                  <div className={`flex items-center flex-wrap gap-x-3 gap-y-2 ${isFresh ? "" : "ml-auto"}`}>
                     <RegenerateButton loading={regeneratingKey === key} onClick={() => handleRegenerate(key, "reel", r, (item) => { const newReels = [...content.reels]; newReels[i] = item; onChange({ ...content, reels: newReels }); }, "reels")} />
                     <CopyButton text={`${r.title ? r.title + "\n\n" : ""}${r.caption || ""}\n\n${r.script}`} label="Copy" />
                     <EditButton isEditing={isEditing} onToggle={() => setEditingKey(isEditing ? null : key)} />
@@ -1998,7 +2039,7 @@ export default function ContentResults({
       )}
 
       {/* LinkedIn Articles */}
-      {content.linkedinArticles.length > 0 && (
+      {activeSection === "linkedinArticles" && content.linkedinArticles.length > 0 && (
         <div className="mb-8">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-3">
@@ -2022,7 +2063,7 @@ export default function ContentResults({
               <div key={i} className={`mb-4 p-5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700 transition-all ${freshClass(key)} ${doneItems.has(key) ? "opacity-60 border-green-200 dark:border-green-800" : ""}`}>
                 <div className="flex items-center justify-between mb-3">
                   {renderFreshBadge(key)}
-                  <div className={`flex items-center gap-3 ${isFresh ? "" : "ml-auto"}`}>
+                  <div className={`flex items-center flex-wrap gap-x-3 gap-y-2 ${isFresh ? "" : "ml-auto"} shrink-0`}>
                     <RegenerateButton loading={regeneratingKey === key} onClick={() => handleRegenerate(key, "linkedinArticle", a, (item) => { const newArticles = [...content.linkedinArticles]; newArticles[i] = item; onChange({ ...content, linkedinArticles: newArticles }); }, "linkedinArticles")} />
                     <CopyButton text={`${a.title}\n\n${a.caption ? `Caption: ${a.caption}\n\n` : ""}${a.body}`} label="Copy article" />
                     <EditButton isEditing={isEditing} onToggle={() => setEditingKey(isEditing ? null : key)} />
@@ -2064,7 +2105,7 @@ export default function ContentResults({
       )}
 
       {/* Carousels */}
-      {content.carousels.length > 0 && (
+      {activeSection === "carousels" && content.carousels.length > 0 && (
         <div className="mb-8">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-3">
@@ -2089,7 +2130,7 @@ export default function ContentResults({
               <div key={i} className={`mb-4 p-5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700 transition-all ${freshClass(key)} ${doneItems.has(key) ? "opacity-60 border-green-200 dark:border-green-800" : ""}`}>
                 <div className="flex items-center justify-between mb-3">
                   {renderFreshBadge(key)}
-                  <div className={`flex items-center gap-3 ${isFresh ? "" : "ml-auto"}`}>
+                  <div className={`flex items-center flex-wrap gap-x-3 gap-y-2 ${isFresh ? "" : "ml-auto"}`}>
                     <RegenerateButton loading={regeneratingKey === key} onClick={() => handleRegenerate(key, "carousel", c, (item) => { const newCarousels = [...content.carousels]; newCarousels[i] = item; onChange({ ...content, carousels: newCarousels }); }, "carousels")} />
                     <CopyButton text={carouselText} label="Copy slides" />
                     <EditButton isEditing={isEditing} onToggle={() => setEditingKey(isEditing ? null : key)} />
@@ -2187,7 +2228,7 @@ export default function ContentResults({
       )}
 
       {/* Quotes for X */}
-      {content.quotesForX.length > 0 && (
+      {activeSection === "quotesForX" && content.quotesForX.length > 0 && (
         <div className="mb-8">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-3">
@@ -2211,7 +2252,7 @@ export default function ContentResults({
               <div key={i} className={`mb-4 p-5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700 transition-all ${freshClass(key)} ${doneItems.has(key) ? "opacity-60 border-green-200 dark:border-green-800" : ""}`}>
                 <div className="flex items-center justify-between mb-3">
                   {renderFreshBadge(key)}
-                  <div className={`flex items-center gap-3 ${isFresh ? "" : "ml-auto"}`}>
+                  <div className={`flex items-center flex-wrap gap-x-3 gap-y-2 ${isFresh ? "" : "ml-auto"}`}>
                     <RegenerateButton loading={regeneratingKey === key} onClick={() => handleRegenerate(key, "quoteForX", q, (item) => { const newQuotes = [...content.quotesForX]; newQuotes[i] = item; onChange({ ...content, quotesForX: newQuotes }); }, "quotesForX")} />
                     <CopyButton text={q.quote} label="Copy quote" />
                     <EditButton isEditing={isEditing} onToggle={() => setEditingKey(isEditing ? null : key)} />
@@ -2240,7 +2281,7 @@ export default function ContentResults({
       )}
 
       {/* YouTube */}
-      {content.youtube.length > 0 && (
+      {activeSection === "youtube" && content.youtube.length > 0 && (
         <div className="mb-8">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-3">
@@ -2264,7 +2305,7 @@ export default function ContentResults({
               <div key={i} className={`mb-4 p-5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700 transition-all ${freshClass(key)} ${doneItems.has(key) ? "opacity-60 border-green-200 dark:border-green-800" : ""}`}>
                 <div className="flex items-center justify-between mb-3">
                   {renderFreshBadge(key)}
-                  <div className={`flex items-center gap-3 ${isFresh ? "" : "ml-auto"}`}>
+                  <div className={`flex items-center flex-wrap gap-x-3 gap-y-2 ${isFresh ? "" : "ml-auto"}`}>
                     <RegenerateButton loading={regeneratingKey === key} onClick={() => handleRegenerate(key, "youtube", y, (item) => { const newYt = [...content.youtube]; newYt[i] = item; onChange({ ...content, youtube: newYt }); }, "youtube")} />
                     <CopyButton text={`${y.title}\n\n${y.script}`} label="Copy script" />
                     <EditButton isEditing={isEditing} onToggle={() => setEditingKey(isEditing ? null : key)} />
