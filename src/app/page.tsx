@@ -19,6 +19,7 @@ import LowBalanceBanner from "@/components/LowBalanceBanner";
 import BalanceDisplay from "@/components/BalanceDisplay";
 import CompanyAssignments from "@/components/CompanyAssignments";
 import SkillImageStudio from "@/components/SkillImageStudio";
+import IconTooltip from "@/components/IconTooltip";
 import { useToast } from "@/components/ToastProvider";
 import { SkeletonGenerating, ElapsedTimer } from "@/components/Skeleton";
 import { buildBrandCssVars, isLightColor } from "@/lib/brand-theme";
@@ -1259,58 +1260,67 @@ export default function Home() {
                 </span>
               )}
               {currentUser?.role === "admin" && (
-                <Link
-                  href="/admin"
-                  className={`p-2 rounded-lg hover:bg-white/10 transition-colors ${headerTextLight ? "text-slate-600 hover:text-slate-900" : "text-white/80 hover:text-white"}`}
-                  title="User management"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                  </svg>
-                </Link>
+                <IconTooltip label="User management">
+                  <Link
+                    href="/admin"
+                    className={`p-2 rounded-lg hover:bg-white/10 transition-colors ${headerTextLight ? "text-slate-600 hover:text-slate-900" : "text-white/80 hover:text-white"}`}
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                    </svg>
+                  </Link>
+                </IconTooltip>
               )}
-              <Link
-                href="/analytics"
-                className={`p-2 rounded-lg hover:bg-white/10 transition-colors ${headerTextLight ? "text-slate-600 hover:text-slate-900" : "text-white/80 hover:text-white"}`}
-                title="Analytics"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                </svg>
-              </Link>
-              <Link
-                href="/research"
-                className={`p-2 rounded-lg hover:bg-white/10 transition-colors ${headerTextLight ? "text-slate-600 hover:text-slate-900" : "text-white/80 hover:text-white"}`}
-                title="Trend research"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-              </Link>
-              {creditsEnabled && (
+              <IconTooltip label="Analytics">
                 <Link
-                  href="/billing"
+                  href="/analytics"
                   className={`p-2 rounded-lg hover:bg-white/10 transition-colors ${headerTextLight ? "text-slate-600 hover:text-slate-900" : "text-white/80 hover:text-white"}`}
-                  title="Billing & credits"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                   </svg>
                 </Link>
+              </IconTooltip>
+              <IconTooltip label="Trend research">
+                <Link
+                  href="/research"
+                  className={`p-2 rounded-lg hover:bg-white/10 transition-colors ${headerTextLight ? "text-slate-600 hover:text-slate-900" : "text-white/80 hover:text-white"}`}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </Link>
+              </IconTooltip>
+              {creditsEnabled && (
+                <IconTooltip label="Billing & credits">
+                  <Link
+                    href="/billing"
+                    className={`p-2 rounded-lg hover:bg-white/10 transition-colors ${headerTextLight ? "text-slate-600 hover:text-slate-900" : "text-white/80 hover:text-white"}`}
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                    </svg>
+                  </Link>
+                </IconTooltip>
               )}
               {currentUser && (
-                <Link
-                  href="/account"
-                  className={`p-2 rounded-lg hover:bg-white/10 transition-colors ${headerTextLight ? "text-slate-600 hover:text-slate-900" : "text-white/80 hover:text-white"}`}
-                  title="Account settings"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-                  </svg>
-                </Link>
+                <IconTooltip label="Account settings">
+                  <Link
+                    href="/account"
+                    className={`p-2 rounded-lg hover:bg-white/10 transition-colors ${headerTextLight ? "text-slate-600 hover:text-slate-900" : "text-white/80 hover:text-white"}`}
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                    </svg>
+                  </Link>
+                </IconTooltip>
               )}
-              <ThemeToggle />
-              <LogoutButton />
+              <IconTooltip label="Theme">
+                <ThemeToggle suppressTitle />
+              </IconTooltip>
+              <IconTooltip label="Sign out">
+                <LogoutButton suppressTitle />
+              </IconTooltip>
             </div>
           </div>
         </div>

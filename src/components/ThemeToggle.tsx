@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 type ThemeMode = "light" | "dark" | "system";
 
-export default function ThemeToggle({ variant = "header" }: { variant?: "header" | "page" }) {
+export default function ThemeToggle({ variant = "header", suppressTitle = false }: { variant?: "header" | "page"; suppressTitle?: boolean }) {
   const [mode, setMode] = useState<ThemeMode>("system");
   const [mounted, setMounted] = useState(false);
 
@@ -52,7 +52,7 @@ export default function ThemeToggle({ variant = "header" }: { variant?: "header"
           ? "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-700/50"
           : "text-current opacity-80 hover:opacity-100 hover:bg-white/10"
       }`}
-      title={`Theme: ${mode}`}
+      title={suppressTitle ? undefined : `Theme: ${mode}`}
     >
       {mode === "light" && (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
