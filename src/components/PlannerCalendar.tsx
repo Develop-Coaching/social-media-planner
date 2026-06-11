@@ -207,7 +207,48 @@ export default function PlannerCalendar({ companyId, savedContentId, drafts, ima
   const cellMinH = view === "week" ? "min-h-[420px]" : "min-h-[96px]";
 
   return (
-    <div className="grid lg:grid-cols-[1fr_240px] gap-4">
+    <div className="space-y-4">
+      {/* Unscheduled drafts — clean collapsible strip; only shows when you have drafts */}
+      {drafts.length > 0 && (
+        <div className="rounded-2xl bg-white dark:bg-slate-800 p-4 shadow-sm border border-slate-100 dark:border-slate-700">
+          <button onClick={() => setShowTray((s) => !s)} className="flex items-center justify-between w-full">
+            <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+              Unscheduled drafts <span className="text-slate-400 font-normal">({drafts.length})</span>
+            </span>
+            <svg className={`w-4 h-4 text-slate-400 transition-transform ${showTray ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+          </button>
+          {showTray && (
+            <>
+              <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1 mb-2">Drag a draft onto a day to schedule it for auto-publishing.</p>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {drafts.map((d) => {
+                  const thumb = d.imageKeys.map((k) => images[k]).find(Boolean);
+                  return (
+                    <div
+                      key={d.itemId}
+                      draggable
+                      onDragStart={(e) => e.dataTransfer.setData("text/plain", d.itemId)}
+                      className="flex items-center gap-2 p-2 rounded-xl border border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 cursor-grab active:cursor-grabbing hover:border-brand-primary/50 flex-shrink-0 w-48"
+                    >
+                      {thumb ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={thumb} alt="" className="w-9 h-9 rounded object-cover flex-shrink-0" />
+                      ) : (
+                        <span className="w-9 h-9 rounded bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-[9px] font-bold text-slate-500 flex-shrink-0">{d.label.slice(0, 2).toUpperCase()}</span>
+                      )}
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">{d.label}</p>
+                        <p className="text-xs text-slate-700 dark:text-slate-300 line-clamp-1">{d.caption || "(no caption)"}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Calendar */}
       <div className="rounded-2xl bg-white dark:bg-slate-800 p-4 sm:p-5 shadow-sm border border-slate-100 dark:border-slate-700">
         {/* Toolbar */}
@@ -305,61 +346,6 @@ export default function PlannerCalendar({ companyId, savedContentId, drafts, ima
         </div>
 
         {loading && <p className="text-xs text-slate-400 mt-3 text-center">Loading scheduled posts...</p>}
-      </div>
-
-      {/* Drafts tray */}
-      <div className="lg:sticky lg:top-4 self-start">
-        <div className="rounded-2xl bg-white dark:bg-slate-800 p-4 shadow-sm border border-slate-100 dark:border-slate-700">
-          <button
-            onClick={() => setShowTray((s) => !s)}
-            className="flex items-center justify-between w-full mb-2"
-          >
-            <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">Unscheduled drafts</span>
-            <span className="text-xs text-slate-400">{drafts.length}</span>
-          </button>
-          {showTray && (
-            drafts.length === 0 ? (
-              <div className="text-center py-6">
-                <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
-                  No drafts yet. Generate content, then drag it onto a day.
-                </p>
-                <button onClick={onCreateContent} className="px-3 py-1.5 text-xs font-medium rounded-full bg-brand-primary text-white hover:opacity-90">
-                  + Create content
-                </button>
-              </div>
-            ) : (
-              <>
-                <p className="text-[11px] text-slate-400 dark:text-slate-500 mb-2">Drag a draft onto a day to schedule it.</p>
-                <div className="space-y-2 max-h-[520px] overflow-y-auto">
-                  {drafts.map((d) => {
-                    const thumb = d.imageKeys.map((k) => images[k]).find(Boolean);
-                    return (
-                      <div
-                        key={d.itemId}
-                        draggable
-                        onDragStart={(e) => e.dataTransfer.setData("text/plain", d.itemId)}
-                        className="flex items-center gap-2 p-2 rounded-xl border border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 cursor-grab active:cursor-grabbing hover:border-brand-primary/50"
-                      >
-                        {thumb ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={thumb} alt="" className="w-9 h-9 rounded object-cover flex-shrink-0" />
-                        ) : (
-                          <span className="w-9 h-9 rounded bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-[9px] font-bold text-slate-500 flex-shrink-0">
-                            {d.label.slice(0, 2).toUpperCase()}
-                          </span>
-                        )}
-                        <div className="min-w-0">
-                          <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">{d.label}</p>
-                          <p className="text-xs text-slate-700 dark:text-slate-300 line-clamp-1">{d.caption || "(no caption)"}</p>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
-            )
-          )}
-        </div>
       </div>
 
       {editing && (

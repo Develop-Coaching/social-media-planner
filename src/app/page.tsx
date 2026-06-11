@@ -1237,9 +1237,73 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-gray-50 dark:bg-slate-900">
+      {/* Left sidebar (desktop) — Meta-style primary navigation */}
+      <aside className="hidden lg:flex lg:flex-col fixed inset-y-0 left-0 w-56 z-30 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800">
+        <div className="px-4 py-4 border-b border-slate-100 dark:border-slate-800">
+          <button onClick={handleBackToCompanies} className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 flex items-center gap-1 mb-2 transition-colors">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+            Companies
+          </button>
+          <h1 className="font-bold text-slate-800 dark:text-slate-100 truncate">{selectedCompany.name}</h1>
+        </div>
+        <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
+          {([
+            { id: "calendar", label: "Calendar", icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" },
+            { id: "create", label: "Create", icon: "M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" },
+            { id: "posts", label: "Posts", icon: "M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" },
+          ] as const).map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                activeTab === tab.id
+                  ? "bg-brand-primary-light text-brand-primary"
+                  : "text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+              }`}
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={tab.icon} /></svg>
+              {tab.label}
+            </button>
+          ))}
+          <Link href="/research" className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+            Research
+          </Link>
+          <Link href="/analytics" className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+            Analytics
+          </Link>
+        </nav>
+        <div className="p-2 border-t border-slate-100 dark:border-slate-800 space-y-1">
+          {currentUser?.role === "admin" && (
+            <Link href="/admin" className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+              Users
+            </Link>
+          )}
+          {creditsEnabled && (
+            <Link href="/billing" className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
+              Billing
+            </Link>
+          )}
+          {currentUser && (
+            <Link href="/account" className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
+              Account
+            </Link>
+          )}
+          <div className="flex items-center gap-1 px-1 pt-1">
+            <ThemeToggle variant="page" />
+            <LogoutButton variant="page" />
+          </div>
+        </div>
+      </aside>
+
+      <div className="lg:pl-56">
       <header className="bg-brand-primary">
         <div className={`max-w-4xl mx-auto px-6 py-6 ${headerTextLight ? "text-slate-900" : "text-white"}`}>
-          <div className="flex items-center gap-2 mb-3 sm:mb-4">
+          <div className="flex items-center gap-2 mb-3 sm:mb-4 lg:hidden">
             <button
               onClick={() => setSidebarOpen(true)}
               className={`lg:hidden p-2 rounded-lg hover:bg-white/10 transition-colors flex-shrink-0 ${headerTextLight ? "text-slate-700" : "text-white"}`}
@@ -1273,6 +1337,7 @@ export default function Home() {
                   {currentUser.displayName}
                 </span>
               )}
+              <div className="flex items-center gap-2 lg:hidden">
               {currentUser?.role === "admin" && (
                 <IconTooltip label="User management">
                   <Link
@@ -1315,13 +1380,14 @@ export default function Home() {
               <IconTooltip label="Sign out">
                 <LogoutButton suppressTitle />
               </IconTooltip>
+              </div>
             </div>
           </div>
         </div>
       </header>
 
-      {/* Primary navigation tabs */}
-      <nav className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+      {/* Primary navigation tabs (mobile only — desktop uses the left sidebar) */}
+      <nav className="lg:hidden bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 flex items-center gap-1 overflow-x-auto">
           {([
             { id: "calendar", label: "Calendar", icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" },
@@ -1682,7 +1748,7 @@ export default function Home() {
               </div>
             </aside>
 
-            <div className="max-w-4xl mx-auto px-6 py-8 pb-20">
+            <div className="max-w-6xl mx-auto px-6 py-8 pb-20">
               {activeTab === "create" && (
               <>
               {/* Desktop: sidebar sections in normal flow */}
@@ -1882,6 +1948,7 @@ export default function Home() {
         </div>
       </div>
       )}
+      </div>
     </main>
   );
 }
