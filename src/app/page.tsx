@@ -20,6 +20,7 @@ import BalanceDisplay from "@/components/BalanceDisplay";
 import CompanyAssignments from "@/components/CompanyAssignments";
 import SkillImageStudio from "@/components/SkillImageStudio";
 import IconTooltip from "@/components/IconTooltip";
+import ScheduledPostsHub from "@/components/ScheduledPostsHub";
 import { useToast } from "@/components/ToastProvider";
 import { SkeletonGenerating, ElapsedTimer } from "@/components/Skeleton";
 import { buildBrandCssVars, isLightColor } from "@/lib/brand-theme";
@@ -140,7 +141,7 @@ export default function Home() {
   const [images, setImages] = useState<Record<string, string>>({});
   const [imageLoading, setImageLoading] = useState<Set<string>>(new Set());
   const [streamingText, setStreamingText] = useState("");
-  const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
+  const [activeTab, setActiveTab] = useState<"create" | "calendar" | "posts">("create");
   const [postingDates, setPostingDates] = useState<Record<string, string>>({});
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -1271,26 +1272,6 @@ export default function Home() {
                   </Link>
                 </IconTooltip>
               )}
-              <IconTooltip label="Analytics">
-                <Link
-                  href="/analytics"
-                  className={`p-2 rounded-lg hover:bg-white/10 transition-colors ${headerTextLight ? "text-slate-600 hover:text-slate-900" : "text-white/80 hover:text-white"}`}
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                  </svg>
-                </Link>
-              </IconTooltip>
-              <IconTooltip label="Trend research">
-                <Link
-                  href="/research"
-                  className={`p-2 rounded-lg hover:bg-white/10 transition-colors ${headerTextLight ? "text-slate-600 hover:text-slate-900" : "text-white/80 hover:text-white"}`}
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
-                </Link>
-              </IconTooltip>
               {creditsEnabled && (
                 <IconTooltip label="Billing & credits">
                   <Link
@@ -1325,6 +1306,50 @@ export default function Home() {
           </div>
         </div>
       </header>
+
+      {/* Primary navigation tabs */}
+      <nav className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 flex items-center gap-1 overflow-x-auto">
+          {([
+            { id: "create", label: "Create", icon: "M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" },
+            { id: "calendar", label: "Calendar", icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" },
+            { id: "posts", label: "Posts", icon: "M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" },
+          ] as const).map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-1.5 px-3 sm:px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                activeTab === tab.id
+                  ? "border-brand-primary text-brand-primary"
+                  : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={tab.icon} />
+              </svg>
+              {tab.label}
+            </button>
+          ))}
+          <Link
+            href="/research"
+            className="flex items-center gap-1.5 px-3 sm:px-4 py-3 text-sm font-medium border-b-2 border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors whitespace-nowrap"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            Research
+          </Link>
+          <Link
+            href="/analytics"
+            className="flex items-center gap-1.5 px-3 sm:px-4 py-3 text-sm font-medium border-b-2 border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors whitespace-nowrap"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+            Analytics
+          </Link>
+        </div>
+      </nav>
 
       {/* Mobile sidebar backdrop */}
       {sidebarOpen && (
@@ -1645,6 +1670,8 @@ export default function Home() {
             </aside>
 
             <div className="max-w-4xl mx-auto px-6 py-8 pb-20">
+              {activeTab === "create" && (
+              <>
               {/* Desktop: sidebar sections in normal flow */}
               <div className="hidden lg:block">
                 {sidebarContent}
@@ -1667,6 +1694,8 @@ export default function Home() {
                   </button>
                 </div>
               )}
+              </>
+              )}
 
               {creditsEnabled && !balanceDismissed && (
                 <LowBalanceBanner
@@ -1675,6 +1704,8 @@ export default function Home() {
                 />
               )}
 
+              {activeTab === "create" && (
+              <>
               {canManageContent && (
               <>
               <section className="mb-8">
@@ -1739,84 +1770,81 @@ export default function Home() {
 
               {content && (
                 <ErrorBoundary fallbackTitle="Failed to render content">
-                  <>
-                    <div className="flex items-center gap-2 mb-4">
-                      <button
-                        onClick={() => setViewMode("list")}
-                        className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all border ${
-                          viewMode === "list"
-                            ? "bg-brand-primary text-white border-brand-primary shadow-sm"
-                            : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-gray-200 dark:border-slate-600 hover:border-brand-primary"
-                        }`}
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-                        </svg>
-                        List
-                      </button>
-                      <button
-                        onClick={() => setViewMode("calendar")}
-                        className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all border ${
-                          viewMode === "calendar"
-                            ? "bg-brand-primary text-white border-brand-primary shadow-sm"
-                            : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-gray-200 dark:border-slate-600 hover:border-brand-primary"
-                        }`}
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                        Calendar
-                      </button>
-                    </div>
-
-                    {viewMode === "calendar" ? (
-                      <ErrorBoundary fallbackTitle="Failed to render calendar">
-                        <section className="mb-8 rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-sm border border-slate-100 dark:border-slate-700">
-                          <ContentCalendar content={content} startDate={new Date()} companyName={selectedCompany.name} companyId={selectedCompany.id} savedContentId={currentSavedId} themeName={selectedTheme?.title || ""} images={images} postingDates={postingDates} onPostingDateChange={handlePostingDateChange} />
-                        </section>
-                      </ErrorBoundary>
-                    ) : (
-                      <ContentResults
-                        content={content}
-                        onChange={setContent}
-                        companyId={selectedCompany.id}
-                        companyName={selectedCompany.name}
-                        theme={selectedTheme!}
-                        tone={selectedTone}
-                        language={selectedLanguage}
-                        images={images}
-                        imageLoading={imageLoading}
-                        onGenerateImage={generateImage}
-                        onGenerateAllImages={generateAllImages}
-                        currentSavedId={currentSavedId}
-                        savingContent={savingContent}
-                        onSave={handleSaveContent}
-                        onUpdate={handleUpdateSavedContent}
-                        showSaveDialog={showSaveDialog}
-                        onShowSaveDialog={setShowSaveDialog}
-                        saveContentName={saveContentName}
-                        onSaveContentNameChange={setSaveContentName}
-                        onSaveContent={handleSaveContent}
-                        brandColors={selectedCompany.brandColors}
-                        characters={characters}
-                        onDeleteImage={(key) => {
-                          setImages((prev) => { const next = { ...prev }; delete next[key]; return next; });
-                          if (selectedCompany && currentSavedId) {
-                            fetch(`/api/images?companyId=${selectedCompany.id}&savedContentId=${currentSavedId}&key=${encodeURIComponent(key)}`, { method: "DELETE" }).catch(() => {});
-                          }
-                        }}
-                        onGenerateCarouselImages={generateCarouselImages}
-                        onRemoveItem={handleRemoveItem}
-                        driveStatus={driveStatus}
-                        onDriveAuth={handleDriveAuth}
-                        onDriveImport={handleDriveImport}
-                        themeName={selectedTheme?.title || ""}
-                        postingDates={postingDates}
-                        onPostingDateChange={handlePostingDateChange}
-                      />
-                    )}
-                  </>
+                  <ContentResults
+                    content={content}
+                    onChange={setContent}
+                    companyId={selectedCompany.id}
+                    companyName={selectedCompany.name}
+                    theme={selectedTheme!}
+                    tone={selectedTone}
+                    language={selectedLanguage}
+                    images={images}
+                    imageLoading={imageLoading}
+                    onGenerateImage={generateImage}
+                    onGenerateAllImages={generateAllImages}
+                    currentSavedId={currentSavedId}
+                    savingContent={savingContent}
+                    onSave={handleSaveContent}
+                    onUpdate={handleUpdateSavedContent}
+                    showSaveDialog={showSaveDialog}
+                    onShowSaveDialog={setShowSaveDialog}
+                    saveContentName={saveContentName}
+                    onSaveContentNameChange={setSaveContentName}
+                    onSaveContent={handleSaveContent}
+                    brandColors={selectedCompany.brandColors}
+                    characters={characters}
+                    onDeleteImage={(key) => {
+                      setImages((prev) => { const next = { ...prev }; delete next[key]; return next; });
+                      if (selectedCompany && currentSavedId) {
+                        fetch(`/api/images?companyId=${selectedCompany.id}&savedContentId=${currentSavedId}&key=${encodeURIComponent(key)}`, { method: "DELETE" }).catch(() => {});
+                      }
+                    }}
+                    onGenerateCarouselImages={generateCarouselImages}
+                    onRemoveItem={handleRemoveItem}
+                    driveStatus={driveStatus}
+                    onDriveAuth={handleDriveAuth}
+                    onDriveImport={handleDriveImport}
+                    themeName={selectedTheme?.title || ""}
+                    postingDates={postingDates}
+                    onPostingDateChange={handlePostingDateChange}
+                  />
                 </ErrorBoundary>
+              )}
+              </>
+              )}
+
+              {/* Calendar tab — plan the week and schedule posts to auto-publish */}
+              {activeTab === "calendar" && (
+                content ? (
+                  <ErrorBoundary fallbackTitle="Failed to render calendar">
+                    <section className="rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-sm border border-slate-100 dark:border-slate-700">
+                      <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+                        Click any post to schedule it for auto-publishing. Scheduled items show up under the <span className="font-semibold">Posts</span> tab.
+                      </p>
+                      <ContentCalendar content={content} startDate={new Date()} companyName={selectedCompany.name} companyId={selectedCompany.id} savedContentId={currentSavedId} themeName={selectedTheme?.title || ""} images={images} postingDates={postingDates} onPostingDateChange={handlePostingDateChange} />
+                    </section>
+                  </ErrorBoundary>
+                ) : (
+                  <div className="text-center py-16">
+                    <svg className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <p className="text-slate-500 dark:text-slate-400 text-sm mb-4">
+                      Generate some content in the <span className="font-semibold">Create</span> tab first — it&apos;ll appear here to schedule across the week.
+                    </p>
+                    <button
+                      onClick={() => setActiveTab("create")}
+                      className="px-6 py-3 rounded-full bg-brand-primary text-white font-medium hover:bg-brand-primary-hover transition-colors"
+                    >
+                      Go to Create
+                    </button>
+                  </div>
+                )
+              )}
+
+              {/* Posts tab — everything queued / published / failed */}
+              {activeTab === "posts" && (
+                <ScheduledPostsHub companyId={selectedCompany.id} />
               )}
             </div>
           </>
