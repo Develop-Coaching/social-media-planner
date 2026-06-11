@@ -11,7 +11,7 @@ import ThemeSelector from "@/components/ThemeSelector";
 import ContentGenerator from "@/components/ContentGenerator";
 import ContentResults from "@/components/ContentResults";
 import CharacterManager from "@/components/CharacterManager";
-import ContentCalendar from "@/components/ContentCalendar";
+import PlannerCalendar, { DraftItem } from "@/components/PlannerCalendar";
 import ThemeToggle from "@/components/ThemeToggle";
 import LogoutButton from "@/components/LogoutButton";
 import ErrorBoundary from "@/components/ErrorBoundary";
@@ -141,7 +141,7 @@ export default function Home() {
   const [images, setImages] = useState<Record<string, string>>({});
   const [imageLoading, setImageLoading] = useState<Set<string>>(new Set());
   const [streamingText, setStreamingText] = useState("");
-  const [activeTab, setActiveTab] = useState<"create" | "calendar" | "posts">("create");
+  const [activeTab, setActiveTab] = useState<"create" | "calendar" | "posts">("calendar");
   const [postingDates, setPostingDates] = useState<Record<string, string>>({});
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -834,6 +834,19 @@ export default function Home() {
     });
   }
 
+  // Turn the current generated batch into draggable calendar drafts.
+  // Image keys mirror how images are keyed in the images map.
+  const calendarDrafts: DraftItem[] = (() => {
+    if (!content) return [];
+    const out: DraftItem[] = [];
+    content.posts.forEach((p, i) => out.push({ itemId: `post-${i}`, type: "post", label: "Post", caption: p.caption, imageKeys: [`post-${i}`] }));
+    content.reels.forEach((r, i) => out.push({ itemId: `reel-${i}`, type: "reel", label: "Reel", caption: r.caption || r.script || "", imageKeys: [], videoUrl: r.finishedVideoUrl || r.rawVideoUrl }));
+    content.linkedinArticles.forEach((a, i) => out.push({ itemId: `article-${i}`, type: "article", label: "Article", caption: a.caption || a.body || "", imageKeys: [`article-${i}`] }));
+    content.carousels.forEach((c, i) => out.push({ itemId: `carousel-${i}`, type: "carousel", label: "Carousel", caption: c.caption || "", imageKeys: c.slides.map((_, j) => `carousel-${i}-slide-${j}`) }));
+    content.quotesForX.forEach((q, i) => out.push({ itemId: `quote-${i}`, type: "quote", label: "Quote", caption: q.quote, imageKeys: [`quote-${i}`] }));
+    return out;
+  })();
+
   function handleRemoveItem(section: "posts" | "reels" | "linkedinArticles" | "carousels" | "quotesForX" | "youtube", index: number) {
     if (!content || !selectedCompany) return;
     const arr = content[section] as unknown[];
@@ -1311,8 +1324,8 @@ export default function Home() {
       <nav className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 flex items-center gap-1 overflow-x-auto">
           {([
-            { id: "create", label: "Create", icon: "M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" },
             { id: "calendar", label: "Calendar", icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" },
+            { id: "create", label: "Create", icon: "M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" },
             { id: "posts", label: "Posts", icon: "M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" },
           ] as const).map((tab) => (
             <button
@@ -1813,33 +1826,17 @@ export default function Home() {
               </>
               )}
 
-              {/* Calendar tab — plan the week and schedule posts to auto-publish */}
+              {/* Calendar tab — the planner: drag drafts onto days to schedule auto-publishing */}
               {activeTab === "calendar" && (
-                content ? (
-                  <ErrorBoundary fallbackTitle="Failed to render calendar">
-                    <section className="rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-sm border border-slate-100 dark:border-slate-700">
-                      <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
-                        Click any post to schedule it for auto-publishing. Scheduled items show up under the <span className="font-semibold">Posts</span> tab.
-                      </p>
-                      <ContentCalendar content={content} startDate={new Date()} companyName={selectedCompany.name} companyId={selectedCompany.id} savedContentId={currentSavedId} themeName={selectedTheme?.title || ""} images={images} postingDates={postingDates} onPostingDateChange={handlePostingDateChange} />
-                    </section>
-                  </ErrorBoundary>
-                ) : (
-                  <div className="text-center py-16">
-                    <svg className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                    <p className="text-slate-500 dark:text-slate-400 text-sm mb-4">
-                      Generate some content in the <span className="font-semibold">Create</span> tab first — it&apos;ll appear here to schedule across the week.
-                    </p>
-                    <button
-                      onClick={() => setActiveTab("create")}
-                      className="px-6 py-3 rounded-full bg-brand-primary text-white font-medium hover:bg-brand-primary-hover transition-colors"
-                    >
-                      Go to Create
-                    </button>
-                  </div>
-                )
+                <ErrorBoundary fallbackTitle="Failed to render calendar">
+                  <PlannerCalendar
+                    companyId={selectedCompany.id}
+                    savedContentId={currentSavedId}
+                    drafts={calendarDrafts}
+                    images={images}
+                    onCreateContent={() => setActiveTab("create")}
+                  />
+                </ErrorBoundary>
               )}
 
               {/* Posts tab — everything queued / published / failed */}
