@@ -13,6 +13,7 @@ export interface NewScheduledPost {
   caption: string;
   image_keys?: string[];
   media_urls?: string[];
+  upload_paths?: string[];
   video_url?: string | null;
   platforms: Platform[];
   scheduled_at: string;
@@ -36,6 +37,7 @@ export async function createScheduledPost(post: NewScheduledPost): Promise<Sched
       ...post,
       image_keys: post.image_keys ?? [],
       media_urls: post.media_urls ?? [],
+      upload_paths: post.upload_paths ?? [],
       content_type: post.content_type ?? "post",
     })
     .select()
@@ -131,6 +133,18 @@ export async function markPostResult(
 // stored image keys become signed Storage URLs; media_urls pass through.
 export async function resolvePublishPayload(post: ScheduledPost): Promise<PublishPayload> {
   const imageUrls: string[] = [...(post.media_urls ?? [])];
+  let videoUrl: string | null = post.video_url;
+  const isVideoType = post.content_type === "reel" || post.content_type === "video";
+
+  // Directly-uploaded media: sign each storage path into a temporary public URL.
+  if (post.upload_paths?.length) {
+    for (const path of post.upload_paths) {
+      const { data: signed } = await supabase.storage.from(BUCKET).createSignedUrl(path, SIGNED_URL_TTL);
+      if (!signed?.signedUrl) continue;
+      if (isVideoType) videoUrl = videoUrl || signed.signedUrl;
+      else imageUrls.push(signed.signedUrl);
+    }
+  }
 
   if (post.image_keys?.length && post.saved_content_id) {
     const { data: rows } = await supabase
@@ -156,7 +170,7 @@ export async function resolvePublishPayload(post: ScheduledPost): Promise<Publis
   return {
     caption: post.caption,
     imageUrls,
-    videoUrl: post.video_url,
-    isReel: post.content_type === "reel",
+    videoUrl,
+    isReel: isVideoType,
   };
 }

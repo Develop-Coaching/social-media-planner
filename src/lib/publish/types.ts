@@ -17,6 +17,7 @@ export interface ScheduledPost {
   caption: string;
   image_keys: string[];
   media_urls: string[];
+  upload_paths: string[];
   video_url: string | null;
   platforms: Platform[];
   scheduled_at: string;

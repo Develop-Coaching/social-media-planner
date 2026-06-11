@@ -254,11 +254,15 @@ CREATE TABLE scheduled_posts (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   published_at TIMESTAMPTZ,
+  upload_paths TEXT[] NOT NULL DEFAULT '{}',   -- storage paths of directly-uploaded media (signed at publish time)
   FOREIGN KEY (user_id, company_id) REFERENCES companies(user_id, id) ON DELETE CASCADE
 );
 ALTER TABLE scheduled_posts ENABLE ROW LEVEL SECURITY;
 CREATE INDEX idx_scheduled_posts_company ON scheduled_posts(user_id, company_id);
 CREATE INDEX idx_scheduled_posts_due ON scheduled_posts(status, scheduled_at);
+
+-- Migration for existing databases (run once):
+-- ALTER TABLE scheduled_posts ADD COLUMN IF NOT EXISTS upload_paths TEXT[] NOT NULL DEFAULT '{}';
 
 -- Migration: Enable RLS on all tables (run on existing databases)
 -- The app uses the service role key which bypasses RLS, so no policies are needed.

@@ -14,7 +14,10 @@
       "Bash(npx tsc:*)",
       "WebSearch",
       "Bash(npx next dev -p 3003)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(python3:*)",
+      "Bash(pkill:*)",
+      "Bash(cd \"/Users/chloewilkes/Downloads/Claude Code/Develop Coaching/Marketing/Post Creator Software\" && npx next build 2>&1 | tail -30)"
     ]
   }
 }

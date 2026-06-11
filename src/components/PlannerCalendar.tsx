@@ -1,20 +1,10 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-
-// A generated content item that can be dragged onto the calendar to schedule it.
-export interface DraftItem {
-  itemId: string;
-  type: string; // post | reel | carousel | article | quote
-  label: string;
-  caption: string;
-  imageKeys: string[];
-  videoUrl?: string;
-}
+import PostComposer from "@/components/PostComposer";
 
 interface ScheduledPost {
   id: string;
-  item_id: string | null;
   content_type: string;
   caption: string;
   platforms: string[];
@@ -23,20 +13,12 @@ interface ScheduledPost {
   error: string | null;
 }
 
-interface Props {
-  companyId: string;
-  savedContentId?: string | null;
-  drafts: DraftItem[];
-  images: Record<string, string>;
-  onCreateContent: () => void;
-}
-
 type ViewMode = "month" | "week";
 
 const ALL_PLATFORMS = [
-  { id: "instagram", label: "Instagram", short: "IG" },
-  { id: "facebook", label: "Facebook", short: "FB" },
-  { id: "linkedin", label: "LinkedIn", short: "LI" },
+  { id: "instagram", label: "Instagram" },
+  { id: "facebook", label: "Facebook" },
+  { id: "linkedin", label: "LinkedIn" },
 ] as const;
 
 const STATUS_DOT: Record<string, string> = {
@@ -49,11 +31,6 @@ const STATUS_DOT: Record<string, string> = {
 
 const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-function defaultPlatforms(type: string): string[] {
-  if (type === "article") return ["linkedin"];
-  return ["instagram", "facebook"];
-}
-
 function startOfDay(d: Date): Date {
   const x = new Date(d);
   x.setHours(0, 0, 0, 0);
@@ -61,17 +38,15 @@ function startOfDay(d: Date): Date {
 }
 
 function isoDate(d: Date): string {
-  // local YYYY-MM-DD
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
 
-// Monday-of-the-week for a date
 function mondayOf(d: Date): Date {
   const x = startOfDay(d);
-  const day = x.getDay(); // 0 Sun .. 6 Sat
+  const day = x.getDay();
   const diff = day === 0 ? -6 : 1 - day;
   x.setDate(x.getDate() + diff);
   return x;
@@ -81,7 +56,7 @@ function sameDay(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
 
-export default function PlannerCalendar({ companyId, savedContentId, drafts, images, onCreateContent }: Props) {
+export default function PlannerCalendar({ companyId }: { companyId: string }) {
   const [view, setView] = useState<ViewMode>("month");
   const [cursor, setCursor] = useState(() => startOfDay(new Date()));
   const [posts, setPosts] = useState<ScheduledPost[]>([]);
@@ -89,7 +64,7 @@ export default function PlannerCalendar({ companyId, savedContentId, drafts, ima
   const [error, setError] = useState<string | null>(null);
   const [dragOverKey, setDragOverKey] = useState<string | null>(null);
   const [editing, setEditing] = useState<ScheduledPost | null>(null);
-  const [showTray, setShowTray] = useState(true);
+  const [composer, setComposer] = useState<{ open: boolean; day?: Date }>({ open: false });
 
   const load = useCallback(async () => {
     try {
@@ -109,7 +84,6 @@ export default function PlannerCalendar({ companyId, savedContentId, drafts, ima
     load();
   }, [load]);
 
-  // Build the visible day cells
   const days = useMemo(() => {
     if (view === "week") {
       const start = mondayOf(cursor);
@@ -119,7 +93,6 @@ export default function PlannerCalendar({ companyId, savedContentId, drafts, ima
         return d;
       });
     }
-    // Month: 6 weeks starting Monday on/before the 1st
     const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
     const start = mondayOf(first);
     return Array.from({ length: 42 }, (_, i) => {
@@ -160,173 +133,120 @@ export default function PlannerCalendar({ companyId, savedContentId, drafts, ima
         })()
       : cursor.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
 
-  const scheduleDraftOnDay = async (draft: DraftItem, day: Date) => {
-    if (draft.type === "youtube") {
-      setError("YouTube posts can't be auto-published yet.");
-      return;
-    }
-    if (draft.type === "reel" && !draft.videoUrl) {
-      setError("This reel needs a finished video before it can be scheduled.");
-      return;
-    }
+  // Drag an existing post to another day to reschedule (keeps its time)
+  const reschedule = async (postId: string, day: Date) => {
+    const post = posts.find((p) => p.id === postId);
+    if (!post) return;
+    const orig = new Date(post.scheduled_at);
     const at = new Date(day);
-    at.setHours(9, 0, 0, 0); // default 9am
+    at.setHours(orig.getHours(), orig.getMinutes(), 0, 0);
     try {
       const res = await fetch("/api/scheduled-posts", {
-        method: "POST",
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          companyId,
-          savedContentId: savedContentId || undefined,
-          itemId: draft.itemId,
-          contentType: draft.type,
-          caption: draft.caption,
-          imageKeys: draft.imageKeys,
-          videoUrl: draft.videoUrl || undefined,
-          platforms: defaultPlatforms(draft.type),
-          scheduledAt: at.toISOString(),
-        }),
+        body: JSON.stringify({ id: postId, companyId, scheduledAt: at.toISOString() }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to schedule");
-      setError(null);
-      load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to schedule");
+      if (res.ok) load();
+    } catch {
+      // non-fatal
     }
   };
 
   const handleDrop = (e: React.DragEvent, day: Date) => {
     e.preventDefault();
     setDragOverKey(null);
-    const itemId = e.dataTransfer.getData("text/plain");
-    const draft = drafts.find((d) => d.itemId === itemId);
-    if (draft) scheduleDraftOnDay(draft, day);
+    const id = e.dataTransfer.getData("text/plain");
+    if (id) reschedule(id, day);
   };
 
-  const cellMinH = view === "week" ? "min-h-[420px]" : "min-h-[96px]";
+  const cellMinH = view === "week" ? "min-h-[440px]" : "min-h-[110px]";
 
   return (
-    <div className="space-y-4">
-      {/* Unscheduled drafts — clean collapsible strip; only shows when you have drafts */}
-      {drafts.length > 0 && (
-        <div className="rounded-2xl bg-white dark:bg-slate-800 p-4 shadow-sm border border-slate-100 dark:border-slate-700">
-          <button onClick={() => setShowTray((s) => !s)} className="flex items-center justify-between w-full">
-            <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-              Unscheduled drafts <span className="text-slate-400 font-normal">({drafts.length})</span>
-            </span>
-            <svg className={`w-4 h-4 text-slate-400 transition-transform ${showTray ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+    <div className="rounded-2xl bg-white dark:bg-slate-800 p-4 sm:p-5 shadow-sm border border-slate-100 dark:border-slate-700">
+      {/* Toolbar */}
+      <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+        <div className="flex items-center gap-2">
+          <button onClick={() => navigate(-1)} className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700" aria-label="Previous">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
           </button>
-          {showTray && (
-            <>
-              <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1 mb-2">Drag a draft onto a day to schedule it for auto-publishing.</p>
-              <div className="flex gap-2 overflow-x-auto pb-1">
-                {drafts.map((d) => {
-                  const thumb = d.imageKeys.map((k) => images[k]).find(Boolean);
-                  return (
-                    <div
-                      key={d.itemId}
-                      draggable
-                      onDragStart={(e) => e.dataTransfer.setData("text/plain", d.itemId)}
-                      className="flex items-center gap-2 p-2 rounded-xl border border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 cursor-grab active:cursor-grabbing hover:border-brand-primary/50 flex-shrink-0 w-48"
-                    >
-                      {thumb ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={thumb} alt="" className="w-9 h-9 rounded object-cover flex-shrink-0" />
-                      ) : (
-                        <span className="w-9 h-9 rounded bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-[9px] font-bold text-slate-500 flex-shrink-0">{d.label.slice(0, 2).toUpperCase()}</span>
-                      )}
-                      <div className="min-w-0">
-                        <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400 dark:text-slate-500">{d.label}</p>
-                        <p className="text-xs text-slate-700 dark:text-slate-300 line-clamp-1">{d.caption || "(no caption)"}</p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </>
-          )}
+          <h2 className="font-semibold text-slate-800 dark:text-slate-200 min-w-[150px] text-center">{periodLabel}</h2>
+          <button onClick={() => navigate(1)} className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700" aria-label="Next">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+          </button>
+          <button onClick={() => setCursor(startOfDay(new Date()))} className="ml-1 px-3 py-1.5 text-xs font-medium rounded-full border border-gray-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700">
+            Today
+          </button>
         </div>
-      )}
-
-      {/* Calendar */}
-      <div className="rounded-2xl bg-white dark:bg-slate-800 p-4 sm:p-5 shadow-sm border border-slate-100 dark:border-slate-700">
-        {/* Toolbar */}
-        <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
-          <div className="flex items-center gap-2">
-            <button onClick={() => navigate(-1)} className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700" aria-label="Previous">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-            </button>
-            <h2 className="font-semibold text-slate-800 dark:text-slate-200 min-w-[140px] text-center">{periodLabel}</h2>
-            <button onClick={() => navigate(1)} className="p-2 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700" aria-label="Next">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-            </button>
-            <button onClick={() => setCursor(startOfDay(new Date()))} className="ml-1 px-3 py-1.5 text-xs font-medium rounded-full border border-gray-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700">
-              Today
-            </button>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="flex rounded-full border border-gray-200 dark:border-slate-600 overflow-hidden">
-              {(["month", "week"] as ViewMode[]).map((v) => (
-                <button
-                  key={v}
-                  onClick={() => setView(v)}
-                  className={`px-3 py-1.5 text-xs font-medium capitalize transition-colors ${
-                    view === v ? "bg-brand-primary text-white" : "text-slate-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700"
-                  }`}
-                >
-                  {v}
-                </button>
-              ))}
-            </div>
-            <button
-              onClick={onCreateContent}
-              className="px-4 py-1.5 text-sm font-medium rounded-full bg-brand-primary text-white hover:opacity-90 transition-opacity"
-            >
-              + Create content
-            </button>
-          </div>
-        </div>
-
-        {error && <p className="text-sm text-red-600 dark:text-red-400 mb-3">{error}</p>}
-
-        {/* Weekday headers */}
-        <div className="grid grid-cols-7 gap-1 mb-1">
-          {DAY_NAMES.map((d) => (
-            <div key={d} className="text-center text-xs font-semibold text-slate-400 dark:text-slate-500 py-1">{d}</div>
-          ))}
-        </div>
-
-        {/* Day grid */}
-        <div className="grid grid-cols-7 gap-1">
-          {days.map((day) => {
-            const key = isoDate(day);
-            const dayPosts = postsByDay[key] || [];
-            const inMonth = view === "week" || day.getMonth() === cursor.getMonth();
-            const isToday = sameDay(day, today);
-            return (
-              <div
-                key={key}
-                onDragOver={(e) => { e.preventDefault(); setDragOverKey(key); }}
-                onDragLeave={() => setDragOverKey((k) => (k === key ? null : k))}
-                onDrop={(e) => handleDrop(e, day)}
-                className={`${cellMinH} rounded-lg border p-1.5 flex flex-col gap-1 transition-colors ${
-                  dragOverKey === key
-                    ? "border-brand-primary bg-brand-primary-light ring-1 ring-brand-primary/30"
-                    : "border-slate-100 dark:border-slate-700"
-                } ${inMonth ? "bg-white dark:bg-slate-800" : "bg-slate-50/60 dark:bg-slate-900/30"}`}
+        <div className="flex items-center gap-2">
+          <div className="flex rounded-full border border-gray-200 dark:border-slate-600 overflow-hidden">
+            {(["month", "week"] as ViewMode[]).map((v) => (
+              <button
+                key={v}
+                onClick={() => setView(v)}
+                className={`px-3 py-1.5 text-xs font-medium capitalize transition-colors ${
+                  view === v ? "bg-brand-primary text-white" : "text-slate-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700"
+                }`}
               >
-                <div className={`text-xs font-medium flex items-center justify-center w-6 h-6 rounded-full ${
+                {v}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={() => setComposer({ open: true })}
+            className="px-4 py-1.5 text-sm font-medium rounded-full bg-brand-primary text-white hover:opacity-90 transition-opacity"
+          >
+            + Schedule post
+          </button>
+        </div>
+      </div>
+
+      {error && <p className="text-sm text-red-600 dark:text-red-400 mb-3">{error}</p>}
+
+      {/* Weekday headers */}
+      <div className="grid grid-cols-7 gap-1 mb-1">
+        {DAY_NAMES.map((d) => (
+          <div key={d} className="text-center text-xs font-semibold text-slate-400 dark:text-slate-500 py-1">{d}</div>
+        ))}
+      </div>
+
+      {/* Day grid */}
+      <div className="grid grid-cols-7 gap-1">
+        {days.map((day) => {
+          const key = isoDate(day);
+          const dayPosts = postsByDay[key] || [];
+          const inMonth = view === "week" || day.getMonth() === cursor.getMonth();
+          const isToday = sameDay(day, today);
+          return (
+            <div
+              key={key}
+              onClick={() => setComposer({ open: true, day })}
+              onDragOver={(e) => { e.preventDefault(); setDragOverKey(key); }}
+              onDragLeave={() => setDragOverKey((k) => (k === key ? null : k))}
+              onDrop={(e) => handleDrop(e, day)}
+              className={`group ${cellMinH} rounded-lg border p-1.5 flex flex-col gap-1 cursor-pointer transition-colors ${
+                dragOverKey === key
+                  ? "border-brand-primary bg-brand-primary-light ring-1 ring-brand-primary/30"
+                  : "border-slate-100 dark:border-slate-700 hover:border-brand-primary/40"
+              } ${inMonth ? "bg-white dark:bg-slate-800" : "bg-slate-50/60 dark:bg-slate-900/30"}`}
+            >
+              <div className="flex items-center justify-between">
+                <span className={`text-xs font-medium flex items-center justify-center w-6 h-6 rounded-full ${
                   isToday ? "bg-brand-primary text-white" : inMonth ? "text-slate-600 dark:text-slate-300" : "text-slate-300 dark:text-slate-600"
                 }`}>
                   {day.getDate()}
-                </div>
-                <div className="flex flex-col gap-1 overflow-y-auto">
-                  {dayPosts.map((p) => (
+                </span>
+                <span className="text-slate-300 dark:text-slate-600 opacity-0 group-hover:opacity-100 text-lg leading-none pr-1">+</span>
+              </div>
+              <div className="flex flex-col gap-1 overflow-y-auto">
+                {dayPosts.map((p) => {
+                  const movable = p.status === "queued" || p.status === "failed";
+                  return (
                     <button
                       key={p.id}
-                      onClick={() => setEditing(p)}
-                      className="text-left rounded-md bg-slate-100 dark:bg-slate-700/60 hover:bg-slate-200 dark:hover:bg-slate-700 px-1.5 py-1 transition-colors"
+                      draggable={movable}
+                      onDragStart={(e) => { e.stopPropagation(); e.dataTransfer.setData("text/plain", p.id); }}
+                      onClick={(e) => { e.stopPropagation(); setEditing(p); }}
+                      className={`text-left rounded-md bg-slate-100 dark:bg-slate-700/60 hover:bg-slate-200 dark:hover:bg-slate-700 px-1.5 py-1 transition-colors ${movable ? "cursor-grab active:cursor-grabbing" : ""}`}
                     >
                       <div className="flex items-center gap-1">
                         <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${STATUS_DOT[p.status]}`} />
@@ -338,15 +258,24 @@ export default function PlannerCalendar({ companyId, savedContentId, drafts, ima
                         {p.caption || p.content_type}
                       </p>
                     </button>
-                  ))}
-                </div>
+                  );
+                })}
               </div>
-            );
-          })}
-        </div>
-
-        {loading && <p className="text-xs text-slate-400 mt-3 text-center">Loading scheduled posts...</p>}
+            </div>
+          );
+        })}
       </div>
+
+      {loading && <p className="text-xs text-slate-400 mt-3 text-center">Loading scheduled posts...</p>}
+
+      {composer.open && (
+        <PostComposer
+          companyId={companyId}
+          day={composer.day}
+          onClose={() => setComposer({ open: false })}
+          onCreated={() => { setComposer({ open: false }); load(); }}
+        />
+      )}
 
       {editing && (
         <EditPostModal

@@ -11,7 +11,7 @@ import ThemeSelector from "@/components/ThemeSelector";
 import ContentGenerator from "@/components/ContentGenerator";
 import ContentResults from "@/components/ContentResults";
 import CharacterManager from "@/components/CharacterManager";
-import PlannerCalendar, { DraftItem } from "@/components/PlannerCalendar";
+import PlannerCalendar from "@/components/PlannerCalendar";
 import ThemeToggle from "@/components/ThemeToggle";
 import LogoutButton from "@/components/LogoutButton";
 import ErrorBoundary from "@/components/ErrorBoundary";
@@ -834,18 +834,6 @@ export default function Home() {
     });
   }
 
-  // Turn the current generated batch into draggable calendar drafts.
-  // Image keys mirror how images are keyed in the images map.
-  const calendarDrafts: DraftItem[] = (() => {
-    if (!content) return [];
-    const out: DraftItem[] = [];
-    content.posts.forEach((p, i) => out.push({ itemId: `post-${i}`, type: "post", label: "Post", caption: p.caption, imageKeys: [`post-${i}`] }));
-    content.reels.forEach((r, i) => out.push({ itemId: `reel-${i}`, type: "reel", label: "Reel", caption: r.caption || r.script || "", imageKeys: [], videoUrl: r.finishedVideoUrl || r.rawVideoUrl }));
-    content.linkedinArticles.forEach((a, i) => out.push({ itemId: `article-${i}`, type: "article", label: "Article", caption: a.caption || a.body || "", imageKeys: [`article-${i}`] }));
-    content.carousels.forEach((c, i) => out.push({ itemId: `carousel-${i}`, type: "carousel", label: "Carousel", caption: c.caption || "", imageKeys: c.slides.map((_, j) => `carousel-${i}-slide-${j}`) }));
-    content.quotesForX.forEach((q, i) => out.push({ itemId: `quote-${i}`, type: "quote", label: "Quote", caption: q.quote, imageKeys: [`quote-${i}`] }));
-    return out;
-  })();
 
   function handleRemoveItem(section: "posts" | "reels" | "linkedinArticles" | "carousels" | "quotesForX" | "youtube", index: number) {
     if (!content || !selectedCompany) return;
@@ -1249,7 +1237,6 @@ export default function Home() {
         <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
           {([
             { id: "calendar", label: "Calendar", icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" },
-            { id: "create", label: "Create", icon: "M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" },
             { id: "posts", label: "Posts", icon: "M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" },
           ] as const).map((tab) => (
             <button
@@ -1265,14 +1252,6 @@ export default function Home() {
               {tab.label}
             </button>
           ))}
-          <Link href="/research" className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-            Research
-          </Link>
-          <Link href="/analytics" className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
-            Analytics
-          </Link>
         </nav>
         <div className="p-2 border-t border-slate-100 dark:border-slate-800 space-y-1">
           {currentUser?.role === "admin" && (
@@ -1391,7 +1370,6 @@ export default function Home() {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 flex items-center gap-1 overflow-x-auto">
           {([
             { id: "calendar", label: "Calendar", icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" },
-            { id: "create", label: "Create", icon: "M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" },
             { id: "posts", label: "Posts", icon: "M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" },
           ] as const).map((tab) => (
             <button
@@ -1409,24 +1387,6 @@ export default function Home() {
               {tab.label}
             </button>
           ))}
-          <Link
-            href="/research"
-            className="flex items-center gap-1.5 px-3 sm:px-4 py-3 text-sm font-medium border-b-2 border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors whitespace-nowrap"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            Research
-          </Link>
-          <Link
-            href="/analytics"
-            className="flex items-center gap-1.5 px-3 sm:px-4 py-3 text-sm font-medium border-b-2 border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors whitespace-nowrap"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-            </svg>
-            Analytics
-          </Link>
         </div>
       </nav>
 
@@ -1895,13 +1855,7 @@ export default function Home() {
               {/* Calendar tab — the planner: drag drafts onto days to schedule auto-publishing */}
               {activeTab === "calendar" && (
                 <ErrorBoundary fallbackTitle="Failed to render calendar">
-                  <PlannerCalendar
-                    companyId={selectedCompany.id}
-                    savedContentId={currentSavedId}
-                    drafts={calendarDrafts}
-                    images={images}
-                    onCreateContent={() => setActiveTab("create")}
-                  />
+                  <PlannerCalendar companyId={selectedCompany.id} />
                 </ErrorBoundary>
               )}
 

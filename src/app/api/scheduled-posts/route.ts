@@ -54,6 +54,7 @@ export async function POST(request: NextRequest) {
       caption,
       imageKeys,
       mediaUrls,
+      uploadPaths,
       videoUrl,
       platforms,
       scheduledAt,
@@ -65,6 +66,7 @@ export async function POST(request: NextRequest) {
       caption?: string;
       imageKeys?: string[];
       mediaUrls?: string[];
+      uploadPaths?: string[];
       videoUrl?: string;
       platforms?: Platform[];
       scheduledAt?: string;
@@ -97,6 +99,7 @@ export async function POST(request: NextRequest) {
       caption: caption ?? "",
       image_keys: imageKeys ?? [],
       media_urls: mediaUrls ?? [],
+      upload_paths: uploadPaths ?? [],
       video_url: videoUrl ?? null,
       platforms,
       scheduled_at: new Date(scheduledAt).toISOString(),
