@@ -5,6 +5,7 @@ import { resolveCompanyAccess, CompanyAccessError } from "@/lib/company-access";
 import { getAnthropicClient } from "@/lib/anthropic";
 import { getBalance, deductCredits, logUsage } from "@/lib/credits";
 import { calculateCost, isCreditsEnabled } from "@/lib/pricing";
+import { getBrainPromptSection } from "@/lib/brain-connector";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -53,6 +54,12 @@ export async function POST(request: NextRequest) {
 
     const context = await getContextForAI(effectiveUserId, companyId);
 
+    // Develop Coaching only: ground generation in Greg's content RAG (fails open).
+    const brainSection = await getBrainPromptSection(
+      companyId,
+      `${theme.title}. ${theme.description}`
+    );
+
     const toneInstruction = tone?.prompt ? `\n\nTONE & STYLE: ${tone.prompt}` : "";
     const languageInstruction = language?.prompt ? `\n\nLANGUAGE: ${language.prompt}` : "";
 
@@ -64,7 +71,7 @@ Theme Description: ${theme.description}
 The content must be specifically about this theme, exploring a different angle than what already exists.
 
 User's saved context (use for tone, topics, and brand voice):
-${context}
+${context}${brainSection}
 
 ${currentItem ? `Here is the current version that needs to be regenerated with a FRESH take (do NOT repeat the same ideas, find a new angle):\n${JSON.stringify(currentItem)}\n` : ""}
 ${typePrompts[contentType]}

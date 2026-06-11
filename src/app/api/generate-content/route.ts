@@ -5,6 +5,7 @@ import { resolveCompanyAccess, CompanyAccessError } from "@/lib/company-access";
 import { getAnthropicClient } from "@/lib/anthropic";
 import { getBalance, deductCredits, logUsage } from "@/lib/credits";
 import { calculateCost, isCreditsEnabled } from "@/lib/pricing";
+import { getBrainPromptSection } from "@/lib/brain-connector";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -65,6 +66,12 @@ export async function POST(request: NextRequest) {
 
     const context = await getContextForAI(effectiveUserId, companyId);
 
+    // Develop Coaching only: ground generation in Greg's content RAG (fails open).
+    const brainSection = await getBrainPromptSection(
+      companyId,
+      `${theme.title}. ${theme.description}`
+    );
+
     const toneInstruction = tone?.prompt ? `\n\nTONE & STYLE: ${tone.prompt}` : "";
     const languageInstruction = language?.prompt ? `\n\nLANGUAGE: ${language.prompt}` : "";
     const referenceDocSection = theme.referenceDoc ? `\n\nREFERENCE DOCUMENT (use this as key context and inspiration for this theme — draw specific facts, examples, and talking points from it):\n${theme.referenceDoc}` : "";
@@ -77,7 +84,7 @@ Theme Description: ${theme.description}${referenceDocSection}
 IMPORTANT: All content must be specifically about this theme. Each post, article, reel, etc. should explore a different angle, tip, insight, or story related to "${theme.title}". Do not generate generic content - make it obvious how each piece connects to the theme.
 
 User's saved context (use for tone, topics, and brand voice):
-${context}
+${context}${brainSection}
 
 Generate exactly this many items (use these exact counts — do NOT skip any type that has a count above 0):
 ${[

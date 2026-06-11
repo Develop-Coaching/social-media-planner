@@ -18,6 +18,7 @@ interface CalendarItem {
   script?: string;
   slides?: { title: string; body: string }[];
   carouselIndex?: number;
+  videoUrl?: string;
 }
 
 interface Props {
@@ -67,6 +68,7 @@ function collectItems(content: GeneratedContent): CalendarItem[] {
       color: TYPE_COLORS.Reel,
       caption: r.caption || undefined,
       script: r.script,
+      videoUrl: r.finishedVideoUrl || r.rawVideoUrl || undefined,
     })
   );
   content.linkedinArticles.forEach((a, i) =>
@@ -304,7 +306,161 @@ function DownloadButton({ src, filename }: { src: string; filename: string }) {
   );
 }
 
-function DetailModal({ item, images, onClose }: { item: CalendarItem; images: Record<string, string>; onClose: () => void }) {
+// ---------- Schedule panel (auto-publishing via /api/scheduled-posts) ----------
+
+const SCHEDULE_PLATFORMS = [
+  { id: "instagram", label: "Instagram" },
+  { id: "facebook", label: "Facebook" },
+  { id: "linkedin", label: "LinkedIn" },
+] as const;
+
+type SchedulePlatform = (typeof SCHEDULE_PLATFORMS)[number]["id"];
+
+function itemContentType(item: CalendarItem): string {
+  const map: Record<string, string> = {
+    Post: "post",
+    Reel: "reel",
+    Article: "article",
+    Carousel: "carousel",
+    Quote: "quote",
+    YouTube: "youtube",
+  };
+  return map[item.type] || "post";
+}
+
+function itemImageKeys(item: CalendarItem): string[] {
+  if (item.slides && item.carouselIndex !== undefined) {
+    return item.slides.map((_, j) => `carousel-${item.carouselIndex}-slide-${j}`);
+  }
+  return item.imageKey ? [item.imageKey] : [];
+}
+
+function SchedulePanel({
+  item,
+  companyId,
+  savedContentId,
+  postingDate,
+}: {
+  item: CalendarItem;
+  companyId: string;
+  savedContentId?: string | null;
+  postingDate?: string;
+}) {
+  const [platforms, setPlatforms] = useState<Set<SchedulePlatform>>(
+    new Set(item.type === "Article" ? ["linkedin"] : ["instagram", "facebook"])
+  );
+  const [dateTime, setDateTime] = useState(() =>
+    postingDate ? `${postingDate}T09:00` : ""
+  );
+  const [scheduling, setScheduling] = useState(false);
+  const [status, setStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
+
+  const togglePlatform = (id: SchedulePlatform) => {
+    setPlatforms((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleSchedule = async () => {
+    if (!dateTime || platforms.size === 0) return;
+    setScheduling(true);
+    setStatus(null);
+    try {
+      const res = await fetch("/api/scheduled-posts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId,
+          savedContentId: savedContentId || undefined,
+          itemId: item.id,
+          contentType: itemContentType(item),
+          caption: item.caption || item.fullText,
+          imageKeys: itemImageKeys(item),
+          videoUrl: item.videoUrl || undefined,
+          platforms: Array.from(platforms),
+          scheduledAt: new Date(dateTime).toISOString(),
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setStatus({ type: "success", message: "Scheduled! It will publish automatically." });
+      } else {
+        setStatus({ type: "error", message: data.error || "Failed to schedule" });
+      }
+    } catch {
+      setStatus({ type: "error", message: "Network error" });
+    } finally {
+      setScheduling(false);
+    }
+  };
+
+  // YouTube uploads aren't supported by the publisher yet
+  if (item.type === "YouTube") return null;
+  // Reels need a video URL to publish
+  const reelMissingVideo = item.type === "Reel" && !item.videoUrl;
+
+  return (
+    <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700">
+      <h4 className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-3">
+        Schedule auto-publish
+      </h4>
+      {reelMissingVideo ? (
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          Attach a finished video to this reel before scheduling it.
+        </p>
+      ) : (
+        <>
+          <div className="flex flex-wrap items-center gap-2 mb-3">
+            {SCHEDULE_PLATFORMS.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => togglePlatform(p.id)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${
+                  platforms.has(p.id)
+                    ? "border-brand-primary bg-brand-primary-light text-brand-primary"
+                    : "border-gray-200 dark:border-slate-600 text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700"
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="datetime-local"
+              value={dateTime}
+              onChange={(e) => setDateTime(e.target.value)}
+              className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200"
+            />
+            <button
+              onClick={handleSchedule}
+              disabled={!dateTime || platforms.size === 0 || scheduling}
+              className="px-4 py-1.5 text-sm font-medium rounded-full bg-brand-primary text-white hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {scheduling ? "Scheduling..." : "Schedule"}
+            </button>
+          </div>
+          {status && (
+            <p
+              className={`mt-2 text-sm font-medium ${
+                status.type === "success"
+                  ? "text-green-600 dark:text-green-400"
+                  : "text-red-600 dark:text-red-400"
+              }`}
+            >
+              {status.message}
+            </p>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function DetailModal({ item, images, companyId, savedContentId, postingDate, onClose }: { item: CalendarItem; images: Record<string, string>; companyId: string; savedContentId?: string | null; postingDate?: string; onClose: () => void }) {
   const [captionCopied, setCaptionCopied] = useState(false);
 
   useEffect(() => {
@@ -478,6 +634,14 @@ function DetailModal({ item, images, onClose }: { item: CalendarItem; images: Re
               ))}
             </div>
           )}
+
+          {/* Schedule auto-publish */}
+          <SchedulePanel
+            item={item}
+            companyId={companyId}
+            savedContentId={savedContentId}
+            postingDate={postingDate}
+          />
         </div>
       </div>
     </div>
@@ -657,7 +821,14 @@ export default function ContentCalendar({ content, startDate, companyName, compa
     <div>
       {/* Detail modal */}
       {modalItem && (
-        <DetailModal item={modalItem} images={images} onClose={() => setModalItem(null)} />
+        <DetailModal
+          item={modalItem}
+          images={images}
+          companyId={companyId}
+          savedContentId={savedContentId}
+          postingDate={postingDates[modalItem.id]}
+          onClose={() => setModalItem(null)}
+        />
       )}
 
       {/* Week navigation */}

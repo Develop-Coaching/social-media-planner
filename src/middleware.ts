@@ -16,7 +16,9 @@ export async function middleware(request: NextRequest) {
     pathname === "/setup" ||
     pathname.startsWith("/api/auth/") ||
     pathname.startsWith("/signup/") ||
-    pathname === "/api/stripe/webhook"
+    pathname === "/api/stripe/webhook" ||
+    pathname === "/api/cron/publish-tick" ||
+    pathname === "/api/analytics/sync"
   ) {
     return NextResponse.next();
   }
