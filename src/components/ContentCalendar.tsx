@@ -347,7 +347,9 @@ function SchedulePanel({
   postingDate?: string;
 }) {
   const [platforms, setPlatforms] = useState<Set<SchedulePlatform>>(
-    new Set(item.type === "Article" ? ["linkedin"] : ["instagram", "facebook"])
+    new Set<SchedulePlatform>(
+      item.type === "Article" ? ["linkedin"] : ["instagram", "facebook"]
+    )
   );
   const [dateTime, setDateTime] = useState(() =>
     postingDate ? `${postingDate}T09:00` : ""
