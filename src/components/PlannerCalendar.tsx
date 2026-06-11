@@ -302,18 +302,22 @@ function EditPostModal({
   onClose: () => void;
   onChanged: () => void;
 }) {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const toLocal = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+
+  const [caption, setCaption] = useState(post.caption);
   const [platforms, setPlatforms] = useState<Set<string>>(new Set(post.platforms));
-  const [dateTime, setDateTime] = useState(() => {
-    const d = new Date(post.scheduled_at);
-    const pad = (n: number) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  });
+  const [dateTime, setDateTime] = useState(() => toLocal(new Date(post.scheduled_at)));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   const editable = post.status === "queued" || post.status === "failed";
 
   const save = async () => {
+    if (new Date(dateTime).getTime() <= Date.now()) {
+      setErr("Pick a time in the future.");
+      return;
+    }
     setBusy(true);
     setErr(null);
     try {
@@ -323,6 +327,7 @@ function EditPostModal({
         body: JSON.stringify({
           id: post.id,
           companyId,
+          caption,
           platforms: Array.from(platforms),
           scheduledAt: new Date(dateTime).toISOString(),
         }),
@@ -359,14 +364,20 @@ function EditPostModal({
           }`}>{post.status}</span>
         </div>
 
-        <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap mb-4 max-h-32 overflow-y-auto">{post.caption || `(${post.content_type})`}</p>
-
         {post.status === "failed" && post.error && (
           <p className="text-xs text-red-500 dark:text-red-400 mb-3">{post.error}</p>
         )}
 
         {editable ? (
           <>
+            <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">Caption</label>
+            <textarea
+              value={caption}
+              onChange={(e) => setCaption(e.target.value)}
+              rows={4}
+              className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 mb-4"
+            />
+
             <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">Platforms</label>
             <div className="flex gap-2 mb-4">
               {ALL_PLATFORMS.map((p) => (
@@ -386,6 +397,7 @@ function EditPostModal({
             <input
               type="datetime-local"
               value={dateTime}
+              min={toLocal(new Date())}
               onChange={(e) => setDateTime(e.target.value)}
               className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 mb-4"
             />
@@ -405,9 +417,12 @@ function EditPostModal({
             </div>
           </>
         ) : (
-          <div className="flex justify-end">
-            <button onClick={onClose} className="px-4 py-2 text-sm rounded-full border border-gray-200 dark:border-slate-600 text-slate-600 dark:text-slate-300">Close</button>
-          </div>
+          <>
+            <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap mb-4 max-h-40 overflow-y-auto">{post.caption || `(${post.content_type})`}</p>
+            <div className="flex justify-end">
+              <button onClick={onClose} className="px-4 py-2 text-sm rounded-full border border-gray-200 dark:border-slate-600 text-slate-600 dark:text-slate-300">Close</button>
+            </div>
+          </>
         )}
       </div>
     </div>

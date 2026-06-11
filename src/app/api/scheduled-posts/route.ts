@@ -87,6 +87,9 @@ export async function POST(request: NextRequest) {
     if (Number.isNaN(Date.parse(scheduledAt))) {
       return NextResponse.json({ error: "scheduledAt must be a valid ISO date" }, { status: 400 });
     }
+    if (Date.parse(scheduledAt) <= Date.now() - 60_000) {
+      return NextResponse.json({ error: "Scheduled time must be in the future" }, { status: 400 });
+    }
 
     const { effectiveUserId } = await resolveCompanyAccess(userId, role, companyId);
 
@@ -134,6 +137,9 @@ export async function PUT(request: NextRequest) {
     if (rest.scheduledAt) {
       if (Number.isNaN(Date.parse(rest.scheduledAt))) {
         return NextResponse.json({ error: "scheduledAt must be a valid ISO date" }, { status: 400 });
+      }
+      if (Date.parse(rest.scheduledAt) <= Date.now() - 60_000) {
+        return NextResponse.json({ error: "Scheduled time must be in the future" }, { status: 400 });
       }
       patch.scheduled_at = new Date(rest.scheduledAt).toISOString();
       // Re-queue a failed/cancelled post when it gets a new date

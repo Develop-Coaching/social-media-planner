@@ -14,11 +14,18 @@ interface PickedFile {
   isVideo: boolean;
 }
 
-function defaultDateTime(day?: Date): string {
-  const d = day ? new Date(day) : new Date(Date.now() + 60 * 60 * 1000);
-  if (day) d.setHours(9, 0, 0, 0);
+function toLocalInput(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function defaultDateTime(day?: Date): string {
+  let d = day ? new Date(day) : new Date(Date.now() + 60 * 60 * 1000);
+  if (day) d.setHours(9, 0, 0, 0);
+  // Never default to the past (e.g. a clicked day earlier today, or 9am already gone)
+  const earliest = new Date(Date.now() + 15 * 60 * 1000);
+  if (d.getTime() < earliest.getTime()) d = earliest;
+  return toLocalInput(d);
 }
 
 export default function PostComposer({
@@ -83,6 +90,10 @@ export default function PostComposer({
     }
     if (hasVideo && files.length > 1) {
       setError("Schedule a video on its own (not mixed with images).");
+      return;
+    }
+    if (new Date(dateTime).getTime() <= Date.now()) {
+      setError("Pick a time in the future.");
       return;
     }
     setBusy(true);
@@ -218,6 +229,7 @@ export default function PostComposer({
             <input
               type="datetime-local"
               value={dateTime}
+              min={toLocalInput(new Date())}
               onChange={(e) => setDateTime(e.target.value)}
               className="px-3 py-2 text-sm rounded-lg border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200"
             />
