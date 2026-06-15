@@ -1,119 +1,52 @@
-// LinkedIn UGC Posts adapter — share text + optional image as a person or organization.
-// Docs: https://learn.microsoft.com/linkedin/marketing/integrations/community-management/shares/ugc-post-api
+// LinkedIn adapter — versioned Posts API (/rest/posts + /rest/images).
+// The legacy /v2/ugcPosts endpoint rejects person URNs from modern
+// OpenID-issued tokens, so we use the current versioned API instead.
+// Docs: https://learn.microsoft.com/linkedin/marketing/community-management/shares/posts-api
 
 import type { PublishPayload, PublishResult } from "./types";
 
-const LI_API = "https://api.linkedin.com/v2";
+const LI = "https://api.linkedin.com/rest";
+const LI_VERSION = "202606"; // refresh ~yearly; LinkedIn keeps ~12 months active
+
+function headers(token: string): Record<string, string> {
+  return {
+    Authorization: `Bearer ${token}`,
+    "LinkedIn-Version": LI_VERSION,
+    "X-Restli-Protocol-Version": "2.0.0",
+    "Content-Type": "application/json",
+  };
+}
+
+// The versioned commentary field treats these characters as reserved; they
+// must be backslash-escaped or the post is rejected as invalid text.
+function escapeCommentary(text: string): string {
+  return text.replace(/[\\<>()\[\]{}@|#*_~]/g, (c) => `\\${c}`);
+}
 
 export function linkedInConfigured(): boolean {
   return !!(process.env.LINKEDIN_ACCESS_TOKEN && process.env.LINKEDIN_AUTHOR_URN);
 }
 
-export async function publishToLinkedIn(payload: PublishPayload): Promise<PublishResult> {
-  if (!linkedInConfigured()) {
-    return { success: false, platform: "linkedin", error: "LinkedIn not configured (LINKEDIN_ACCESS_TOKEN / LINKEDIN_AUTHOR_URN)" };
-  }
-
-  const token = process.env.LINKEDIN_ACCESS_TOKEN!;
-  const authorUrn = process.env.LINKEDIN_AUTHOR_URN!; // urn:li:person:XXXX or urn:li:organization:YYYY
-  const imageUrl = payload.imageUrls[0];
-
-  let mediaAsset: string | null = null;
-  if (imageUrl) {
-    try {
-      mediaAsset = await uploadImageToLinkedIn(token, authorUrn, imageUrl);
-    } catch (err) {
-      // Soft-fail: post text-only rather than blocking the publish
-      console.warn(`LinkedIn image upload failed, posting text-only: ${err}`);
-    }
-  }
-
-  const media = mediaAsset
-    ? [
-        {
-          status: "READY",
-          description: { text: payload.caption.slice(0, 200) },
-          media: mediaAsset,
-          title: { text: "Develop Coaching" },
-        },
-      ]
-    : [];
-
-  const res = await fetch(`${LI_API}/ugcPosts`, {
+async function uploadImage(token: string, owner: string, imageUrl: string): Promise<string> {
+  // 1. Initialize the upload
+  const initRes = await fetch(`${LI}/images?action=initializeUpload`, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-      "X-Restli-Protocol-Version": "2.0.0",
-    },
-    body: JSON.stringify({
-      author: authorUrn,
-      lifecycleState: "PUBLISHED",
-      specificContent: {
-        "com.linkedin.ugc.ShareContent": {
-          shareCommentary: { text: payload.caption },
-          shareMediaCategory: mediaAsset ? "IMAGE" : "NONE",
-          ...(media.length ? { media } : {}),
-        },
-      },
-      visibility: { "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC" },
-    }),
+    headers: headers(token),
+    body: JSON.stringify({ initializeUploadRequest: { owner } }),
   });
-
-  if (!res.ok) {
-    const errText = await res.text();
-    return { success: false, platform: "linkedin", error: `LinkedIn ${res.status}: ${errText.slice(0, 400)}` };
+  if (!initRes.ok) {
+    throw new Error(`initializeUpload ${initRes.status}: ${(await initRes.text()).slice(0, 300)}`);
   }
+  const init = (await initRes.json()) as { value: { uploadUrl: string; image: string } };
+  const { uploadUrl, image } = init.value;
 
-  const urn =
-    res.headers.get("x-restli-id") ||
-    ((await res.json().catch(() => ({}))) as { id?: string }).id;
-  return {
-    success: true,
-    platform: "linkedin",
-    externalId: urn || undefined,
-    externalUrl: urn ? `https://www.linkedin.com/feed/update/${urn}/` : undefined,
-  };
-}
-
-async function uploadImageToLinkedIn(token: string, owner: string, imageUrl: string): Promise<string> {
-  // 1. Register upload
-  const regRes = await fetch(`${LI_API}/assets?action=registerUpload`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      registerUploadRequest: {
-        recipes: ["urn:li:digitalmediaRecipe:feedshare-image"],
-        owner,
-        serviceRelationships: [
-          { relationshipType: "OWNER", identifier: "urn:li:userGeneratedContent" },
-        ],
-      },
-    }),
-  });
-  if (!regRes.ok) {
-    throw new Error(`registerUpload failed: ${await regRes.text()}`);
-  }
-  const reg = (await regRes.json()) as {
-    value: {
-      uploadMechanism: Record<string, { uploadUrl: string }>;
-      asset: string;
-    };
-  };
-  const uploadUrl =
-    reg.value.uploadMechanism["com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"].uploadUrl;
-  const asset = reg.value.asset;
-
-  // 2. Fetch the image bytes
+  // 2. Fetch the source bytes
   const imgRes = await fetch(imageUrl);
   if (!imgRes.ok) throw new Error(`fetch image failed: ${imgRes.status}`);
   const bytes = Buffer.from(await imgRes.arrayBuffer());
 
-  // 3. PUT the bytes to LinkedIn.
-  // LinkedIn's upload endpoint 400s with an HTML body unless Content-Type and a
+  // 3. PUT the bytes to the DMS upload URL.
+  // LinkedIn's DMS endpoint 400s with an HTML body unless Content-Type and a
   // real User-Agent are sent explicitly.
   const putRes = await fetch(uploadUrl, {
     method: "PUT",
@@ -124,7 +57,64 @@ async function uploadImageToLinkedIn(token: string, owner: string, imageUrl: str
     },
     body: bytes,
   });
-  if (!putRes.ok) throw new Error(`asset upload failed: ${putRes.status}`);
+  if (!putRes.ok) throw new Error(`image upload ${putRes.status}`);
 
-  return asset;
+  return image; // urn:li:image:...
+}
+
+export async function publishToLinkedIn(payload: PublishPayload): Promise<PublishResult> {
+  if (!linkedInConfigured()) {
+    return { success: false, platform: "linkedin", error: "LinkedIn not configured (LINKEDIN_ACCESS_TOKEN / LINKEDIN_AUTHOR_URN)" };
+  }
+
+  const token = process.env.LINKEDIN_ACCESS_TOKEN!;
+  const authorUrn = process.env.LINKEDIN_AUTHOR_URN!; // urn:li:person:XXXX or urn:li:organization:YYYY
+
+  // Upload images (LinkedIn video isn't supported here yet — those post text-only)
+  const imageUrns: string[] = [];
+  for (const url of payload.imageUrls.slice(0, 9)) {
+    try {
+      imageUrns.push(await uploadImage(token, authorUrn, url));
+    } catch (err) {
+      console.warn(`LinkedIn image upload failed, continuing: ${err}`);
+    }
+  }
+
+  const body: Record<string, unknown> = {
+    author: authorUrn,
+    commentary: escapeCommentary(payload.caption || ""),
+    visibility: "PUBLIC",
+    distribution: {
+      feedDistribution: "MAIN_FEED",
+      targetEntities: [],
+      thirdPartyDistributionChannels: [],
+    },
+    lifecycleState: "PUBLISHED",
+    isReshareDisabledByAuthor: false,
+  };
+
+  if (imageUrns.length === 1) {
+    body.content = { media: { id: imageUrns[0], altText: "" } };
+  } else if (imageUrns.length > 1) {
+    body.content = { multiImage: { images: imageUrns.map((id) => ({ id, altText: "" })) } };
+  }
+
+  const res = await fetch(`${LI}/posts`, {
+    method: "POST",
+    headers: headers(token),
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    return { success: false, platform: "linkedin", error: `LinkedIn ${res.status}: ${errText.slice(0, 400)}` };
+  }
+
+  const urn = res.headers.get("x-restli-id") || res.headers.get("x-linkedin-id") || undefined;
+  return {
+    success: true,
+    platform: "linkedin",
+    externalId: urn,
+    externalUrl: urn ? `https://www.linkedin.com/feed/update/${urn}/` : undefined,
+  };
 }
