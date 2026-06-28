@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { claimDuePosts, markPostResult, resolvePublishPayload } from "@/lib/scheduled-posts";
 import { publishToInstagram, publishToFacebook } from "@/lib/publish/meta";
 import { publishToLinkedIn } from "@/lib/publish/linkedin";
+import { sendSlackNotification } from "@/lib/slack";
 import type { Platform, PublishPayload, PublishResult, ScheduledPost } from "@/lib/publish/types";
 
 export const dynamic = "force-dynamic";
@@ -35,6 +36,9 @@ export async function GET(request: NextRequest) {
   }
 
   const results: Array<{ id: string; status: string; detail?: string }> = [];
+  // Posts that have exhausted their retries this tick, alerted to Slack below
+  // so a broken token / config never fails silently again.
+  const terminalFailures: Array<{ post: ScheduledPost; detail: string }> = [];
 
   for (const post of claimed) {
     try {
@@ -71,6 +75,7 @@ export async function GET(request: NextRequest) {
           retry_count: retryCount,
         });
         results.push({ id: post.id, status, detail: errors.join(" | ") });
+        if (status === "failed") terminalFailures.push({ post, detail: errors.join(" | ") });
       }
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
@@ -82,6 +87,24 @@ export async function GET(request: NextRequest) {
         console.error(`publish-tick: failed to mark post ${post.id}:`, markErr);
       }
       results.push({ id: post.id, status, detail: message });
+      if (status === "failed") terminalFailures.push({ post, detail: message });
+    }
+  }
+
+  if (terminalFailures.length > 0) {
+    const lines = terminalFailures.map(({ post, detail }) => {
+      const snippet = post.caption.replace(/\s+/g, " ").slice(0, 80);
+      return `• *${post.platforms.join(", ")}*: "${snippet}..."\n   ${detail.slice(0, 300)}`;
+    });
+    const text =
+      `:rotating_light: *Scheduled post${terminalFailures.length > 1 ? "s" : ""} failed to publish* ` +
+      `(gave up after ${MAX_RETRIES} attempts)\n${lines.join("\n")}\n` +
+      `_Reconnect the account in Vercel env, then re-queue the post._`;
+    try {
+      const slack = await sendSlackNotification({ text });
+      if (!slack.ok) console.error("publish-tick: Slack alert failed:", slack.error);
+    } catch (slackErr) {
+      console.error("publish-tick: Slack alert threw:", slackErr);
     }
   }
 
