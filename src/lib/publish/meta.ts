@@ -21,7 +21,7 @@ export function metaFbConfigured(): boolean {
 
 async function fetchIgPermalink(mediaId: string, token: string): Promise<string | undefined> {
   try {
-    const res = await fetch(`${GRAPH}/${mediaId}?fields=permalink&access_token=${token}`);
+    const res = await fetch(`${GRAPH}/${mediaId}?fields=permalink&access_token=${token}`, { cache: "no-store" });
     const json = (await res.json()) as { permalink?: string };
     return json.permalink;
   } catch {
@@ -144,12 +144,23 @@ async function publishInstagramReel(payload: PublishPayload, videoUrl: string): 
   // Poll status_code until FINISHED (or ERROR). Processing time is highly
   // variable (observed 33s to >4min for the same file), so a closed poll
   // window hands the container back via pendingContainerId for the next tick.
+  // cache: "no-store" is load-bearing: without it, Next.js's fetch Data Cache
+  // can pin the first IN_PROGRESS response for this URL and every later poll
+  // (across ticks too, same URL) replays it, so FINISHED is never observed.
   const deadline = Date.now() + 4 * 60 * 1000; // stay under serverless maxDuration
   let status = "IN_PROGRESS";
+  let lastReadError: string | null = null;
   while (Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, 7000));
-    const sres = await fetch(`${GRAPH}/${containerId}?fields=status_code,status&access_token=${token}`);
-    const sjson = (await sres.json()) as { status_code?: string; status?: string };
+    const sres = await fetch(`${GRAPH}/${containerId}?fields=status_code,status&access_token=${token}`, { cache: "no-store" });
+    const sjson = (await sres.json()) as { status_code?: string; status?: string; error?: unknown };
+    if (sjson.error) {
+      // A failed read is not IN_PROGRESS — remember it and keep trying, so a
+      // broken token or rate limit surfaces in the error text instead of
+      // masquerading as slow processing.
+      lastReadError = JSON.stringify(sjson.error).slice(0, 300);
+      continue;
+    }
     status = sjson.status_code || sjson.status || "IN_PROGRESS";
     if (status === "FINISHED") break;
     if (status === "ERROR" || status === "EXPIRED") {
@@ -162,7 +173,9 @@ async function publishInstagramReel(payload: PublishPayload, videoUrl: string): 
       success: false,
       platform: "instagram",
       pendingContainerId: containerId,
-      error: `IG reel still processing (status: ${status}), resuming next tick`,
+      error:
+        `IG reel still processing (status: ${status}), resuming next tick` +
+        (lastReadError ? ` [status reads failing: ${lastReadError}]` : ""),
     };
   }
 
