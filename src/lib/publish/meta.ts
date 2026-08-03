@@ -125,18 +125,25 @@ async function publishInstagramCarousel(payload: PublishPayload): Promise<Publis
 async function publishInstagramReel(payload: PublishPayload, videoUrl: string): Promise<PublishResult> {
   const token = process.env.META_ACCESS_TOKEN!;
 
-  const create = await igCreate({
-    media_type: "REELS",
-    video_url: videoUrl,
-    caption: payload.caption,
-    share_to_feed: true,
-  });
-  if (!create.ok) {
-    return { success: false, platform: "instagram", error: `IG reel create failed: ${JSON.stringify(create.raw)}` };
+  // Resume a container from a previous tick when one exists; processing
+  // continues on Meta's side between ticks, so re-creating would restart it.
+  let containerId = payload.igContainerId;
+  if (!containerId) {
+    const create = await igCreate({
+      media_type: "REELS",
+      video_url: videoUrl,
+      caption: payload.caption,
+      share_to_feed: true,
+    });
+    if (!create.ok) {
+      return { success: false, platform: "instagram", error: `IG reel create failed: ${JSON.stringify(create.raw)}` };
+    }
+    containerId = create.id!;
   }
 
-  // Poll status_code until FINISHED (or ERROR). Reels can take 60-300s to process.
-  const containerId = create.id!;
+  // Poll status_code until FINISHED (or ERROR). Processing time is highly
+  // variable (observed 33s to >4min for the same file), so a closed poll
+  // window hands the container back via pendingContainerId for the next tick.
   const deadline = Date.now() + 4 * 60 * 1000; // stay under serverless maxDuration
   let status = "IN_PROGRESS";
   while (Date.now() < deadline) {
@@ -146,11 +153,17 @@ async function publishInstagramReel(payload: PublishPayload, videoUrl: string): 
     status = sjson.status_code || sjson.status || "IN_PROGRESS";
     if (status === "FINISHED") break;
     if (status === "ERROR" || status === "EXPIRED") {
+      // Terminal container state — don't hand it back for resumption.
       return { success: false, platform: "instagram", error: `IG reel processing failed: ${JSON.stringify(sjson)}` };
     }
   }
   if (status !== "FINISHED") {
-    return { success: false, platform: "instagram", error: `IG reel processing timed out (last status: ${status})` };
+    return {
+      success: false,
+      platform: "instagram",
+      pendingContainerId: containerId,
+      error: `IG reel still processing (status: ${status}), resuming next tick`,
+    };
   }
 
   return igPublish(containerId);
