@@ -36,6 +36,9 @@ export interface PublishPayload {
   imageUrls: string[];
   videoUrl: string | null;
   isReel: boolean;
+  // An IG reel container from a previous tick that is still processing.
+  // When set, the IG adapter resumes polling it instead of creating a new one.
+  igContainerId?: string;
 }
 
 export interface PublishResult {
@@ -44,4 +47,8 @@ export interface PublishResult {
   externalId?: string;
   externalUrl?: string;
   error?: string;
+  // IG reel container still processing when the poll window closed. The tick
+  // stores it on the row so the next tick resumes the same container instead
+  // of re-uploading; waiting is not a failed attempt.
+  pendingContainerId?: string;
 }
