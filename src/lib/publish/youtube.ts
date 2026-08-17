@@ -101,8 +101,12 @@ export async function publishToYouTube(
   const caption = payload.caption || "";
 
   try {
-    // Stream the signed URL straight into the upload instead of buffering the
-    // whole file in memory; these are tens of megabytes.
+    // Read the signed URL into a Buffer rather than piping the response stream
+    // straight through. A stream body can only be consumed once, so if the
+    // Google client retried the request internally it would re-send an
+    // exhausted stream and could land a truncated video on the channel. A
+    // Buffer is replayable, which makes that whole class of bug impossible.
+    // Safe on memory because Supabase caps these uploads at 50MiB.
     const videoRes = await fetch(payload.videoUrl, { cache: "no-store" });
     if (!videoRes.ok || !videoRes.body) {
       return {
@@ -111,6 +115,7 @@ export async function publishToYouTube(
         error: `fetch video failed: ${videoRes.status}`,
       };
     }
+    const videoBytes = Buffer.from(await videoRes.arrayBuffer());
 
     const yt = youTubeClient();
     const res = await yt.videos.insert({
@@ -128,8 +133,17 @@ export async function publishToYouTube(
         },
       },
       media: {
-        body: Readable.fromWeb(videoRes.body as Parameters<typeof Readable.fromWeb>[0]),
+        // The API requires a readable stream here, and a stream can only be
+        // consumed once. See the retry note below.
+        body: Readable.from(videoBytes),
       },
+    },
+    {
+      // Internal retries are disabled deliberately. A retry would re-send the
+      // already-consumed stream above and could land a truncated video on the
+      // channel. The tick's own retry (MAX_RETRIES) re-runs this function from
+      // the top with a freshly fetched body, which is the safe way to retry.
+      retry: false,
     });
 
     const id = res.data.id;
