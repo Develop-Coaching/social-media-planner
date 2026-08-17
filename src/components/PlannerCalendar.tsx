@@ -19,6 +19,7 @@ const ALL_PLATFORMS = [
   { id: "instagram", label: "Instagram" },
   { id: "facebook", label: "Facebook" },
   { id: "linkedin", label: "LinkedIn" },
+  { id: "youtube", label: "YouTube" },
 ] as const;
 
 const STATUS_DOT: Record<string, string> = {

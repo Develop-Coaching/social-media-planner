@@ -3,9 +3,12 @@
 import { useState, useRef } from "react";
 
 const PLATFORMS = [
-  { id: "instagram", label: "Instagram" },
-  { id: "facebook", label: "Facebook" },
-  { id: "linkedin", label: "LinkedIn" },
+  { id: "instagram", label: "Instagram", videoOnly: false },
+  { id: "facebook", label: "Facebook", videoOnly: false },
+  { id: "linkedin", label: "LinkedIn", videoOnly: false },
+  // YouTube uploads a video file; there is no image post to fall back to, so
+  // the toggle stays disabled until the composer has a video attached.
+  { id: "youtube", label: "YouTube", videoOnly: true },
 ] as const;
 
 interface PickedFile {
@@ -79,12 +82,21 @@ export default function PostComposer({
 
   const contentType = hasVideo ? "reel" : files.length > 1 ? "carousel" : "post";
 
+  // A video-only platform can be ticked while a video is attached and then be
+  // left stranded if the video is removed, since its button is now disabled and
+  // cannot be un-ticked. Derive the real selection rather than trusting state,
+  // so an image post can never be scheduled to YouTube.
+  const VIDEO_ONLY = PLATFORMS.filter((p) => p.videoOnly).map((p) => p.id as string);
+  const effectivePlatforms = Array.from(platforms).filter(
+    (id) => hasVideo || VIDEO_ONLY.indexOf(id) === -1
+  );
+
   const submit = async () => {
     if (files.length === 0) {
       setError("Add at least one image or video.");
       return;
     }
-    if (platforms.size === 0) {
+    if (effectivePlatforms.length === 0) {
       setError("Pick at least one platform.");
       return;
     }
@@ -122,7 +134,7 @@ export default function PostComposer({
           contentType,
           caption,
           uploadPaths,
-          platforms: Array.from(platforms),
+          platforms: effectivePlatforms,
           scheduledAt: new Date(dateTime).toISOString(),
         }),
       });
@@ -209,17 +221,26 @@ export default function PostComposer({
           <div>
             <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-2">Post to</label>
             <div className="flex gap-2">
-              {PLATFORMS.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => togglePlatform(p.id)}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${
-                    platforms.has(p.id) ? "border-brand-primary bg-brand-primary-light text-brand-primary" : "border-gray-200 dark:border-slate-600 text-slate-500 dark:text-slate-400"
-                  }`}
-                >
-                  {p.label}
-                </button>
-              ))}
+              {PLATFORMS.map((p) => {
+                const blocked = p.videoOnly && !hasVideo;
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => togglePlatform(p.id)}
+                    disabled={blocked}
+                    title={blocked ? `${p.label} needs a video` : undefined}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${
+                      blocked
+                        ? "border-gray-200 dark:border-slate-700 text-slate-300 dark:text-slate-600 cursor-not-allowed"
+                        : platforms.has(p.id)
+                        ? "border-brand-primary bg-brand-primary-light text-brand-primary"
+                        : "border-gray-200 dark:border-slate-600 text-slate-500 dark:text-slate-400"
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
