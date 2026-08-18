@@ -82,11 +82,19 @@ export async function cancelScheduledPost(id: string, userId: string, companyId:
 
 // Claim due posts with an optimistic queued→publishing transition so a
 // concurrent tick can't double-publish the same row.
+// LinkedIn has no API for creating native articles, so an article row is a
+// PLANNING entry: it shows on the calendar and in the posts list, but it must
+// never be picked up by the publisher. Without this guard the publisher would
+// treat it like any other post and push its caption out as a plain text update,
+// because the LinkedIn adapter does not look at content_type at all.
+export const NON_PUBLISHABLE_CONTENT_TYPES = ["article"] as const;
+
 export async function claimDuePosts(limit: number = 5): Promise<ScheduledPost[]> {
   const { data: due, error } = await supabase
     .from("scheduled_posts")
     .select("id")
     .eq("status", "queued")
+    .not("content_type", "in", `(${NON_PUBLISHABLE_CONTENT_TYPES.join(",")})`)
     .lte("scheduled_at", new Date().toISOString())
     .order("scheduled_at", { ascending: true })
     .limit(limit);
