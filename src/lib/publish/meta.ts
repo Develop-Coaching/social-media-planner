@@ -134,6 +134,7 @@ async function publishInstagramReel(payload: PublishPayload, videoUrl: string): 
       video_url: videoUrl,
       caption: payload.caption,
       share_to_feed: true,
+      ...(payload.coverUrl ? { cover_url: payload.coverUrl } : {}),
     });
     if (!create.ok) {
       return { success: false, platform: "instagram", error: `IG reel create failed: ${JSON.stringify(create.raw)}` };

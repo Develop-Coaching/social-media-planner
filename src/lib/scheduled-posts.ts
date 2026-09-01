@@ -154,6 +154,14 @@ export async function resolvePublishPayload(post: ScheduledPost): Promise<Publis
     }
   }
 
+  let coverUrl: string | null = null;
+  if (post.cover_path) {
+    const { data: signed } = await supabase.storage
+      .from(BUCKET)
+      .createSignedUrl(post.cover_path, SIGNED_URL_TTL);
+    coverUrl = signed?.signedUrl ?? null;
+  }
+
   if (post.image_keys?.length && post.saved_content_id) {
     const { data: rows } = await supabase
       .from("images")
@@ -179,6 +187,7 @@ export async function resolvePublishPayload(post: ScheduledPost): Promise<Publis
     caption: post.caption,
     imageUrls,
     videoUrl,
+    coverUrl,
     isReel: isVideoType,
   };
 }

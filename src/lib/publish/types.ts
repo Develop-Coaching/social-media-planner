@@ -19,6 +19,7 @@ export interface ScheduledPost {
   media_urls: string[];
   upload_paths: string[];
   video_url: string | null;
+  cover_path: string | null;
   platforms: Platform[];
   scheduled_at: string;
   status: ScheduledPostStatus;
@@ -35,6 +36,7 @@ export interface PublishPayload {
   caption: string;
   imageUrls: string[];
   videoUrl: string | null;
+  coverUrl: string | null;
   isReel: boolean;
   // An IG reel container from a previous tick that is still processing.
   // When set, the IG adapter resumes polling it instead of creating a new one.
