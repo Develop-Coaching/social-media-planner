@@ -6,7 +6,11 @@
 
 import type { PublishPayload, PublishResult } from "./types";
 
-const GRAPH = "https://graph.facebook.com/v21.0";
+function graphBase(): string {
+  const version = process.env.META_GRAPH_VERSION || "v24.0";
+  if (!/^v\d+\.\d+$/.test(version)) throw new Error("META_GRAPH_VERSION must look like v24.0");
+  return `https://graph.facebook.com/${version}`;
+}
 
 export function metaIgConfigured(): boolean {
   return !!(process.env.META_ACCESS_TOKEN && process.env.META_IG_USER_ID);
@@ -21,7 +25,7 @@ export function metaFbConfigured(): boolean {
 
 async function fetchIgPermalink(mediaId: string, token: string): Promise<string | undefined> {
   try {
-    const res = await fetch(`${GRAPH}/${mediaId}?fields=permalink&access_token=${token}`, { cache: "no-store" });
+    const res = await fetch(`${graphBase()}/${mediaId}?fields=permalink&access_token=${token}`, { cache: "no-store" });
     const json = (await res.json()) as { permalink?: string };
     return json.permalink;
   } catch {
@@ -59,7 +63,7 @@ export async function publishToInstagram(payload: PublishPayload): Promise<Publi
 async function igCreate(body: Record<string, unknown>): Promise<{ id?: string; raw: unknown; ok: boolean }> {
   const token = process.env.META_ACCESS_TOKEN!;
   const igUserId = process.env.META_IG_USER_ID!;
-  const res = await fetch(`${GRAPH}/${igUserId}/media`, {
+  const res = await fetch(`${graphBase()}/${igUserId}/media`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ...body, access_token: token }),
@@ -71,7 +75,7 @@ async function igCreate(body: Record<string, unknown>): Promise<{ id?: string; r
 async function igPublish(creationId: string, platform: "instagram" = "instagram"): Promise<PublishResult> {
   const token = process.env.META_ACCESS_TOKEN!;
   const igUserId = process.env.META_IG_USER_ID!;
-  const res = await fetch(`${GRAPH}/${igUserId}/media_publish`, {
+  const res = await fetch(`${graphBase()}/${igUserId}/media_publish`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ creation_id: creationId, access_token: token }),
@@ -153,7 +157,7 @@ async function publishInstagramReel(payload: PublishPayload, videoUrl: string): 
   let lastReadError: string | null = null;
   while (Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, 7000));
-    const sres = await fetch(`${GRAPH}/${containerId}?fields=status_code,status&access_token=${token}`, { cache: "no-store" });
+    const sres = await fetch(`${graphBase()}/${containerId}?fields=status_code,status&access_token=${token}`, { cache: "no-store" });
     const sjson = (await sres.json()) as { status_code?: string; status?: string; error?: unknown };
     if (sjson.error) {
       // A failed read is not IN_PROGRESS — remember it and keep trying, so a
@@ -200,15 +204,15 @@ export async function publishToFacebook(payload: PublishPayload): Promise<Publis
   const body: Record<string, unknown> = { access_token: token, published: true };
 
   if (payload.videoUrl) {
-    endpoint = `${GRAPH}/${pageId}/videos`;
+    endpoint = `${graphBase()}/${pageId}/videos`;
     body.file_url = payload.videoUrl;
     body.description = payload.caption;
   } else if (imageUrl) {
-    endpoint = `${GRAPH}/${pageId}/photos`;
+    endpoint = `${graphBase()}/${pageId}/photos`;
     body.url = imageUrl;
     body.caption = payload.caption;
   } else {
-    endpoint = `${GRAPH}/${pageId}/feed`;
+    endpoint = `${graphBase()}/${pageId}/feed`;
     body.message = payload.caption;
   }
 
@@ -224,10 +228,17 @@ export async function publishToFacebook(payload: PublishPayload): Promise<Publis
   }
 
   const externalId = json.post_id || json.id!;
+  let permalink: string | undefined;
+  try {
+    const read = await fetch(`${graphBase()}/${encodeURIComponent(externalId)}?fields=permalink_url&access_token=${encodeURIComponent(token)}`, { cache: "no-store" });
+    if (read.ok) permalink = ((await read.json()) as { permalink_url?: string }).permalink_url;
+  } catch {
+    // The provider ID is durable even if the optional canonical URL read fails.
+  }
   return {
     success: true,
     platform: "facebook",
     externalId,
-    externalUrl: `https://facebook.com/${externalId}`,
+    externalUrl: permalink,
   };
 }

@@ -6,12 +6,16 @@
 import type { PublishPayload, PublishResult } from "./types";
 
 const LI = "https://api.linkedin.com/rest";
-const LI_VERSION = "202606"; // refresh ~yearly; LinkedIn keeps ~12 months active
+function linkedInVersion(): string {
+  const version = process.env.LINKEDIN_API_VERSION || "202606";
+  if (!/^\d{6}$/.test(version)) throw new Error("LINKEDIN_API_VERSION must be YYYYMM");
+  return version;
+}
 
 function headers(token: string): Record<string, string> {
   return {
     Authorization: `Bearer ${token}`,
-    "LinkedIn-Version": LI_VERSION,
+    "LinkedIn-Version": linkedInVersion(),
     "X-Restli-Protocol-Version": "2.0.0",
     "Content-Type": "application/json",
   };
@@ -62,6 +66,53 @@ async function uploadImage(token: string, owner: string, imageUrl: string): Prom
   return image; // urn:li:image:...
 }
 
+async function uploadVideo(token: string, owner: string, videoUrl: string): Promise<string> {
+  const source = await fetch(videoUrl, { cache: "no-store" });
+  if (!source.ok) throw new Error(`fetch video failed: ${source.status}`);
+  const bytes = Buffer.from(await source.arrayBuffer());
+  const initRes = await fetch(`${LI}/videos?action=initializeUpload`, {
+    method: "POST",
+    headers: headers(token),
+    body: JSON.stringify({ initializeUploadRequest: { owner, fileSizeBytes: bytes.length, uploadCaptions: false, uploadThumbnail: false } }),
+  });
+  if (!initRes.ok) throw new Error(`initialize video upload ${initRes.status}: ${(await initRes.text()).slice(0, 300)}`);
+  const init = (await initRes.json()) as {
+    value?: {
+      video?: string;
+      uploadToken?: string;
+      uploadInstructions?: Array<{ uploadUrl?: string; firstByte?: number; lastByte?: number }>;
+    };
+  };
+  const video = init.value?.video;
+  const instructions = init.value?.uploadInstructions ?? [];
+  if (!video || instructions.length === 0) throw new Error("LinkedIn video upload initialization returned no resumable instructions");
+
+  const uploadedPartIds: string[] = [];
+  for (const instruction of instructions) {
+    if (!instruction.uploadUrl || instruction.firstByte === undefined || instruction.lastByte === undefined) {
+      throw new Error("LinkedIn video upload instruction was incomplete");
+    }
+    const part = bytes.subarray(instruction.firstByte, instruction.lastByte + 1);
+    const upload = await fetch(instruction.uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": "application/octet-stream" },
+      body: part,
+    });
+    if (!upload.ok) throw new Error(`video part upload failed: ${upload.status}`);
+    const etag = upload.headers.get("etag");
+    if (!etag) throw new Error("LinkedIn video part upload returned no ETag");
+    uploadedPartIds.push(etag);
+  }
+
+  const finalize = await fetch(`${LI}/videos?action=finalizeUpload`, {
+    method: "POST",
+    headers: headers(token),
+    body: JSON.stringify({ finalizeUploadRequest: { video, uploadToken: init.value?.uploadToken ?? "", uploadedPartIds } }),
+  });
+  if (!finalize.ok) throw new Error(`finalize video upload ${finalize.status}: ${(await finalize.text()).slice(0, 300)}`);
+  return video;
+}
+
 export async function publishToLinkedIn(payload: PublishPayload): Promise<PublishResult> {
   if (!linkedInConfigured()) {
     return { success: false, platform: "linkedin", error: "LinkedIn not configured (LINKEDIN_ACCESS_TOKEN / LINKEDIN_AUTHOR_URN)" };
@@ -70,13 +121,21 @@ export async function publishToLinkedIn(payload: PublishPayload): Promise<Publis
   const token = process.env.LINKEDIN_ACCESS_TOKEN!;
   const authorUrn = process.env.LINKEDIN_AUTHOR_URN!; // urn:li:person:XXXX or urn:li:organization:YYYY
 
-  // Upload images (LinkedIn video isn't supported here yet — those post text-only)
+  let videoUrn: string | null = null;
+  if (payload.videoUrl) {
+    try {
+      videoUrn = await uploadVideo(token, authorUrn, payload.videoUrl);
+    } catch (err) {
+      return { success: false, platform: "linkedin", error: `LinkedIn video upload failed: ${err instanceof Error ? err.message : String(err)}` };
+    }
+  }
+
   const imageUrns: string[] = [];
-  for (const url of payload.imageUrls.slice(0, 9)) {
+  for (const url of (videoUrn ? [] : payload.imageUrls.slice(0, 9))) {
     try {
       imageUrns.push(await uploadImage(token, authorUrn, url));
     } catch (err) {
-      console.warn(`LinkedIn image upload failed, continuing: ${err}`);
+      return { success: false, platform: "linkedin", error: `LinkedIn image upload failed: ${err instanceof Error ? err.message : String(err)}` };
     }
   }
 
@@ -93,7 +152,9 @@ export async function publishToLinkedIn(payload: PublishPayload): Promise<Publis
     isReshareDisabledByAuthor: false,
   };
 
-  if (imageUrns.length === 1) {
+  if (videoUrn) {
+    body.content = { media: { id: videoUrn } };
+  } else if (imageUrns.length === 1) {
     body.content = { media: { id: imageUrns[0], altText: "" } };
   } else if (imageUrns.length > 1) {
     body.content = { multiImage: { images: imageUrns.map((id) => ({ id, altText: "" })) } };
@@ -111,10 +172,13 @@ export async function publishToLinkedIn(payload: PublishPayload): Promise<Publis
   }
 
   const urn = res.headers.get("x-restli-id") || res.headers.get("x-linkedin-id") || undefined;
+  if (!urn) {
+    return { success: false, platform: "linkedin", error: "LinkedIn returned 201 without x-restli-id" };
+  }
   return {
     success: true,
     platform: "linkedin",
     externalId: urn,
-    externalUrl: urn ? `https://www.linkedin.com/feed/update/${urn}/` : undefined,
+    externalUrl: `https://www.linkedin.com/feed/update/${urn}/`,
   };
 }

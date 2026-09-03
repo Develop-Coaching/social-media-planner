@@ -89,34 +89,41 @@ export async function cancelScheduledPost(id: string, userId: string, companyId:
 // because the LinkedIn adapter does not look at content_type at all.
 export const NON_PUBLISHABLE_CONTENT_TYPES = ["article"] as const;
 
-export async function claimDuePosts(limit: number = 5): Promise<ScheduledPost[]> {
-  const { data: due, error } = await supabase
-    .from("scheduled_posts")
-    .select("id")
-    .eq("status", "queued")
-    .not("content_type", "in", `(${NON_PUBLISHABLE_CONTENT_TYPES.join(",")})`)
-    .lte("scheduled_at", new Date().toISOString())
-    .order("scheduled_at", { ascending: true })
-    .limit(limit);
-  if (error) throw new Error(`claimDuePosts select: ${error.message}`);
-  if (!due?.length) return [];
+export async function claimDuePosts(expectedEpoch: number, limit: number = 5): Promise<ScheduledPost[]> {
+  const { data, error } = await supabase.rpc("claim_legacy_spp_posts", {
+    p_expected_epoch: expectedEpoch,
+    p_limit: limit,
+    p_lease_seconds: 420,
+    p_now: new Date().toISOString(),
+  });
+  if (error) throw new Error(`claimDuePosts: ${error.message}`);
+  return (data ?? []) as ScheduledPost[];
+}
 
-  const claimed: ScheduledPost[] = [];
-  for (const row of due) {
-    const { data, error: claimError } = await supabase
-      .from("scheduled_posts")
-      .update({ status: "publishing", updated_at: new Date().toISOString() })
-      .eq("id", row.id)
-      .eq("status", "queued")
-      .select()
-      .maybeSingle();
-    if (!claimError && data) claimed.push(data as ScheduledPost);
-  }
-  return claimed;
+export async function reapExpiredLegacyClaims(expectedEpoch: number, now: Date = new Date()): Promise<
+  Array<{ post_id: string; verification_required: boolean }>
+> {
+  const { data, error } = await supabase.rpc("reap_expired_legacy_spp_leases", {
+    p_expected_epoch: expectedEpoch,
+    p_now: now.toISOString(),
+  });
+  if (error) throw new Error(`reapExpiredLegacyClaims: ${error.message}`);
+  return (data ?? []) as Array<{ post_id: string; verification_required: boolean }>;
+}
+
+export async function markLegacyDispatchStarted(post: ScheduledPost, expectedEpoch: number): Promise<void> {
+  if (!post.publisher_lease_token) throw new Error("Legacy claim has no lease token");
+  const { data, error } = await supabase.rpc("mark_legacy_spp_dispatch_started", {
+    p_post_id: post.id,
+    p_lease_token: post.publisher_lease_token,
+    p_expected_epoch: expectedEpoch,
+  });
+  if (error || !data) throw new Error(`markLegacyDispatchStarted: ${error?.message ?? "lease lost"}`);
 }
 
 export async function markPostResult(
-  id: string,
+  post: ScheduledPost,
+  expectedEpoch: number,
   result: {
     status: "published" | "failed" | "queued";
     platform_post_ids?: Record<string, string>;
@@ -124,17 +131,18 @@ export async function markPostResult(
     retry_count?: number;
   }
 ): Promise<void> {
-  const patch: Record<string, unknown> = {
-    status: result.status,
-    updated_at: new Date().toISOString(),
-    error: result.error ?? null,
-  };
-  if (result.platform_post_ids) patch.platform_post_ids = result.platform_post_ids;
-  if (typeof result.retry_count === "number") patch.retry_count = result.retry_count;
-  if (result.status === "published") patch.published_at = new Date().toISOString();
-
-  const { error } = await supabase.from("scheduled_posts").update(patch).eq("id", id);
-  if (error) throw new Error(`markPostResult: ${error.message}`);
+  if (!post.publisher_lease_token) throw new Error("Legacy claim has no lease token");
+  const { data, error } = await supabase.rpc("complete_legacy_spp_claim", {
+    p_post_id: post.id,
+    p_lease_token: post.publisher_lease_token,
+    p_expected_epoch: expectedEpoch,
+    p_status: result.status,
+    p_platform_post_ids: result.platform_post_ids ?? post.platform_post_ids,
+    p_error: result.error ?? null,
+    p_retry_count: result.retry_count ?? post.retry_count,
+    p_published_at: result.status === "published" ? new Date().toISOString() : null,
+  });
+  if (error || !data) throw new Error(`markPostResult: ${error?.message ?? "lease lost"}`);
 }
 
 // Resolve a scheduled post's media into URLs the platforms can fetch:
