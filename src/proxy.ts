@@ -47,6 +47,16 @@ export async function proxy(request: NextRequest) {
   try {
     const { payload } = await jwtVerify(token, getSecret());
 
+    if (
+      payload.onboardingCompleted === false &&
+      pathname !== "/onboarding" &&
+      !pathname.startsWith("/api/onboarding") &&
+      !pathname.startsWith("/api/auth/")
+    ) {
+      const onboardingUrl = new URL("/onboarding", request.url);
+      return NextResponse.redirect(onboardingUrl);
+    }
+
     return NextResponse.next();
   } catch {
     return unauthorized(request);

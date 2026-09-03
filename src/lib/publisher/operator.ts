@@ -34,6 +34,7 @@ export interface OperatorDelivery {
   nextAttemptAt: string | null;
   liveUrl: string | null;
   error: string | null;
+  errorCode: "verification_required" | "delivery_failed" | null;
   publishedAt: string | null;
 }
 
@@ -74,7 +75,12 @@ export function safeLiveUrl(platform: PublisherDeliveryRow["platform"], value: s
   if (!value) return null;
   try {
     const url = new URL(value);
-    return url.protocol === "https:" && LIVE_HOSTS[platform].has(url.hostname.toLowerCase()) ? url.toString() : null;
+    if (url.protocol !== "https:" || !LIVE_HOSTS[platform].has(url.hostname.toLowerCase())) return null;
+    url.username = "";
+    url.password = "";
+    url.search = "";
+    url.hash = "";
+    return url.toString();
   } catch {
     return null;
   }
@@ -84,13 +90,24 @@ export function sanitizeOperatorText(value: string | null, limit = 300): string 
   if (!value) return null;
   const sanitized = value
     .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]")
-    .replace(/([?&](?:access_token|token|sig|signature|key)=)[^&\s]+/gi, "$1[redacted]")
+    .replace(/\bhttps?:\/\/[^\s<>'\"]+/gi, (candidate) => {
+      try {
+        const url = new URL(candidate);
+        url.search = "";
+        url.hash = "";
+        return url.toString();
+      } catch {
+        return "[redacted-url]";
+      }
+    })
+    .replace(/\b(?:AWSAccessKeyId|X-Amz-Credential|X-Amz-Signature|GoogleAccessId|Signature|token|apikey|api_key)\s*[=:]\s*[^\s&,;]+/gi, "[redacted-secret]")
     .replace(/\b(?:eyJ[A-Za-z0-9_-]{20,}|[A-Za-z0-9_-]{48,})\b/g, "[redacted]")
     .trim();
   return sanitized ? sanitized.slice(0, limit) : null;
 }
 
 function aggregateState(item: PublisherContentRow, deliveries: PublisherDeliveryRow[]): OperatorQueueState {
+  if (item.approval_state !== "approved") return "blocked";
   if (item.publishability === "planning_only") return "planning_only";
   if (item.migration_state === "migration_frozen" || deliveries.some((delivery) => delivery.state === "migration_frozen")) return "frozen";
   if (deliveries.some((delivery) => delivery.state === "verification_required")) return "verification_required";
@@ -103,7 +120,8 @@ function aggregateState(item: PublisherContentRow, deliveries: PublisherDelivery
   return "blocked";
 }
 
-function nextAction(state: OperatorQueueState): string {
+function nextAction(state: OperatorQueueState, item: PublisherContentRow): string {
+  if (item.approval_state !== "approved") return "Approval is required. This item is blocked and cannot dispatch.";
   switch (state) {
     case "scheduled": return "No action needed. The publisher will process this when due.";
     case "frozen": return "Migration safeguard is active. This item cannot publish before the signed-off ownership handoff.";
@@ -143,7 +161,7 @@ export function toOperatorQueueItems(
       migrationState: item.migration_state,
       legacyStatus: sanitizeOperatorText(item.legacy_status, 80),
       state,
-      nextAction: nextAction(state),
+      nextAction: nextAction(state, item),
       deliveries: deliveries.map((delivery) => ({
         id: delivery.id,
         platform: delivery.platform,
@@ -152,7 +170,14 @@ export function toOperatorQueueItems(
         maxAttempts: delivery.max_attempts,
         nextAttemptAt: delivery.next_attempt_at,
         liveUrl: safeLiveUrl(delivery.platform, delivery.live_url),
-        error: sanitizeOperatorText(delivery.last_error),
+        error: delivery.last_error
+          ? delivery.state === "verification_required"
+            ? "Provider verification is required before any retry."
+            : "Delivery failed. Review restricted server logs for diagnostic detail."
+          : null,
+        errorCode: delivery.last_error
+          ? delivery.state === "verification_required" ? "verification_required" : "delivery_failed"
+          : null,
         publishedAt: delivery.published_at,
       })),
     };

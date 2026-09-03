@@ -1,13 +1,25 @@
 import { SignJWT, jwtVerify } from "jose";
+import { isStrongAuthSecret, isStrongSetupKey } from "./credential-policy";
 
 const COOKIE_NAME = "pc_session";
 const EXPIRY = "7d";
 
 export { COOKIE_NAME };
 
+export function sessionCookieOptions(production = process.env.NODE_ENV === "production") {
+  return {
+    httpOnly: true,
+    secure: production,
+    sameSite: "lax" as const,
+    path: "/",
+    maxAge: 7 * 24 * 60 * 60,
+  };
+}
+
 export interface AuthConfiguration {
   configured: boolean;
   missing: Array<"ADMIN_PASSWORD" | "AUTH_SECRET">;
+  invalid: Array<"ADMIN_PASSWORD" | "AUTH_SECRET">;
 }
 
 export function authConfiguration(
@@ -15,26 +27,31 @@ export function authConfiguration(
 ): AuthConfiguration {
   const source = env ?? process.env;
   const missing: AuthConfiguration["missing"] = [];
+  const invalid: AuthConfiguration["invalid"] = [];
   if (!source.ADMIN_PASSWORD?.trim()) missing.push("ADMIN_PASSWORD");
   if (!source.AUTH_SECRET?.trim()) missing.push("AUTH_SECRET");
-  return { configured: missing.length === 0, missing };
+  if (source.ADMIN_PASSWORD && !isStrongSetupKey(source.ADMIN_PASSWORD)) invalid.push("ADMIN_PASSWORD");
+  if (source.AUTH_SECRET && !isStrongAuthSecret(source.AUTH_SECRET)) invalid.push("AUTH_SECRET");
+  return { configured: missing.length === 0 && invalid.length === 0, missing, invalid };
 }
 
 export function getSecret(): Uint8Array {
   const configuration = authConfiguration();
   if (!configuration.configured) {
-    throw new AuthConfigurationError(configuration.missing);
+    throw new AuthConfigurationError(configuration.missing, configuration.invalid);
   }
   return new TextEncoder().encode(process.env.AUTH_SECRET!);
 }
 
 export class AuthConfigurationError extends Error {
   readonly missing: AuthConfiguration["missing"];
+  readonly invalid: AuthConfiguration["invalid"];
 
-  constructor(missing: AuthConfiguration["missing"]) {
+  constructor(missing: AuthConfiguration["missing"], invalid: AuthConfiguration["invalid"] = []) {
     super("Authentication is not configured");
     this.name = "AuthConfigurationError";
     this.missing = missing;
+    this.invalid = invalid;
   }
 }
 

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { authConfiguration, createToken, COOKIE_NAME } from "@/lib/auth";
+import { authConfiguration, createToken, COOKIE_NAME, sessionCookieOptions } from "@/lib/auth";
 import { verifyPassword } from "@/lib/users";
 import { createRateLimiter, getClientIP } from "@/lib/rate-limit";
 
@@ -42,13 +42,7 @@ export async function POST(request: NextRequest) {
     const token = await createToken(user.id, user.role, user.onboardingCompleted);
     const response = NextResponse.json({ success: true });
 
-    response.cookies.set(COOKIE_NAME, token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-      maxAge: 7 * 24 * 60 * 60,
-    });
+    response.cookies.set(COOKIE_NAME, token, sessionCookieOptions());
 
     return response;
   } catch {

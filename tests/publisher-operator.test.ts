@@ -71,6 +71,12 @@ describe("operator queue projection", () => {
   it("blocks content with no known delivery transition", () => {
     expect(toOperatorQueueItems([content], [])[0].state).toBe("blocked");
   });
+
+  it("blocks draft content even when a delivery appears runnable", () => {
+    const [item] = toOperatorQueueItems([{ ...content, approval_state: "draft" }], [delivery()]);
+    expect(item.state).toBe("blocked");
+    expect(item.nextAction).toContain("Approval is required");
+  });
 });
 
 describe("operator output safety", () => {
@@ -79,6 +85,19 @@ describe("operator output safety", () => {
     expect(safeLiveUrl("instagram", "http://www.instagram.com/p/abc")).toBeNull();
     expect(safeLiveUrl("instagram", "https://instagram.com.evil.test/p/abc")).toBeNull();
     expect(safeLiveUrl("instagram", "javascript:alert(1)")).toBeNull();
+    expect(safeLiveUrl("instagram", "https://instagram.com/p/abc?token=secret#fragment")).toBe("https://instagram.com/p/abc");
+  });
+
+  it("removes query strings and fragments from cloud signed URLs", () => {
+    for (const signedUrl of [
+      "https://bucket.s3.amazonaws.com/media.png?X-Amz-Credential=AKIA_TEST&X-Amz-Signature=secret",
+      "https://storage.googleapis.com/bucket/media.png?GoogleAccessId=user%40example.com&Signature=secret",
+      "https://project.supabase.co/storage/v1/object/sign/media.png?token=secret#private",
+    ]) {
+      const result = sanitizeOperatorText(`Upload failed at ${signedUrl}`);
+      expect(result).not.toMatch(/[?#]/);
+      expect(result).not.toMatch(/secret|Credential|Signature|token/i);
+    }
   });
 
   it("redacts common token shapes and caps output", () => {

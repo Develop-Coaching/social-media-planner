@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/auth-helpers";
 import { markOnboardingComplete } from "@/lib/users";
-import { createToken, COOKIE_NAME } from "@/lib/auth";
+import { createToken, COOKIE_NAME, sessionCookieOptions } from "@/lib/auth";
 import {
   OnboardingResponses,
   saveOnboardingResponses,
@@ -35,13 +35,7 @@ export async function POST(request: NextRequest) {
     // 5. Re-issue JWT with onboardingCompleted=true
     const token = await createToken(userId, role, true);
     const res = NextResponse.json({ success: true, companyId });
-    res.cookies.set(COOKIE_NAME, token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-      maxAge: 7 * 24 * 60 * 60,
-    });
+    res.cookies.set(COOKIE_NAME, token, sessionCookieOptions());
 
     return res;
   } catch (e) {

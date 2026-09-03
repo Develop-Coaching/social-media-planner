@@ -10,7 +10,7 @@ interface Health {
   dispatchEnabled: boolean;
   configuredEpoch: number | null;
   ownership: { owner: "legacy" | "replacement"; epoch: number; cutoffAt: string | null; reconciled: boolean };
-  platforms: Array<{ platform: string; configured: boolean; state: string; missingPermissions: string[]; detail: string }>;
+  platforms: Array<{ platform: string; configured: boolean; state: string }>;
 }
 
 const FILTERS: Array<{ id: "all" | OperatorQueueState; label: string }> = [
@@ -54,6 +54,7 @@ export default function OperatorShell() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const requestSequence = useRef(0);
+  const activeRequest = useRef<AbortController | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -74,26 +75,40 @@ export default function OperatorShell() {
 
   const refresh = useCallback(async () => {
     if (!tenantId) return;
+    activeRequest.current?.abort();
+    const controller = new AbortController();
+    activeRequest.current = controller;
     const requestId = ++requestSequence.current;
     setLoading(true); setError(null); setItems([]); setHealth(null);
     try {
       const [queueResponse, healthResponse] = await Promise.all([
-        fetch(`/api/publisher/queue?companyId=${encodeURIComponent(tenantId)}`, { cache: "no-store" }),
-        fetch("/api/publisher/health", { cache: "no-store" }),
+        fetch(`/api/publisher/queue?companyId=${encodeURIComponent(tenantId)}`, { cache: "no-store", signal: controller.signal }),
+        fetch("/api/publisher/health", { cache: "no-store", signal: controller.signal }),
       ]);
       const queueBody = await queueResponse.json();
       const healthBody = await healthResponse.json();
       if (requestId !== requestSequence.current) return;
       if (!queueResponse.ok) throw new Error(queueBody.error || "Unable to load publisher queue");
       setItems(queueBody.items ?? []); setHealth(healthResponse.ok ? healthBody : null);
-      if (!healthResponse.ok) setError(healthBody.error || "Publisher health is unavailable");
+      if (!healthResponse.ok && healthResponse.status !== 403) setError("Publisher health is unavailable");
     } catch (reason) {
       if (requestId !== requestSequence.current) return;
+      if (reason instanceof DOMException && reason.name === "AbortError") return;
       setError(reason instanceof Error ? reason.message : "Unable to refresh publisher queue");
     } finally {
       if (requestId === requestSequence.current) setLoading(false);
     }
   }, [tenantId]);
+
+  const selectTenant = useCallback((nextTenantId: string) => {
+    activeRequest.current?.abort();
+    requestSequence.current += 1;
+    setItems([]);
+    setHealth(null);
+    setError(null);
+    setLoading(true);
+    setTenantId(nextTenantId);
+  }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
   const visible = useMemo(() => filter === "all" ? items : items.filter((item) => item.state === filter), [filter, items]);
@@ -110,7 +125,7 @@ export default function OperatorShell() {
       </header>
       <div className="mx-auto max-w-6xl px-4 py-5 sm:px-6 sm:py-8">
         <section className="mb-5 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
-          <div><label htmlFor="tenant" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Queue</label><select id="tenant" value={tenantId} onChange={(event) => setTenantId(event.target.value)} className="w-full max-w-md rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-900">{tenants.map((tenant) => <option key={tenant.id} value={tenant.id}>{tenant.name}{tenant.isAssigned ? " (assigned)" : ""}</option>)}</select></div>
+      <div><label htmlFor="tenant" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">Queue</label><select id="tenant" value={tenantId} onChange={(event) => selectTenant(event.target.value)} className="w-full max-w-md rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm dark:border-slate-700 dark:bg-slate-900">{tenants.map((tenant) => <option key={tenant.id} value={tenant.id}>{tenant.name}{tenant.isAssigned ? " (assigned)" : ""}</option>)}</select></div>
           <button onClick={refresh} disabled={loading || !tenantId} className="self-end rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50">{loading ? "Refreshing…" : "Refresh"}</button>
         </section>
         {health && <HealthPanel health={health} />}
@@ -124,7 +139,7 @@ export default function OperatorShell() {
 
 function HealthPanel({ health }: { health: Health }) {
   const safeToRun = health.dispatchEnabled && health.ownership.owner === "replacement" && health.configuredEpoch === health.ownership.epoch;
-  return <section aria-label="Publisher health" className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"><div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="font-semibold">Publisher health</h2><p className="text-sm text-slate-500 dark:text-slate-400">{safeToRun ? "Replacement publisher is active." : health.ownership.owner === "legacy" ? "Legacy scheduler still owns the frozen migration queue." : "Dispatch is paused or its ownership epoch does not match."}</p></div><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${safeToRun ? STATE_STYLE.published : STATE_STYLE.frozen}`}>{safeToRun ? "Active" : "Protected"}</span></div><div className="mt-3 flex flex-wrap gap-2">{health.platforms.map((platform) => <span key={platform.platform} title={platform.detail} className={`rounded-full px-2.5 py-1 text-xs font-medium ${platform.state === "ok" ? STATE_STYLE.published : platform.state === "unknown" ? STATE_STYLE.publishing : STATE_STYLE.dead_letter}`}>{platform.platform}: {platform.state}</span>)}</div></section>;
+  return <section aria-label="Publisher health" className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"><div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="font-semibold">Publisher health</h2><p className="text-sm text-slate-500 dark:text-slate-400">{safeToRun ? "Replacement publisher is active." : health.ownership.owner === "legacy" ? "Legacy scheduler still owns the frozen migration queue." : "Dispatch is paused or its ownership epoch does not match."}</p></div><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${safeToRun ? STATE_STYLE.published : STATE_STYLE.frozen}`}>{safeToRun ? "Active" : "Protected"}</span></div><div className="mt-3 flex flex-wrap gap-2">{health.platforms.map((platform) => <span key={platform.platform} className={`rounded-full px-2.5 py-1 text-xs font-medium ${platform.state === "ok" ? STATE_STYLE.published : platform.state === "unknown" ? STATE_STYLE.publishing : STATE_STYLE.dead_letter}`}>{platform.platform}: {platform.state}</span>)}</div></section>;
 }
 
 function QueueCard({ item }: { item: OperatorQueueItem }) {

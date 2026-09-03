@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getInviteByToken, isInviteValid, markInviteUsed } from "@/lib/invites";
 import { createUser } from "@/lib/users";
-import { createToken, COOKIE_NAME } from "@/lib/auth";
+import { createToken, COOKIE_NAME, sessionCookieOptions } from "@/lib/auth";
 import { createRateLimiter, getClientIP } from "@/lib/rate-limit";
+import { credentialPolicyError } from "@/lib/credential-policy";
 
 export const dynamic = "force-dynamic";
 
@@ -30,8 +31,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "All fields are required" }, { status: 400 });
     }
 
-    if (password.length < 8) {
-      return NextResponse.json({ error: "Password must be at least 8 characters" }, { status: 400 });
+    const passwordError = credentialPolicyError(password);
+    if (passwordError) {
+      return NextResponse.json({ error: passwordError }, { status: 400 });
     }
 
     // Validate invite
@@ -53,13 +55,7 @@ export async function POST(request: NextRequest) {
     const jwt = await createToken(user.id, user.role, false);
     const response = NextResponse.json({ success: true, redirectTo: "/onboarding" });
 
-    response.cookies.set(COOKIE_NAME, jwt, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-      maxAge: 7 * 24 * 60 * 60,
-    });
+    response.cookies.set(COOKIE_NAME, jwt, sessionCookieOptions());
 
     return response;
   } catch (e) {
