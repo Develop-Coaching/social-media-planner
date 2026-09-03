@@ -12,6 +12,13 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // This exact service subtree authenticates locally with its Hermes HMAC
+  // contract. Do not exempt adjacent paths from the normal session boundary.
+  if (pathname === "/api/hermes/v1/social-schedules"
+    || pathname.startsWith("/api/hermes/v1/social-schedules/")) {
+    return NextResponse.next();
+  }
+
   if (!authConfiguration().configured) {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "Authentication is not configured" }, { status: 503 });
