@@ -8,6 +8,7 @@ const REQUIRED_KEYS = [
 ];
 const STATUSES = new Set(["queued", "publishing", "published", "failed", "cancelled"]);
 const PLATFORMS = new Set(["instagram", "facebook", "linkedin"]);
+const AMBIGUOUS_PROVIDER_ID = /^(pending|unknown|failed|error|processing|publishing|queued|n\/a|null|none|sent)$/i;
 
 export function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
@@ -38,7 +39,7 @@ export function classifyLegacyPlatformOutcome(row, platform) {
   const rawId = typeof row.platform_post_ids?.[platform] === "string"
     ? row.platform_post_ids[platform].trim()
     : "";
-  const directAmbiguous = /^(pending|unknown|failed|error|processing|publishing|queued|n\/a|null|none|sent)$/i.test(rawId);
+  const directAmbiguous = AMBIGUOUS_PROVIDER_ID.test(rawId);
   const containerId = platform === "instagram" && typeof row.platform_post_ids?.instagram_container === "string"
     ? row.platform_post_ids.instagram_container.trim()
     : "";
@@ -55,6 +56,32 @@ export function classifyLegacyPlatformOutcome(row, platform) {
       ? { instagram_container: containerId || null, instagram_container_since: containerSince || null }
       : {},
   };
+}
+
+export function classifyAuditedLegacyResolution(outcome, audit) {
+  if (!outcome?.ambiguous || audit?.event_type !== "legacy_verification_resolved" || !audit.actor?.trim()) return null;
+  const details = audit.details;
+  const evidence = details?.provider_evidence;
+  if (!evidence || Array.isArray(evidence) || typeof evidence !== "object" || Object.keys(evidence).length === 0) return null;
+  if (details.before?.state !== "verification_required"
+    || stableJson(details.before?.provider_reconciliation_metadata ?? {}) !== stableJson(outcome.reconciliationMetadata ?? {})) return null;
+
+  if (details.resolution === "confirmed_published") {
+    const providerPostId = typeof details.provider_post_id === "string" ? details.provider_post_id.trim() : "";
+    const publishedAt = details.published_at;
+    if (!providerPostId || AMBIGUOUS_PROVIDER_ID.test(providerPostId) || !publishedAt
+      || details.after?.state !== "succeeded"
+      || details.after?.platform_post_id !== providerPostId
+      || details.after?.published_at !== publishedAt) return null;
+    return { state: "succeeded", platformPostId: providerPostId, publishedAt };
+  }
+  if (details.resolution === "confirmed_absent"
+    && details.after?.state === "migration_frozen"
+    && details.provider_post_id == null && details.published_at == null
+    && details.after?.platform_post_id == null && details.after?.published_at == null) {
+    return { state: "migration_frozen", platformPostId: null, publishedAt: null };
+  }
+  return null;
 }
 
 export function validateRows(rows) {

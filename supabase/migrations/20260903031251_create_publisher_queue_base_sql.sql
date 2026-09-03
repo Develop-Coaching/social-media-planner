@@ -307,20 +307,29 @@ declare
   v_user_id text;
   v_company_id text;
 begin
-  if tg_op = 'INSERT' or new.state is distinct from old.state or new.lease_phase is distinct from old.lease_phase then
+  if tg_op = 'INSERT' or new.state is distinct from old.state or new.lease_phase is distinct from old.lease_phase
+    or new.provider_reconciliation_metadata is distinct from old.provider_reconciliation_metadata then
     select ci.user_id, ci.company_id into v_user_id, v_company_id
     from public.publisher_content_items ci where ci.id = new.content_item_id;
     insert into public.publisher_audit_log (
       user_id, company_id, content_item_id, delivery_id, event_type, actor, details
     ) values (
       v_user_id, v_company_id, new.content_item_id, new.id,
-      case when tg_op = 'INSERT' then 'delivery_created' else 'delivery_transitioned' end,
+      case
+        when tg_op = 'INSERT' then 'delivery_created'
+        when new.state is not distinct from old.state and new.lease_phase is not distinct from old.lease_phase
+          and new.provider_reconciliation_metadata is distinct from old.provider_reconciliation_metadata
+          then 'delivery_checkpointed'
+        else 'delivery_transitioned'
+      end,
       'database',
       jsonb_build_object(
         'from_state', case when tg_op = 'INSERT' then null else old.state end,
         'to_state', new.state,
         'lease_phase', new.lease_phase,
-        'attempt_count', new.attempt_count
+        'attempt_count', new.attempt_count,
+        'provider_reconciliation_metadata_before', case when tg_op = 'INSERT' then null else old.provider_reconciliation_metadata end,
+        'provider_reconciliation_metadata_after', new.provider_reconciliation_metadata
       )
     );
   end if;
@@ -707,6 +716,43 @@ begin
 end;
 $$;
 
+create or replace function publisher_private.checkpoint_publisher_delivery(
+  p_delivery_id uuid,
+  p_lease_token uuid,
+  p_provider_reconciliation_metadata jsonb
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_owner text;
+begin
+  if p_provider_reconciliation_metadata is null
+    or jsonb_typeof(p_provider_reconciliation_metadata) <> 'object'
+    or p_provider_reconciliation_metadata = '{}'::jsonb then
+    raise exception 'provider reconciliation checkpoint must be a non-empty JSON object' using errcode = '22023';
+  end if;
+
+  select owner into v_owner
+  from public.publisher_queue_ownership
+  where source = 'legacy_spp'
+  for update;
+  if v_owner is distinct from 'replacement' then
+    raise exception 'replacement publisher does not own the queue' using errcode = '40001';
+  end if;
+
+  update public.publisher_deliveries d
+  set provider_reconciliation_metadata = d.provider_reconciliation_metadata || p_provider_reconciliation_metadata,
+      updated_at = statement_timestamp()
+  where d.id = p_delivery_id and d.state = 'leased'
+    and d.lease_token = p_lease_token and d.lease_phase = 'pre_dispatch'
+    and d.lease_expires_at > statement_timestamp();
+  return found;
+end;
+$$;
+
 create or replace function publisher_private.mark_publisher_dispatch_started(
   p_delivery_id uuid,
   p_lease_token uuid,
@@ -1031,6 +1077,97 @@ begin
 end;
 $$;
 
+create or replace function publisher_private.resolve_legacy_delivery_verification(
+  p_delivery_id uuid,
+  p_resolution text,
+  p_provider_post_id text,
+  p_published_at timestamptz,
+  p_actor text,
+  p_provider_evidence jsonb
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_owner text;
+  v_before jsonb;
+  v_content_id uuid;
+  v_user_id text;
+  v_company_id text;
+  v_attestation text;
+begin
+  if p_resolution is null or p_resolution not in ('confirmed_published', 'confirmed_absent')
+    or nullif(btrim(p_actor), '') is null
+    or p_provider_evidence is null
+    or jsonb_typeof(p_provider_evidence) <> 'object'
+    or p_provider_evidence = '{}'::jsonb then
+    raise exception 'verification resolution requires an outcome, actor, and provider evidence' using errcode = '22023';
+  end if;
+  if p_resolution = 'confirmed_published' and (
+    nullif(btrim(p_provider_post_id), '') is null
+    or lower(btrim(p_provider_post_id)) ~ '^(pending|unknown|failed|error|processing|publishing|queued|n/a|null|none|sent)$'
+    or p_published_at is null
+  ) then
+    raise exception 'confirmed publication requires a durable provider ID and published_at' using errcode = '22023';
+  end if;
+  if p_resolution = 'confirmed_absent' and (p_provider_post_id is not null or p_published_at is not null) then
+    raise exception 'confirmed absence cannot include publication fields' using errcode = '22023';
+  end if;
+
+  select owner into v_owner from public.publisher_queue_ownership
+  where source = 'legacy_spp' for update;
+  if v_owner is distinct from 'legacy' then
+    raise exception 'legacy verification is closed after ownership transfer' using errcode = '55000';
+  end if;
+
+  select to_jsonb(d), d.content_item_id, ci.user_id, ci.company_id
+  into v_before, v_content_id, v_user_id, v_company_id
+  from public.publisher_deliveries d
+  join public.publisher_content_items ci on ci.id = d.content_item_id
+  where d.id = p_delivery_id and d.state = 'verification_required'
+    and ci.legacy_spp_id is not null and ci.legacy_status = 'queued'
+    and ci.publishability = 'publishable' and ci.content_type <> 'article'
+  for update of d;
+  if v_before is null then return false; end if;
+
+  update public.publisher_deliveries
+  set state = case when p_resolution = 'confirmed_published' then 'succeeded' else 'migration_frozen' end,
+      platform_post_id = case when p_resolution = 'confirmed_published' then btrim(p_provider_post_id) else null end,
+      published_at = case when p_resolution = 'confirmed_published' then p_published_at else null end,
+      last_error = null,
+      updated_at = statement_timestamp()
+  where id = p_delivery_id;
+
+  insert into public.publisher_audit_log (
+    user_id, company_id, content_item_id, delivery_id, event_type, actor, details
+  ) values (
+    v_user_id, v_company_id, v_content_id, p_delivery_id,
+    'legacy_verification_resolved', btrim(p_actor),
+    jsonb_build_object(
+      'resolution', p_resolution,
+      'before', v_before,
+      'after', (select to_jsonb(d) from public.publisher_deliveries d where d.id = p_delivery_id),
+      'provider_post_id', case when p_resolution = 'confirmed_published' then btrim(p_provider_post_id) else null end,
+      'published_at', p_published_at,
+      'provider_evidence', p_provider_evidence
+    )
+  );
+
+  select encode(extensions.digest(string_agg(
+    ci.legacy_spp_id::text || ':' || ci.legacy_payload_sha256 || ':' || d.platform || ':' || d.state || ':' || coalesce(d.platform_post_id, '') || ':' || d.provider_reconciliation_metadata::text,
+    E'\n' order by ci.legacy_spp_id, d.platform
+  ), 'sha256'), 'hex') into v_attestation
+  from public.publisher_content_items ci join public.publisher_deliveries d on d.content_item_id = ci.id
+  where ci.legacy_spp_id is not null;
+  update public.publisher_queue_ownership
+  set reconciliation_sha256 = v_attestation, updated_at = statement_timestamp()
+  where source = 'legacy_spp' and owner = 'legacy';
+  return true;
+end;
+$$;
+
 create or replace function publisher_private.transfer_publisher_queue_ownership(
   p_expected_epoch bigint,
   p_cutoff_at timestamptz
@@ -1124,11 +1261,41 @@ begin
           else 'empty'
         end as id_class
       ) classified
+      left join lateral (
+        select a.details
+        from public.publisher_audit_log a
+        where a.delivery_id = d.id
+          and a.event_type = 'legacy_verification_resolved'
+          and nullif(btrim(a.actor), '') is not null
+          and a.details->'provider_evidence' is not null
+          and jsonb_typeof(a.details->'provider_evidence') = 'object'
+          and a.details->'provider_evidence' <> '{}'::jsonb
+          and a.details->'before'->>'state' = 'verification_required'
+          and a.details->'before'->'provider_reconciliation_metadata'
+            is not distinct from d.provider_reconciliation_metadata
+          and a.details->'after' is not distinct from to_jsonb(d)
+          and (
+            (a.details->>'resolution' = 'confirmed_published'
+              and a.details->'after'->>'state' = 'succeeded'
+              and nullif(btrim(a.details->>'provider_post_id'), '') = d.platform_post_id
+              and (a.details->>'published_at')::timestamptz is not distinct from d.published_at)
+            or
+            (a.details->>'resolution' = 'confirmed_absent'
+              and a.details->'after'->>'state' = 'migration_frozen'
+              and d.platform_post_id is null and d.published_at is null)
+          )
+        order by a.id desc
+        limit 1
+      ) resolved on true
       where d.id is null
         or d.idempotency_key <> 'legacy-spp:' || ci.legacy_spp_id::text || ':' || p.platform
         or d.state <> case
           when ci.legacy_status = 'queued' and ci.content_type = 'article' then 'planning_only'
           when ci.legacy_status = 'queued' and classified.id_class = 'durable' then 'succeeded'
+          when ci.legacy_status = 'queued' and classified.id_class = 'ambiguous'
+            and resolved.details->>'resolution' = 'confirmed_published' then 'succeeded'
+          when ci.legacy_status = 'queued' and classified.id_class = 'ambiguous'
+            and resolved.details->>'resolution' = 'confirmed_absent' then 'migration_frozen'
           when ci.legacy_status = 'queued' and classified.id_class = 'ambiguous' then 'verification_required'
           when ci.legacy_status = 'queued' then 'migration_frozen'
           when ci.legacy_status = 'published' and classified.id_class = 'durable' then 'succeeded'
@@ -1139,6 +1306,12 @@ begin
           else 'historical'
         end
         or (classified.id_class = 'durable' and d.platform_post_id is distinct from ids.provider_id)
+        or (classified.id_class = 'ambiguous'
+          and resolved.details->>'resolution' = 'confirmed_published'
+          and d.platform_post_id is distinct from resolved.details->>'provider_post_id')
+        or (classified.id_class = 'ambiguous'
+          and resolved.details->>'resolution' = 'confirmed_absent'
+          and d.platform_post_id is not null)
         or d.provider_reconciliation_metadata is distinct from case
           when p.platform = 'instagram' and (ids.instagram_container is not null or ids.instagram_container_since is not null)
           then jsonb_build_object(
@@ -1198,6 +1371,10 @@ create or replace function public.mark_publisher_dispatch_started(p_delivery_id 
 returns boolean language plpgsql security invoker set search_path = '' as $$
 begin perform publisher_private.assert_service_caller(); return publisher_private.mark_publisher_dispatch_started(p_delivery_id,p_lease_token,p_request_fingerprint_sha256); end $$;
 
+create or replace function public.checkpoint_publisher_delivery(p_delivery_id uuid,p_lease_token uuid,p_provider_reconciliation_metadata jsonb)
+returns boolean language plpgsql security invoker set search_path = '' as $$
+begin perform publisher_private.assert_service_caller(); return publisher_private.checkpoint_publisher_delivery(p_delivery_id,p_lease_token,p_provider_reconciliation_metadata); end $$;
+
 create or replace function public.complete_publisher_delivery(p_delivery_id uuid,p_lease_token uuid,p_platform_post_id text,p_live_url text default null,p_provider_response jsonb default null)
 returns boolean language plpgsql security invoker set search_path = '' as $$
 begin perform publisher_private.assert_service_caller(); return publisher_private.complete_publisher_delivery(p_delivery_id,p_lease_token,p_platform_post_id,p_live_url,p_provider_response); end $$;
@@ -1229,6 +1406,10 @@ begin perform publisher_private.assert_service_caller(); return query select * f
 create or replace function public.reap_expired_publisher_leases(p_now timestamptz default statement_timestamp())
 returns table (delivery_id uuid,new_state text) language plpgsql security invoker set search_path = '' as $$
 begin perform publisher_private.assert_service_caller(); return query select * from publisher_private.reap_expired_publisher_leases(p_now); end $$;
+
+create or replace function public.resolve_legacy_delivery_verification(p_delivery_id uuid,p_resolution text,p_provider_post_id text,p_published_at timestamptz,p_actor text,p_provider_evidence jsonb)
+returns boolean language plpgsql security invoker set search_path = '' as $$
+begin perform publisher_private.assert_service_caller(); return publisher_private.resolve_legacy_delivery_verification(p_delivery_id,p_resolution,p_provider_post_id,p_published_at,p_actor,p_provider_evidence); end $$;
 
 create or replace function public.transfer_publisher_queue_ownership(p_expected_epoch bigint,p_cutoff_at timestamptz)
 returns bigint language plpgsql security invoker set search_path = '' as $$
@@ -1265,6 +1446,7 @@ revoke all on function public.audit_publisher_delivery_transition() from public,
 revoke all on function public.import_legacy_spp_rows(jsonb) from public, anon, authenticated, service_role;
 revoke all on function public.claim_legacy_spp_posts(bigint, integer, integer, timestamptz) from public, anon, authenticated, service_role;
 revoke all on function public.claim_publisher_deliveries(bigint, integer, integer, timestamptz) from public, anon, authenticated, service_role;
+revoke all on function public.checkpoint_publisher_delivery(uuid, uuid, jsonb) from public, anon, authenticated, service_role;
 revoke all on function public.mark_publisher_dispatch_started(uuid, uuid, text) from public, anon, authenticated, service_role;
 revoke all on function public.complete_publisher_delivery(uuid, uuid, text, text, jsonb) from public, anon, authenticated, service_role;
 revoke all on function public.retry_publisher_delivery(uuid, uuid, text, timestamptz) from public, anon, authenticated, service_role;
@@ -1274,11 +1456,13 @@ revoke all on function public.mark_legacy_spp_dispatch_started(uuid, uuid, bigin
 revoke all on function public.complete_legacy_spp_claim(uuid, uuid, bigint, text, jsonb, text, integer, timestamptz) from public, anon, authenticated, service_role;
 revoke all on function public.reap_expired_legacy_spp_leases(bigint, timestamptz) from public, anon, authenticated, service_role;
 revoke all on function public.reap_expired_publisher_leases(timestamptz) from public, anon, authenticated, service_role;
+revoke all on function public.resolve_legacy_delivery_verification(uuid, text, text, timestamptz, text, jsonb) from public, anon, authenticated, service_role;
 revoke all on function public.transfer_publisher_queue_ownership(bigint, timestamptz) from public, anon, authenticated, service_role;
 
 grant execute on function public.import_legacy_spp_rows(jsonb) to service_role;
 grant execute on function public.claim_legacy_spp_posts(bigint, integer, integer, timestamptz) to service_role;
 grant execute on function public.claim_publisher_deliveries(bigint, integer, integer, timestamptz) to service_role;
+grant execute on function public.checkpoint_publisher_delivery(uuid, uuid, jsonb) to service_role;
 grant execute on function public.mark_publisher_dispatch_started(uuid, uuid, text) to service_role;
 grant execute on function public.complete_publisher_delivery(uuid, uuid, text, text, jsonb) to service_role;
 grant execute on function public.retry_publisher_delivery(uuid, uuid, text, timestamptz) to service_role;
@@ -1288,6 +1472,7 @@ grant execute on function public.mark_legacy_spp_dispatch_started(uuid, uuid, bi
 grant execute on function public.complete_legacy_spp_claim(uuid, uuid, bigint, text, jsonb, text, integer, timestamptz) to service_role;
 grant execute on function public.reap_expired_legacy_spp_leases(bigint, timestamptz) to service_role;
 grant execute on function public.reap_expired_publisher_leases(timestamptz) to service_role;
+grant execute on function public.resolve_legacy_delivery_verification(uuid, text, text, timestamptz, text, jsonb) to service_role;
 grant execute on function public.transfer_publisher_queue_ownership(bigint, timestamptz) to service_role;
 
 revoke all on all functions in schema publisher_private from public, anon, authenticated, service_role;

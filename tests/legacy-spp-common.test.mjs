@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { classifyLegacyPlatformOutcome, manifestFor, sha256, stableJson, summary, validateRows } from "../scripts/migration/legacy-spp-common.mjs";
+import { classifyAuditedLegacyResolution, classifyLegacyPlatformOutcome, manifestFor, sha256, stableJson, summary, validateRows } from "../scripts/migration/legacy-spp-common.mjs";
 
 function fixtureRow(index) {
   const queued = index <= 21;
@@ -66,4 +66,53 @@ test("Instagram auxiliary container keys require verification and are preserved"
   assert.equal(classifyLegacyPlatformOutcome({
     ...fixtureRow(15), platform_post_ids: { instagram_container_since: "2026-09-03T01:02:03.000Z" },
   }, "instagram").ambiguous, true);
+});
+
+test("only complete immutable audit evidence resolves an ambiguous legacy outcome", () => {
+  const outcome = classifyLegacyPlatformOutcome({
+    ...fixtureRow(15), platform_post_ids: { instagram_container: "container-only" },
+  }, "instagram");
+  const before = {
+    state: "verification_required",
+    provider_reconciliation_metadata: outcome.reconciliationMetadata,
+  };
+  const confirmedPublished = {
+    event_type: "legacy_verification_resolved",
+    actor: "sanitized-reviewer",
+    details: {
+      resolution: "confirmed_published",
+      before,
+      after: {
+        state: "succeeded",
+        platform_post_id: "durable-provider-id",
+        published_at: "2026-09-03T03:04:05+00:00",
+      },
+      provider_post_id: "durable-provider-id",
+      published_at: "2026-09-03T03:04:05+00:00",
+      provider_evidence: { lookup: "published" },
+    },
+  };
+  assert.deepEqual(classifyAuditedLegacyResolution(outcome, confirmedPublished), {
+    state: "succeeded",
+    platformPostId: "durable-provider-id",
+    publishedAt: "2026-09-03T03:04:05+00:00",
+  });
+
+  const confirmedAbsent = {
+    ...confirmedPublished,
+    details: {
+      resolution: "confirmed_absent",
+      before,
+      after: { state: "migration_frozen", platform_post_id: null, published_at: null },
+      provider_post_id: null,
+      published_at: null,
+      provider_evidence: { lookup: "not_found" },
+    },
+  };
+  assert.deepEqual(classifyAuditedLegacyResolution(outcome, confirmedAbsent), {
+    state: "migration_frozen", platformPostId: null, publishedAt: null,
+  });
+  assert.equal(classifyAuditedLegacyResolution(outcome, {
+    ...confirmedAbsent, details: { ...confirmedAbsent.details, provider_evidence: {} },
+  }), null);
 });

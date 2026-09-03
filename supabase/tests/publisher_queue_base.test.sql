@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(71);
+select plan(82);
 
 select has_table('public', 'publisher_queue_ownership', 'ownership controller exists');
 select has_table('public', 'publisher_content_items', 'content items exist');
@@ -33,6 +33,12 @@ select ok(not has_table_privilege('service_role', 'public.publisher_audit_log', 
 select ok(not has_function_privilege('anon', 'public.claim_publisher_deliveries(bigint,integer,integer,timestamptz)', 'execute'), 'anon cannot claim');
 select ok(not has_function_privilege('authenticated', 'public.claim_publisher_deliveries(bigint,integer,integer,timestamptz)', 'execute'), 'authenticated cannot claim');
 select ok(has_function_privilege('service_role', 'public.claim_publisher_deliveries(bigint,integer,integer,timestamptz)', 'execute'), 'service role can claim');
+select ok(not has_function_privilege('anon', 'public.resolve_legacy_delivery_verification(uuid,text,text,timestamptz,text,jsonb)', 'execute'), 'anon cannot resolve legacy verification');
+select ok(not has_function_privilege('authenticated', 'public.resolve_legacy_delivery_verification(uuid,text,text,timestamptz,text,jsonb)', 'execute'), 'authenticated cannot resolve legacy verification');
+select ok(has_function_privilege('service_role', 'public.resolve_legacy_delivery_verification(uuid,text,text,timestamptz,text,jsonb)', 'execute'), 'service role can resolve legacy verification');
+select ok(not has_function_privilege('anon', 'public.checkpoint_publisher_delivery(uuid,uuid,jsonb)', 'execute'), 'anon cannot checkpoint provider metadata');
+select ok(not has_function_privilege('authenticated', 'public.checkpoint_publisher_delivery(uuid,uuid,jsonb)', 'execute'), 'authenticated cannot checkpoint provider metadata');
+select ok(has_function_privilege('service_role', 'public.checkpoint_publisher_delivery(uuid,uuid,jsonb)', 'execute'), 'service role can checkpoint provider metadata');
 
 set local role authenticated;
 select throws_ok(
@@ -91,6 +97,15 @@ select is((select count(*)::integer from public.publisher_content_items where mi
 select is((select count(*)::integer from public.publisher_content_items where migration_state = 'historical'), 46, '46 historical rows preserved');
 select is((select count(*)::integer from public.publisher_content_items where publishability = 'planning_only'), 14, '14 article reminders are planning only');
 select is((select count(*)::integer from public.publisher_content_items where migration_state = 'migration_frozen' and content_type = 'reel'), 7, '7 queued reels preserved');
+select throws_ok(
+  format(
+    'select public.checkpoint_publisher_delivery(%L, %L, %L::jsonb)',
+    (select id from public.publisher_deliveries limit 1), gen_random_uuid(), '{"prepare_handle":"sanitized"}'
+  ),
+  '40001',
+  'replacement publisher does not own the queue',
+  'provider checkpoint is denied before replacement ownership'
+);
 select is((select count(distinct user_id || chr(0) || company_id)::integer from public.publisher_content_items), 1, 'fixture has one tenant');
 select is((select count(*)::integer from public.publisher_deliveries where state = 'migration_frozen'), 21, 'three frozen platform deliveries created for each reel');
 select is((select count(*)::integer from public.publisher_deliveries where state = 'planning_only'), 14, 'article delivery records cannot publish');
@@ -245,6 +260,33 @@ select is(
 
 create temporary table second_claim as
 select * from public.claim_publisher_deliveries(2, 1, 30, '2026-09-03 00:02:00+00');
+select ok(
+  public.checkpoint_publisher_delivery(
+    (select delivery_id from second_claim), (select lease_token from second_claim),
+    '{"prepare_handle":"sanitized-handle","prepare_phase":"uploaded"}'::jsonb
+  ),
+  'live pre-dispatch lease checkpoints provider reconciliation handles'
+);
+select is(
+  (select provider_reconciliation_metadata->>'prepare_handle' from public.publisher_deliveries where id = (select delivery_id from second_claim)),
+  'sanitized-handle',
+  'checkpoint merges structured provider reconciliation metadata'
+);
+select ok(
+  exists(
+    select 1 from public.publisher_audit_log
+    where delivery_id = (select delivery_id from second_claim)
+      and event_type = 'delivery_checkpointed'
+      and details->'provider_reconciliation_metadata_after'->>'prepare_handle' = 'sanitized-handle'
+  ),
+  'checkpoint transition records before and after metadata in append-only audit'
+);
+select ok(
+  not public.checkpoint_publisher_delivery(
+    (select delivery_id from second_claim), gen_random_uuid(), '{"prepare_handle":"stale"}'::jsonb
+  ),
+  'stale lease token cannot overwrite provider reconciliation metadata'
+);
 select ok(
   public.mark_publisher_dispatch_started(
     (select delivery_id from second_claim), (select lease_token from second_claim), repeat('b', 64)

@@ -46,7 +46,20 @@ All 21 queued content items remain `migration_frozen`. Article deliveries remain
 An Instagram delivery carrying either legacy `instagram_container` or
 `instagram_container_since` metadata is imported as `verification_required`, with
 both values preserved in `provider_reconciliation_metadata`; ownership transfer is
-blocked until that provider-side container is reconciled.
+blocked until that provider-side container is reconciled. The frozen 2026-09-03
+67-row export (21 queued, 46 historical) contains zero queued direct platform-result
+IDs, sentinel values, `instagram_container` keys, or `instagram_container_since`
+keys. This is a point-in-time observation only: a fresh cutoff export must still be
+classified and reconciled by the same safeguards.
+
+Resolve an ambiguous imported delivery only through the service-role-only
+`resolve_legacy_delivery_verification` RPC. A provider-confirmed publication requires
+a durable provider post ID and publication time and becomes terminal `succeeded`;
+provider-confirmed absence returns to `migration_frozen`. Both outcomes require a
+named actor and non-empty provider evidence. The RPC writes an append-only before/
+after audit and refreshes the database-derived attestation in the same transaction.
+The transfer RPC rejects an otherwise edited outcome unless that exact resolution is
+backed by the matching immutable audit record.
 
 ## Atomic ownership contract
 
@@ -68,3 +81,10 @@ Call `mark_publisher_dispatch_started` immediately before a provider POST. An ex
 lease before that point may retry; an expired lease afterwards becomes
 `verification_required`, because provider APIs do not supply a dependable request
 idempotency key and an automatic retry could duplicate a live post.
+
+If provider preparation creates a reconciliation handle before the public POST, call
+`checkpoint_publisher_delivery(delivery_id, lease_token, metadata)` first. It accepts
+only a non-empty JSON object, merges it into the delivery metadata only for the
+replacement owner with the matching live pre-dispatch lease, and records the before/
+after metadata in append-only audit history. A stale token returns `false`; a caller
+must never continue to dispatch after that result.

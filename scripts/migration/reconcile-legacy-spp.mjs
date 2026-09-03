@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { classifyLegacyPlatformOutcome, loadExport, manifestFor, parseArgs, sha256, stableJson, summary } from "./legacy-spp-common.mjs";
+import { classifyAuditedLegacyResolution, classifyLegacyPlatformOutcome, loadExport, manifestFor, parseArgs, sha256, stableJson, summary } from "./legacy-spp-common.mjs";
 
 const args = parseArgs(process.argv.slice(2));
 const exportDirectory = args.get("export");
@@ -14,6 +14,7 @@ const url = process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
 const key = process.env.SUPABASE_SECRET_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY;
 if (!url || !key) throw new Error("SUPABASE_URL and SUPABASE_SECRET_KEY are required");
 const supabase = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+const normalizedTimestamp = (value) => value == null ? null : new Date(value).toISOString();
 
 const expectedIds = loaded.rows.map((row) => row.id);
 const { data: items, error: itemError } = await supabase
@@ -55,9 +56,18 @@ for (const source of loaded.rows) {
 
 const { data: deliveries, error: deliveryError } = await supabase
   .from("publisher_deliveries")
-  .select("content_item_id,platform,state,idempotency_key,platform_post_id,provider_reconciliation_metadata")
+  .select("id,content_item_id,platform,state,idempotency_key,platform_post_id,published_at,provider_reconciliation_metadata")
   .in("content_item_id", items.map((item) => item.id));
 if (deliveryError) throw new Error(`Delivery reconciliation failed: ${deliveryError.message}`);
+const { data: resolutionAudits, error: auditError } = await supabase
+  .from("publisher_audit_log")
+  .select("id,delivery_id,event_type,actor,details")
+  .eq("event_type", "legacy_verification_resolved")
+  .in("delivery_id", deliveries.map((delivery) => delivery.id))
+  .order("id", { ascending: true });
+if (auditError) throw new Error(`Resolution audit reconciliation failed: ${auditError.message}`);
+const latestResolutionByDelivery = new Map();
+for (const audit of resolutionAudits) latestResolutionByDelivery.set(audit.delivery_id, audit);
 const deliveryMap = new Map(deliveries.map((delivery) => [`${delivery.content_item_id}:${delivery.platform}`, delivery]));
 let expectedDeliveryCount = 0;
 for (const source of loaded.rows) {
@@ -67,8 +77,12 @@ for (const source of loaded.rows) {
     expectedDeliveryCount += 1;
     const delivery = deliveryMap.get(`${item.id}:${platform}`);
     const { rawId, durable, ambiguous, reconciliationMetadata } = classifyLegacyPlatformOutcome(source, platform);
+    const resolution = delivery
+      ? classifyAuditedLegacyResolution({ ambiguous, reconciliationMetadata }, latestResolutionByDelivery.get(delivery.id))
+      : null;
     const expectedState = source.status === "queued" && source.content_type === "article" ? "planning_only"
       : source.status === "queued" && durable ? "succeeded"
+      : source.status === "queued" && ambiguous && resolution ? resolution.state
       : source.status === "queued" && ambiguous ? "verification_required"
       : source.status === "queued" ? "migration_frozen"
       : source.status === "published" && durable ? "succeeded"
@@ -79,7 +93,13 @@ for (const source of loaded.rows) {
     else {
       if (delivery.state !== expectedState) differences.push({ legacy_spp_id: source.id, platform, field: "delivery_state" });
       if (delivery.idempotency_key !== `legacy-spp:${source.id}:${platform}`) differences.push({ legacy_spp_id: source.id, platform, field: "idempotency_key" });
-      if ((delivery.platform_post_id ?? null) !== (durable ? rawId : null)) differences.push({ legacy_spp_id: source.id, platform, field: "platform_post_id" });
+      const expectedProviderPostId = durable ? rawId : resolution?.platformPostId ?? null;
+      if ((delivery.platform_post_id ?? null) !== expectedProviderPostId) differences.push({ legacy_spp_id: source.id, platform, field: "platform_post_id" });
+      const expectedPublishedAt = resolution?.publishedAt
+        ?? (durable ? source.published_at ?? source.updated_at ?? null : null);
+      if (normalizedTimestamp(delivery.published_at) !== normalizedTimestamp(expectedPublishedAt)) {
+        differences.push({ legacy_spp_id: source.id, platform, field: "published_at" });
+      }
       if (stableJson(delivery.provider_reconciliation_metadata ?? {}) !== stableJson(reconciliationMetadata)) differences.push({ legacy_spp_id: source.id, platform, field: "provider_reconciliation_metadata" });
     }
   }
