@@ -29,6 +29,10 @@ export interface ScheduledPost {
   created_at: string;
   updated_at: string;
   published_at: string | null;
+  publisher_lease_token?: string | null;
+  publisher_lease_expires_at?: string | null;
+  publisher_lease_phase?: "pre_dispatch" | "dispatch_started" | null;
+  publisher_ownership_epoch?: number | null;
 }
 
 // Resolved media handed to a platform adapter (signed URLs ready to fetch).

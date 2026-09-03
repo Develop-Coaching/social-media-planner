@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { claimDuePosts, markPostResult, resolvePublishPayload } from "@/lib/scheduled-posts";
+import { claimDuePosts, markLegacyDispatchStarted, markPostResult, reapExpiredLegacyClaims, resolvePublishPayload } from "@/lib/scheduled-posts";
 import { publishToInstagram, publishToFacebook } from "@/lib/publish/meta";
 import { publishToLinkedIn } from "@/lib/publish/linkedin";
 import { sendSlackNotification } from "@/lib/slack";
@@ -29,8 +29,14 @@ export async function GET(request: NextRequest) {
   }
 
   let claimed: ScheduledPost[];
+  let reapedLegacy: Array<{ post_id: string; verification_required: boolean }> = [];
+  const expectedEpoch = Number(process.env.LEGACY_PUBLISHER_OWNERSHIP_EPOCH);
+  if (!Number.isSafeInteger(expectedEpoch) || expectedEpoch < 1) {
+    return NextResponse.json({ error: "Legacy publisher ownership epoch is not configured" }, { status: 503 });
+  }
   try {
-    claimed = await claimDuePosts(5);
+    reapedLegacy = await reapExpiredLegacyClaims(expectedEpoch);
+    claimed = await claimDuePosts(expectedEpoch, 5);
   } catch (e) {
     console.error("publish-tick claim failed:", e);
     return NextResponse.json({ error: "claim failed" }, { status: 500 });
@@ -46,8 +52,11 @@ export async function GET(request: NextRequest) {
   const failed: Array<{ post: ScheduledPost; detail: string }> = [];
 
   for (const post of claimed) {
+    let dispatchStarted = false;
     try {
       const payload = await resolvePublishPayload(post);
+      await markLegacyDispatchStarted(post, expectedEpoch);
+      dispatchStarted = true;
       // Skip platforms already published on a previous (partially failed) attempt
       const platformPostIds: Record<string, string> = { ...post.platform_post_ids };
       const errors: string[] = [];
@@ -105,7 +114,7 @@ export async function GET(request: NextRequest) {
         delete platformPostIds[IG_CONTAINER_SINCE_KEY];
       }
 
-      await markPostResult(post.id, {
+      await markPostResult(post, expectedEpoch, {
         status: outcome.status,
         platform_post_ids: platformPostIds,
         error: outcome.error ? outcome.error.slice(0, 2000) : null,
@@ -119,10 +128,18 @@ export async function GET(request: NextRequest) {
       else failed.push({ post, detail: outcome.error ?? "" });
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e);
+      if (dispatchStarted) {
+        // Do not turn a transport exception after dispatch began back into a
+        // retry. The expired-lease reaper will quarantine it for provider
+        // reconciliation, preventing an automatic duplicate post.
+        results.push({ id: post.id, status: "verification_pending", detail });
+        failed.push({ post, detail: `Provider result is indeterminate; automatic retry blocked: ${detail}` });
+        continue;
+      }
       const retryCount = post.retry_count + 1;
       const status = retryCount >= MAX_RETRIES ? "failed" : "queued";
       try {
-        await markPostResult(post.id, { status, error: detail.slice(0, 2000), retry_count: retryCount });
+        await markPostResult(post, expectedEpoch, { status, error: detail.slice(0, 2000), retry_count: retryCount });
       } catch (markErr) {
         console.error(`publish-tick: failed to mark post ${post.id}:`, markErr);
       }
@@ -141,6 +158,14 @@ export async function GET(request: NextRequest) {
     }
   };
   const snippetOf = (post: ScheduledPost) => post.caption.replace(/\s+/g, " ").slice(0, 80);
+
+  const quarantined = reapedLegacy.filter((post) => post.verification_required);
+  if (quarantined.length > 0) {
+    await notify(
+      `:rotating_light: *${quarantined.length} legacy publisher lease${quarantined.length > 1 ? "s" : ""} expired after dispatch*\n` +
+      `_Automatic retry is blocked; reconcile the provider before re-queueing._`
+    );
+  }
 
   // Terminal failures: retries exhausted, needs a human to reconnect + re-queue.
   if (failed.length > 0) {

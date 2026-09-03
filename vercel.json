@@ -5,6 +5,10 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/cron/publisher-tick",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/analytics/sync",
       "schedule": "0 6 * * *"
     },
