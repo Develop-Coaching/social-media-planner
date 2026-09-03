@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 
 interface MetricRow {
-  platform: "instagram" | "facebook" | "linkedin";
+  platform: "instagram" | "facebook" | "linkedin" | "youtube";
   platform_post_id: string;
   posted_at: string | null;
   content_snippet: string;
@@ -24,6 +24,7 @@ const PLATFORM_BADGES: Record<string, string> = {
   instagram: "bg-pink-100 dark:bg-pink-900/40 text-pink-700 dark:text-pink-300",
   facebook: "bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300",
   linkedin: "bg-sky-100 dark:bg-sky-900/40 text-sky-700 dark:text-sky-300",
+  youtube: "bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300",
 };
 
 type SortKey = "posted_at" | "reach" | "likes" | "comments" | "engagement_rate";
@@ -118,7 +119,7 @@ export default function AnalyticsPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Sync failed");
       const parts: string[] = [];
-      for (const platform of ["instagram", "facebook", "linkedin"] as const) {
+      for (const platform of ["instagram", "facebook", "linkedin", "youtube"] as const) {
         const r = data[platform];
         if (!r) continue;
         parts.push(r.error ? `${platform}: ${r.error}` : `${platform}: ${r.synced} synced`);
@@ -186,7 +187,7 @@ export default function AnalyticsPage() {
 
   const byPlatform = useMemo(
     () =>
-      (["instagram", "facebook", "linkedin"] as const).map((p) => ({
+      (["instagram", "facebook", "linkedin", "youtube"] as const).map((p) => ({
         label: p === "instagram" ? "IG" : p === "facebook" ? "FB" : "LI",
         value: rows.filter((r) => r.platform === p).reduce((s, r) => s + interactions(r), 0),
       })),
@@ -299,7 +300,7 @@ export default function AnalyticsPage() {
               <div className="px-5 py-4 flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-700">
                 <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">All posts ({filtered.length})</h3>
                 <div className="flex items-center gap-2">
-                  {["all", "instagram", "facebook", "linkedin"].map((p) => (
+                  {["all", "instagram", "facebook", "linkedin", "youtube"].map((p) => (
                     <button
                       key={p}
                       onClick={() => setPlatformFilter(p)}
