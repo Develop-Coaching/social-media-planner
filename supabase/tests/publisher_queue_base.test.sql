@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(98);
+select plan(102);
 
 select has_table('public', 'publisher_queue_ownership', 'ownership controller exists');
 select has_table('public', 'publisher_content_items', 'content items exist');
@@ -187,6 +187,32 @@ select throws_ok(
   '55000','cutover delivery set mismatch','wrong delivery identity is rejected'
 );
 update public.publisher_deliveries set idempotency_key=regexp_replace(idempotency_key,':wrong$','') where idempotency_key like '%:wrong';
+update public.publisher_deliveries d set next_attempt_at=d.next_attempt_at+interval '1 minute'
+from public.publisher_content_items ci where ci.id=d.content_item_id and ci.legacy_spp_id='00000000-0000-0000-0000-000000000015';
+select throws_ok(
+  $$select public.publisher_cutover_readiness((select jsonb_agg(payload) from readiness_rows),1,3600)$$,
+  '55000','cutover readiness found noncanonical or native claimant work','frozen delivery retry time must equal its canonical schedule'
+);
+update public.publisher_deliveries d set next_attempt_at=ci.scheduled_at
+from public.publisher_content_items ci where ci.id=d.content_item_id and ci.legacy_spp_id='00000000-0000-0000-0000-000000000015';
+update public.publisher_deliveries d set published_at=d.published_at+interval '1 minute'
+from public.publisher_content_items ci where ci.id=d.content_item_id and ci.legacy_spp_id='00000000-0000-0000-0000-000000000022';
+select throws_ok(
+  $$select public.publisher_cutover_readiness((select jsonb_agg(payload) from readiness_rows),1,3600)$$,
+  '55000','database reconciliation attestation is missing or stale','published timestamp drift invalidates the database attestation'
+);
+update public.publisher_deliveries d set published_at=coalesce((ci.legacy_payload->>'published_at')::timestamptz,(ci.legacy_payload->>'updated_at')::timestamptz)
+from public.publisher_content_items ci where ci.id=d.content_item_id and ci.legacy_spp_id='00000000-0000-0000-0000-000000000022';
+insert into public.publisher_content_items(user_id,company_id,content_type,caption,scheduled_at,approval_state,publishability,migration_state)
+values('fixture-user','fixture-company','reel','native due','2026-01-01','approved','publishable','native');
+insert into public.publisher_deliveries(content_item_id,platform,state,idempotency_key)
+select id,'instagram','pending','native-due-fixture' from public.publisher_content_items where caption='native due';
+select throws_ok(
+  $$select public.publisher_cutover_readiness((select jsonb_agg(payload) from readiness_rows),1,3600)$$,
+  '55000','cutover readiness found noncanonical or native claimant work','native due claimant work blocks legacy cutover'
+);
+delete from public.publisher_deliveries where idempotency_key='native-due-fixture';
+delete from public.publisher_content_items where caption='native due';
 
 select throws_ok(
   $$select public.import_legacy_spp_rows(jsonb_build_array((select payload || '{"caption":"changed"}'::jsonb from sanitized_export limit 1)))$$,
@@ -262,7 +288,7 @@ select ok(
   'legacy dispatch start uses lease token and ownership epoch CAS'
 );
 select throws_ok(
-  $$select public.transfer_publisher_queue_ownership(1, '2099-09-03')$$,
+  $$select public.transfer_publisher_queue_ownership((select jsonb_agg(payload) from readiness_rows),1,3600)$$,
   '55000',
   'ownership transfer requires zero live leases',
   'cutover refuses a live legacy lease'
@@ -280,9 +306,10 @@ select ok(
 delete from public.scheduled_posts
 where id in ('10000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000002');
 
-select is(public.transfer_publisher_queue_ownership(1, '2099-09-03'), 2::bigint, 'atomic transfer increments epoch');
+select is(public.transfer_publisher_queue_ownership((select jsonb_agg(payload) from readiness_rows),1,3600), 2::bigint, 'atomic transfer increments epoch');
 select is((select owner from public.publisher_queue_ownership where source = 'legacy_spp'), 'replacement', 'replacement owns queue after transfer');
 select is((select epoch from public.publisher_queue_ownership where source = 'legacy_spp'), 2::bigint, 'ownership epoch is durable');
+select ok(abs(extract(epoch from ((select cutoff_at from public.publisher_queue_ownership where source='legacy_spp')-statement_timestamp()))) < 2, 'transfer cutoff is derived from the database clock');
 select is((select count(*)::integer from public.publisher_deliveries where state = 'pending'), 21, 'transfer activates only publishable frozen deliveries');
 select is((select count(*)::integer from public.publisher_deliveries where state = 'planning_only'), 14, 'articles stay planning only after transfer');
 select throws_ok(

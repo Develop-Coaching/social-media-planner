@@ -388,7 +388,6 @@ declare
   v_ig_container_since text;
   v_reconciliation_metadata jsonb;
   v_attestation text;
-  v_computed_attestation text;
   v_expected_deliveries integer;
 begin
   if jsonb_typeof(p_rows) <> 'array' then
@@ -544,7 +543,7 @@ begin
   end if;
 
   select encode(extensions.digest(string_agg(
-    ci.legacy_spp_id::text || ':' || ci.legacy_payload_sha256 || ':' || d.platform || ':' || d.state || ':' || coalesce(d.platform_post_id, '') || ':' || d.provider_reconciliation_metadata::text,
+    ci.legacy_spp_id::text || ':' || ci.legacy_payload_sha256 || ':' || d.platform || ':' || d.state || ':' || coalesce(d.platform_post_id, '') || ':' || coalesce(d.published_at::text,'') || ':' || d.provider_reconciliation_metadata::text,
     E'\n' order by ci.legacy_spp_id, d.platform
   ), 'sha256'), 'hex')
   into v_attestation
@@ -1222,6 +1221,8 @@ begin
   set state = case when p_resolution = 'confirmed_published' then 'succeeded' else 'migration_frozen' end,
       platform_post_id = case when p_resolution = 'confirmed_published' then btrim(p_provider_post_id) else null end,
       published_at = case when p_resolution = 'confirmed_published' then p_published_at else null end,
+      next_attempt_at = case when p_resolution = 'confirmed_absent'
+        then (select ci.scheduled_at from public.publisher_content_items ci where ci.id=v_content_id) else null end,
       last_error = null,
       updated_at = statement_timestamp()
   where id = p_delivery_id;
@@ -1242,7 +1243,7 @@ begin
   );
 
   select encode(extensions.digest(string_agg(
-    ci.legacy_spp_id::text || ':' || ci.legacy_payload_sha256 || ':' || d.platform || ':' || d.state || ':' || coalesce(d.platform_post_id, '') || ':' || d.provider_reconciliation_metadata::text,
+    ci.legacy_spp_id::text || ':' || ci.legacy_payload_sha256 || ':' || d.platform || ':' || d.state || ':' || coalesce(d.platform_post_id, '') || ':' || coalesce(d.published_at::text,'') || ':' || d.provider_reconciliation_metadata::text,
     E'\n' order by ci.legacy_spp_id, d.platform
   ), 'sha256'), 'hex') into v_attestation
   from public.publisher_content_items ci join public.publisher_deliveries d on d.content_item_id = ci.id
@@ -1269,6 +1270,7 @@ declare
   v_owner text;
   v_epoch bigint;
   v_attestation text;
+  v_computed_attestation text;
   v_binding text;
   v_next_due timestamptz;
   v_due_legacy integer;
@@ -1316,7 +1318,7 @@ begin
     ) then raise exception 'cutover export/source/import binding mismatch' using errcode = '55000'; end if;
 
   select encode(extensions.digest(string_agg(
-    ci.legacy_spp_id::text||':'||ci.legacy_payload_sha256||':'||d.platform||':'||d.state||':'||coalesce(d.platform_post_id,'')||':'||d.provider_reconciliation_metadata::text,
+    ci.legacy_spp_id::text||':'||ci.legacy_payload_sha256||':'||d.platform||':'||d.state||':'||coalesce(d.platform_post_id,'')||':'||coalesce(d.published_at::text,'')||':'||d.provider_reconciliation_metadata::text,
     E'\n' order by ci.legacy_spp_id,d.platform),'sha256'),'hex') into v_computed_attestation
   from public.publisher_content_items ci join public.publisher_deliveries d on d.content_item_id=ci.id
   where ci.legacy_spp_id is not null;
@@ -1371,7 +1373,8 @@ begin
         else '{}'::jsonb end
       or (classed.id_class='durable'
         and (ci.legacy_status='published' or (ci.legacy_status='queued' and ci.content_type<>'article'))
-        and (d.state<>'succeeded' or d.platform_post_id is distinct from ids.provider_id or d.published_at is null))
+        and (d.state<>'succeeded' or d.platform_post_id is distinct from ids.provider_id
+          or d.published_at is distinct from coalesce((ci.legacy_payload->>'published_at')::timestamptz,(ci.legacy_payload->>'updated_at')::timestamptz)))
       or (classed.id_class<>'durable' and ci.legacy_status='queued' and ci.content_type='article' and d.state<>'planning_only')
       or (classed.id_class='empty' and ci.legacy_status='queued' and ci.content_type<>'article' and d.state<>'migration_frozen')
       or (classed.id_class='ambiguous' and ci.legacy_status='queued' and ci.content_type<>'article' and not exists (
@@ -1396,9 +1399,21 @@ begin
   select count(*) into v_due_replacement from public.publisher_deliveries d
   join public.publisher_content_items ci on ci.id=d.content_item_id
   where ci.legacy_status='queued' and ci.publishability='publishable'
-    and d.state='migration_frozen' and ci.scheduled_at <= v_now;
+    and d.state='migration_frozen' and coalesce(d.next_attempt_at,ci.scheduled_at) <= v_now;
+  if exists (
+    select 1 from public.publisher_deliveries d join public.publisher_content_items ci on ci.id=d.content_item_id
+    where d.state='migration_frozen' and ci.legacy_spp_id is not null
+      and (ci.legacy_status<>'queued' or ci.publishability<>'publishable' or ci.content_type='article'
+        or d.next_attempt_at is distinct from ci.scheduled_at)
+  ) or exists (
+    select 1 from public.publisher_deliveries d join public.publisher_content_items ci on ci.id=d.content_item_id
+    where ci.legacy_spp_id is null and d.state in ('pending','retryable')
+      and coalesce(d.next_attempt_at,ci.scheduled_at) <= v_now
+      and d.attempt_count < d.max_attempts and ci.migration_state in ('native','active')
+      and ci.approval_state='approved' and ci.publishability='publishable' and ci.content_type<>'article'
+  ) then raise exception 'cutover readiness found noncanonical or native claimant work' using errcode='55000'; end if;
   if v_due_legacy <> v_due_replacement then raise exception 'legacy and replacement effective due sets differ' using errcode='55000'; end if;
-  select min(sp.scheduled_at) into v_next_due from public.scheduled_posts sp
+  select min(coalesce(d.next_attempt_at,ci.scheduled_at)) into v_next_due from public.scheduled_posts sp
   join public.publisher_content_items ci on ci.legacy_spp_id=sp.id
   join public.publisher_deliveries d on d.content_item_id=ci.id and d.state='migration_frozen'
   where sp.status='queued' and lower(sp.content_type)<>'article';
@@ -1416,8 +1431,9 @@ end;
 $$;
 
 create or replace function publisher_private.transfer_publisher_queue_ownership(
+  p_rows jsonb,
   p_expected_epoch bigint,
-  p_cutoff_at timestamptz
+  p_safety_seconds integer
 )
 returns bigint
 language plpgsql
@@ -1441,7 +1457,7 @@ begin
   end if;
 
   select encode(extensions.digest(string_agg(
-    ci.legacy_spp_id::text || ':' || ci.legacy_payload_sha256 || ':' || d.platform || ':' || d.state || ':' || coalesce(d.platform_post_id, '') || ':' || d.provider_reconciliation_metadata::text,
+    ci.legacy_spp_id::text || ':' || ci.legacy_payload_sha256 || ':' || d.platform || ':' || d.state || ':' || coalesce(d.platform_post_id, '') || ':' || coalesce(d.published_at::text,'') || ':' || d.provider_reconciliation_metadata::text,
     E'\n' order by ci.legacy_spp_id, d.platform
   ), 'sha256'), 'hex')
   into v_computed_attestation
@@ -1569,15 +1585,10 @@ begin
       using errcode = '55000';
   end if;
 
-  perform publisher_private.publisher_cutover_readiness(
-    (select jsonb_agg(ci.legacy_payload || jsonb_build_object('__migration_payload_sha256',ci.legacy_payload_sha256) order by ci.legacy_spp_id)
-     from public.publisher_content_items ci where ci.legacy_spp_id is not null),
-    p_expected_epoch,
-    0
-  );
+  perform publisher_private.publisher_cutover_readiness(p_rows,p_expected_epoch,p_safety_seconds);
 
   update public.publisher_queue_ownership
-  set owner = 'replacement', epoch = epoch + 1, cutoff_at = p_cutoff_at,
+  set owner = 'replacement', epoch = epoch + 1, cutoff_at = statement_timestamp(),
       reconciliation_sha256 = v_computed_attestation,
       transferred_at = statement_timestamp(), updated_at = statement_timestamp()
   where source = 'legacy_spp';
@@ -1597,7 +1608,7 @@ begin
   values ('ownership_transferred', 'cutover', jsonb_build_object(
     'source', 'legacy_spp', 'from_owner', 'legacy', 'to_owner', 'replacement',
     'from_epoch', v_epoch, 'to_epoch', v_epoch + 1,
-    'cutoff_at', p_cutoff_at, 'reconciliation_sha256', v_computed_attestation
+    'cutoff_at', statement_timestamp(), 'reconciliation_sha256', v_computed_attestation
   ));
 
   return v_epoch + 1;
@@ -1668,9 +1679,9 @@ create or replace function public.publisher_cutover_readiness(p_rows jsonb,p_exp
 returns jsonb language plpgsql security invoker set search_path = '' as $$
 begin perform publisher_private.assert_service_caller(); return publisher_private.publisher_cutover_readiness(p_rows,p_expected_epoch,p_safety_seconds); end $$;
 
-create or replace function public.transfer_publisher_queue_ownership(p_expected_epoch bigint,p_cutoff_at timestamptz)
+create or replace function public.transfer_publisher_queue_ownership(p_rows jsonb,p_expected_epoch bigint,p_safety_seconds integer)
 returns bigint language plpgsql security invoker set search_path = '' as $$
-begin perform publisher_private.assert_service_caller(); return publisher_private.transfer_publisher_queue_ownership(p_expected_epoch,p_cutoff_at); end $$;
+begin perform publisher_private.assert_service_caller(); return publisher_private.transfer_publisher_queue_ownership(p_rows,p_expected_epoch,p_safety_seconds); end $$;
 
 alter table public.publisher_queue_ownership enable row level security;
 alter table public.publisher_content_items enable row level security;
@@ -1715,7 +1726,7 @@ revoke all on function public.reap_expired_legacy_spp_leases(bigint, timestamptz
 revoke all on function public.reap_expired_publisher_leases(timestamptz) from public, anon, authenticated, service_role;
 revoke all on function public.resolve_legacy_delivery_verification(uuid, text, text, timestamptz, text, jsonb) from public, anon, authenticated, service_role;
 revoke all on function public.publisher_cutover_readiness(jsonb, bigint, integer) from public, anon, authenticated, service_role;
-revoke all on function public.transfer_publisher_queue_ownership(bigint, timestamptz) from public, anon, authenticated, service_role;
+revoke all on function public.transfer_publisher_queue_ownership(jsonb, bigint, integer) from public, anon, authenticated, service_role;
 
 grant execute on function public.import_legacy_spp_rows(jsonb) to service_role;
 grant execute on function public.claim_legacy_spp_posts(bigint, integer, integer, timestamptz) to service_role;
@@ -1732,7 +1743,7 @@ grant execute on function public.reap_expired_legacy_spp_leases(bigint, timestam
 grant execute on function public.reap_expired_publisher_leases(timestamptz) to service_role;
 grant execute on function public.resolve_legacy_delivery_verification(uuid, text, text, timestamptz, text, jsonb) to service_role;
 grant execute on function public.publisher_cutover_readiness(jsonb, bigint, integer) to service_role;
-grant execute on function public.transfer_publisher_queue_ownership(bigint, timestamptz) to service_role;
+grant execute on function public.transfer_publisher_queue_ownership(jsonb, bigint, integer) to service_role;
 
 revoke all on all functions in schema publisher_private from public, anon, authenticated, service_role;
 grant usage on schema publisher_private to service_role;

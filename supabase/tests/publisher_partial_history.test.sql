@@ -33,6 +33,10 @@ with fixture as (
 )
 select public.import_legacy_spp_rows(jsonb_agg(payload order by payload->>'id')) from fixture;
 
+create temporary table partial_readiness_rows as
+select ci.legacy_payload || jsonb_build_object('__migration_payload_sha256',ci.legacy_payload_sha256) payload
+from public.publisher_content_items ci where ci.legacy_spp_id is not null;
+
 select is((select state from public.publisher_deliveries d join public.publisher_content_items ci on ci.id=d.content_item_id where ci.legacy_spp_id='20000000-0000-0000-0000-000000000015' and d.platform='facebook'), 'succeeded', 'queued platform with durable ID imports terminal-success');
 select is((select state from public.publisher_deliveries d join public.publisher_content_items ci on ci.id=d.content_item_id where ci.legacy_spp_id='20000000-0000-0000-0000-000000000015' and d.platform='instagram'), 'verification_required', 'Instagram auxiliary container requires verification');
 select is((select provider_reconciliation_metadata from public.publisher_deliveries d join public.publisher_content_items ci on ci.id=d.content_item_id where ci.legacy_spp_id='20000000-0000-0000-0000-000000000015' and d.platform='instagram'), '{"instagram_container":"ig-container-sanitized","instagram_container_since":"2099-09-03T01:02:03.000Z"}'::jsonb, 'Instagram container ID and start time are preserved for provider reconciliation');
@@ -41,7 +45,7 @@ select is((select state from public.publisher_deliveries d join public.publisher
 select is((select state from public.publisher_deliveries d join public.publisher_content_items ci on ci.id=d.content_item_id where ci.legacy_spp_id='20000000-0000-0000-0000-000000000023' and d.platform='linkedin'), 'succeeded', 'published history with durable ID imports succeeded');
 select is((select state from public.publisher_deliveries d join public.publisher_content_items ci on ci.id=d.content_item_id where ci.legacy_spp_id='20000000-0000-0000-0000-000000000016' and d.platform='instagram'), 'verification_required', 'Instagram container-since alone requires verification');
 select throws_ok(
-  $$select public.transfer_publisher_queue_ownership(1, '2099-09-03')$$,
+  $$select public.transfer_publisher_queue_ownership((select jsonb_agg(payload) from partial_readiness_rows),1,3600)$$,
   '55000',
   'ownership transfer requires zero live leases',
   'Instagram container verification blocks ownership transfer and activation'
@@ -106,7 +110,7 @@ select ok(
    order by id desc limit 1),
   'confirmed-publication audit records evidence and durable provider result'
 );
-select is(public.transfer_publisher_queue_ownership(1, '2099-09-03'), 2::bigint, 'transfer accepts only the fully audited resolutions');
+select is(public.transfer_publisher_queue_ownership((select jsonb_agg(payload) from partial_readiness_rows),1,3600), 2::bigint, 'transfer accepts only the fully audited resolutions');
 select is((select state from public.publisher_deliveries d join public.publisher_content_items ci on ci.id=d.content_item_id where ci.legacy_spp_id='20000000-0000-0000-0000-000000000015' and d.platform='instagram'), 'pending', 'confirmed absence becomes claimable only after atomic transfer');
 select is((select state from public.publisher_deliveries d join public.publisher_content_items ci on ci.id=d.content_item_id where ci.legacy_spp_id='20000000-0000-0000-0000-000000000016' and d.platform='instagram'), 'succeeded', 'confirmed publication stays terminal through transfer');
 
