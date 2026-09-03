@@ -107,9 +107,9 @@ export function sanitizeOperatorText(value: string | null, limit = 300): string 
 }
 
 function aggregateState(item: PublisherContentRow, deliveries: PublisherDeliveryRow[]): OperatorQueueState {
-  if (item.approval_state !== "approved") return "blocked";
   if (item.publishability === "planning_only") return "planning_only";
   if (item.migration_state === "migration_frozen" || deliveries.some((delivery) => delivery.state === "migration_frozen")) return "frozen";
+  if (item.approval_state !== "approved") return "blocked";
   if (deliveries.some((delivery) => delivery.state === "verification_required")) return "verification_required";
   if (deliveries.some((delivery) => delivery.state === "dead_letter")) return "dead_letter";
   if (deliveries.some((delivery) => delivery.state === "leased")) return "publishing";
@@ -121,7 +121,6 @@ function aggregateState(item: PublisherContentRow, deliveries: PublisherDelivery
 }
 
 function nextAction(state: OperatorQueueState, item: PublisherContentRow): string {
-  if (item.approval_state !== "approved") return "Approval is required. This item is blocked and cannot dispatch.";
   switch (state) {
     case "scheduled": return "No action needed. The publisher will process this when due.";
     case "frozen": return "Migration safeguard is active. This item cannot publish before the signed-off ownership handoff.";
@@ -132,7 +131,9 @@ function nextAction(state: OperatorQueueState, item: PublisherContentRow): strin
     case "published": return "Published. Use the platform links below to verify the live posts.";
     case "cancelled": return "Cancelled. No publisher action will occur.";
     case "historical": return "Historical evidence only. No publisher action will occur.";
-    default: return "Unknown state. Publishing is blocked until an operator investigates.";
+    default: return item.approval_state !== "approved"
+      ? "Approval is required. This item is blocked and cannot dispatch."
+      : "Unknown state. Publishing is blocked until an operator investigates.";
   }
 }
 

@@ -77,6 +77,27 @@ describe("operator queue projection", () => {
     expect(item.state).toBe("blocked");
     expect(item.nextAction).toContain("Approval is required");
   });
+
+  it("keeps draft articles planning-only and explicitly manual", () => {
+    const [item] = toOperatorQueueItems([{
+      ...content,
+      approval_state: "draft",
+      content_type: "article",
+      publishability: "planning_only",
+    }], [delivery()]);
+    expect(item.state).toBe("planning_only");
+    expect(item.nextAction).toContain("never dispatch");
+  });
+
+  it("keeps draft migrated content frozen behind the handoff safeguard", () => {
+    const [item] = toOperatorQueueItems([{
+      ...content,
+      approval_state: "draft",
+      migration_state: "migration_frozen",
+    }], [delivery()]);
+    expect(item.state).toBe("frozen");
+    expect(item.nextAction).toContain("Migration safeguard");
+  });
 });
 
 describe("operator output safety", () => {
