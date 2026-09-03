@@ -138,6 +138,7 @@ create table public.publisher_deliveries (
   lease_expires_at timestamptz,
   lease_phase text check (lease_phase in ('pre_dispatch', 'dispatch_started')),
   platform_post_id text,
+  provider_reconciliation_metadata jsonb not null default '{}'::jsonb,
   live_url text,
   last_error text,
   published_at timestamptz,
@@ -374,6 +375,9 @@ declare
   v_supplied_payload_sha256 text;
   v_platform_post_id text;
   v_platform_id_class text;
+  v_ig_container_id text;
+  v_ig_container_since text;
+  v_reconciliation_metadata jsonb;
   v_attestation text;
   v_expected_deliveries integer;
 begin
@@ -470,9 +474,22 @@ begin
       end if;
 
       v_platform_post_id := nullif(btrim(v_record->'platform_post_ids'->>v_platform), '');
+      v_ig_container_id := case when v_platform = 'instagram'
+        then nullif(btrim(v_record->'platform_post_ids'->>'instagram_container'), '') else null end;
+      v_ig_container_since := case when v_platform = 'instagram'
+        then nullif(btrim(v_record->'platform_post_ids'->>'instagram_container_since'), '') else null end;
+      v_reconciliation_metadata := case when v_platform = 'instagram'
+        and (v_ig_container_id is not null or v_ig_container_since is not null)
+        then jsonb_build_object(
+          'instagram_container', to_jsonb(v_ig_container_id),
+          'instagram_container_since', to_jsonb(v_ig_container_since)
+        ) else '{}'::jsonb end;
       v_platform_id_class := case
+        when v_ig_container_id is not null or v_ig_container_since is not null then 'ambiguous'
+        when v_platform_post_id is not null
+          and lower(v_platform_post_id) !~ '^(pending|unknown|failed|error|processing|publishing|queued|n/a|null|none|sent)$' then 'durable'
+        when v_platform_post_id is not null then 'ambiguous'
         when v_platform_post_id is null then 'empty'
-        when lower(v_platform_post_id) ~ '^(pending|unknown|failed|error|processing|publishing|queued|n/a|null|none|sent)$' then 'ambiguous'
         else 'durable'
       end;
 
@@ -491,7 +508,7 @@ begin
 
       insert into public.publisher_deliveries (
         content_item_id, platform, state, idempotency_key, attempt_count,
-        next_attempt_at, platform_post_id, published_at
+        next_attempt_at, platform_post_id, provider_reconciliation_metadata, published_at
       ) values (
         v_content_id,
         v_platform,
@@ -500,6 +517,7 @@ begin
         greatest(coalesce((v_record->>'retry_count')::integer, 0), 0),
         case when v_delivery_state = 'migration_frozen' then (v_record->>'scheduled_at')::timestamptz else null end,
         case when v_platform_id_class = 'durable' then v_platform_post_id else null end,
+        v_reconciliation_metadata,
         case when v_delivery_state = 'succeeded'
           then coalesce((v_record->>'published_at')::timestamptz, (v_record->>'updated_at')::timestamptz)
           else null end
@@ -516,7 +534,7 @@ begin
   end if;
 
   select encode(extensions.digest(string_agg(
-    ci.legacy_spp_id::text || ':' || ci.legacy_payload_sha256 || ':' || d.platform || ':' || d.state || ':' || coalesce(d.platform_post_id, ''),
+    ci.legacy_spp_id::text || ':' || ci.legacy_payload_sha256 || ':' || d.platform || ':' || d.state || ':' || coalesce(d.platform_post_id, '') || ':' || d.provider_reconciliation_metadata::text,
     E'\n' order by ci.legacy_spp_id, d.platform
   ), 'sha256'), 'hex')
   into v_attestation
@@ -1039,7 +1057,7 @@ begin
   end if;
 
   select encode(extensions.digest(string_agg(
-    ci.legacy_spp_id::text || ':' || ci.legacy_payload_sha256 || ':' || d.platform || ':' || d.state || ':' || coalesce(d.platform_post_id, ''),
+    ci.legacy_spp_id::text || ':' || ci.legacy_payload_sha256 || ':' || d.platform || ':' || d.state || ':' || coalesce(d.platform_post_id, '') || ':' || d.provider_reconciliation_metadata::text,
     E'\n' order by ci.legacy_spp_id, d.platform
   ), 'sha256'), 'hex')
   into v_computed_attestation
@@ -1093,13 +1111,17 @@ begin
       cross join lateral jsonb_array_elements_text(ci.legacy_payload->'platforms') p(platform)
       left join public.publisher_deliveries d on d.content_item_id = ci.id and d.platform = p.platform
       cross join lateral (
-        select nullif(btrim(ci.legacy_payload->'platform_post_ids'->>p.platform), '') as provider_id
+        select
+          nullif(btrim(ci.legacy_payload->'platform_post_ids'->>p.platform), '') as provider_id,
+          case when p.platform = 'instagram' then nullif(btrim(ci.legacy_payload->'platform_post_ids'->>'instagram_container'), '') end as instagram_container,
+          case when p.platform = 'instagram' then nullif(btrim(ci.legacy_payload->'platform_post_ids'->>'instagram_container_since'), '') end as instagram_container_since
       ) ids
       cross join lateral (
         select case
-          when ids.provider_id is null then 'empty'
-          when lower(ids.provider_id) ~ '^(pending|unknown|failed|error|processing|publishing|queued|n/a|null|none|sent)$' then 'ambiguous'
-          else 'durable'
+          when ids.instagram_container is not null or ids.instagram_container_since is not null then 'ambiguous'
+          when ids.provider_id is not null and lower(ids.provider_id) !~ '^(pending|unknown|failed|error|processing|publishing|queued|n/a|null|none|sent)$' then 'durable'
+          when ids.provider_id is not null then 'ambiguous'
+          else 'empty'
         end as id_class
       ) classified
       where d.id is null
@@ -1117,6 +1139,12 @@ begin
           else 'historical'
         end
         or (classified.id_class = 'durable' and d.platform_post_id is distinct from ids.provider_id)
+        or d.provider_reconciliation_metadata is distinct from case
+          when p.platform = 'instagram' and (ids.instagram_container is not null or ids.instagram_container_since is not null)
+          then jsonb_build_object(
+            'instagram_container', to_jsonb(ids.instagram_container),
+            'instagram_container_since', to_jsonb(ids.instagram_container_since)
+          ) else '{}'::jsonb end
     ) then
     raise exception 'ownership transfer requires exact per-platform delivery reconciliation'
       using errcode = '55000';

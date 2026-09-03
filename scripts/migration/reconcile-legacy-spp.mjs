@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { loadExport, manifestFor, parseArgs, sha256, stableJson, summary } from "./legacy-spp-common.mjs";
+import { classifyLegacyPlatformOutcome, loadExport, manifestFor, parseArgs, sha256, stableJson, summary } from "./legacy-spp-common.mjs";
 
 const args = parseArgs(process.argv.slice(2));
 const exportDirectory = args.get("export");
@@ -55,7 +55,7 @@ for (const source of loaded.rows) {
 
 const { data: deliveries, error: deliveryError } = await supabase
   .from("publisher_deliveries")
-  .select("content_item_id,platform,state,idempotency_key,platform_post_id")
+  .select("content_item_id,platform,state,idempotency_key,platform_post_id,provider_reconciliation_metadata")
   .in("content_item_id", items.map((item) => item.id));
 if (deliveryError) throw new Error(`Delivery reconciliation failed: ${deliveryError.message}`);
 const deliveryMap = new Map(deliveries.map((delivery) => [`${delivery.content_item_id}:${delivery.platform}`, delivery]));
@@ -66,9 +66,7 @@ for (const source of loaded.rows) {
   for (const platform of source.platforms) {
     expectedDeliveryCount += 1;
     const delivery = deliveryMap.get(`${item.id}:${platform}`);
-    const rawId = typeof source.platform_post_ids?.[platform] === "string" ? source.platform_post_ids[platform].trim() : "";
-    const ambiguous = /^(pending|unknown|failed|error|processing|publishing|queued|n\/a|null|none|sent)$/i.test(rawId);
-    const durable = rawId.length > 0 && !ambiguous;
+    const { rawId, durable, ambiguous, reconciliationMetadata } = classifyLegacyPlatformOutcome(source, platform);
     const expectedState = source.status === "queued" && source.content_type === "article" ? "planning_only"
       : source.status === "queued" && durable ? "succeeded"
       : source.status === "queued" && ambiguous ? "verification_required"
@@ -82,6 +80,7 @@ for (const source of loaded.rows) {
       if (delivery.state !== expectedState) differences.push({ legacy_spp_id: source.id, platform, field: "delivery_state" });
       if (delivery.idempotency_key !== `legacy-spp:${source.id}:${platform}`) differences.push({ legacy_spp_id: source.id, platform, field: "idempotency_key" });
       if ((delivery.platform_post_id ?? null) !== (durable ? rawId : null)) differences.push({ legacy_spp_id: source.id, platform, field: "platform_post_id" });
+      if (stableJson(delivery.provider_reconciliation_metadata ?? {}) !== stableJson(reconciliationMetadata)) differences.push({ legacy_spp_id: source.id, platform, field: "provider_reconciliation_metadata" });
     }
   }
 }

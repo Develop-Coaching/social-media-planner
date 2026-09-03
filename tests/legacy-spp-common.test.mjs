@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { manifestFor, sha256, stableJson, summary, validateRows } from "../scripts/migration/legacy-spp-common.mjs";
+import { classifyLegacyPlatformOutcome, manifestFor, sha256, stableJson, summary, validateRows } from "../scripts/migration/legacy-spp-common.mjs";
 
 function fixtureRow(index) {
   const queued = index <= 21;
@@ -41,4 +41,29 @@ test("manifest hashing is deterministic across object key order", () => {
 test("validation rejects duplicate IDs and unsupported platforms", () => {
   assert.throws(() => validateRows([fixtureRow(1), fixtureRow(1)]), /Duplicate legacy ID/);
   assert.throws(() => validateRows([{ ...fixtureRow(1), platforms: ["x"] }]), /Unsupported platform/);
+});
+
+test("Instagram auxiliary container keys require verification and are preserved", () => {
+  const row = {
+    ...fixtureRow(15),
+    platform_post_ids: {
+      instagram_container: "ig-container-sanitized",
+      instagram_container_since: "2026-09-03T01:02:03.000Z",
+    },
+  };
+  assert.deepEqual(classifyLegacyPlatformOutcome(row, "instagram"), {
+    rawId: "",
+    durable: false,
+    ambiguous: true,
+    reconciliationMetadata: {
+      instagram_container: "ig-container-sanitized",
+      instagram_container_since: "2026-09-03T01:02:03.000Z",
+    },
+  });
+  assert.equal(classifyLegacyPlatformOutcome({
+    ...fixtureRow(15), platform_post_ids: { instagram_container: "container-only" },
+  }, "instagram").ambiguous, true);
+  assert.equal(classifyLegacyPlatformOutcome({
+    ...fixtureRow(15), platform_post_ids: { instagram_container_since: "2026-09-03T01:02:03.000Z" },
+  }, "instagram").ambiguous, true);
 });

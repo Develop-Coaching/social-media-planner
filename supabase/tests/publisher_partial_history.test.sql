@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(5);
+select plan(7);
 
 insert into public.companies (user_id, id, name)
 values ('partial-user', 'partial-company', 'Sanitized Partial Fixture');
@@ -14,7 +14,11 @@ with fixture as (
     'caption', 'Sanitized partial caption ' || i,
     'platforms', case when i <= 14 or i > 21 then jsonb_build_array('linkedin') else jsonb_build_array('instagram','facebook','linkedin') end,
     'platform_post_ids', case
-      when i = 15 then jsonb_build_object('instagram','durable-partial-id','facebook','pending')
+      when i = 15 then jsonb_build_object(
+        'facebook','durable-partial-id',
+        'instagram_container','ig-container-sanitized',
+        'instagram_container_since','2026-09-03T01:02:03.000Z'
+      )
       when i between 23 and 50 then jsonb_build_object('linkedin','durable-history-' || i)
       else '{}'::jsonb end,
     'scheduled_at', to_jsonb('2026-09-01 00:00:00+00'::timestamptz + i * interval '1 hour'),
@@ -26,11 +30,18 @@ with fixture as (
 )
 select public.import_legacy_spp_rows(jsonb_agg(payload order by payload->>'id')) from fixture;
 
-select is((select state from public.publisher_deliveries d join public.publisher_content_items ci on ci.id=d.content_item_id where ci.legacy_spp_id='20000000-0000-0000-0000-000000000015' and d.platform='instagram'), 'succeeded', 'queued platform with durable ID imports terminal-success');
-select is((select state from public.publisher_deliveries d join public.publisher_content_items ci on ci.id=d.content_item_id where ci.legacy_spp_id='20000000-0000-0000-0000-000000000015' and d.platform='facebook'), 'verification_required', 'queued sentinel platform requires verification');
+select is((select state from public.publisher_deliveries d join public.publisher_content_items ci on ci.id=d.content_item_id where ci.legacy_spp_id='20000000-0000-0000-0000-000000000015' and d.platform='facebook'), 'succeeded', 'queued platform with durable ID imports terminal-success');
+select is((select state from public.publisher_deliveries d join public.publisher_content_items ci on ci.id=d.content_item_id where ci.legacy_spp_id='20000000-0000-0000-0000-000000000015' and d.platform='instagram'), 'verification_required', 'Instagram auxiliary container requires verification');
+select is((select provider_reconciliation_metadata from public.publisher_deliveries d join public.publisher_content_items ci on ci.id=d.content_item_id where ci.legacy_spp_id='20000000-0000-0000-0000-000000000015' and d.platform='instagram'), '{"instagram_container":"ig-container-sanitized","instagram_container_since":"2026-09-03T01:02:03.000Z"}'::jsonb, 'Instagram container ID and start time are preserved for provider reconciliation');
 select is((select state from public.publisher_deliveries d join public.publisher_content_items ci on ci.id=d.content_item_id where ci.legacy_spp_id='20000000-0000-0000-0000-000000000015' and d.platform='linkedin'), 'migration_frozen', 'only unfinished queued platform is frozen');
 select is((select state from public.publisher_deliveries d join public.publisher_content_items ci on ci.id=d.content_item_id where ci.legacy_spp_id='20000000-0000-0000-0000-000000000022' and d.platform='linkedin'), 'historical', 'published history without durable ID is nonclaimable historical');
 select is((select state from public.publisher_deliveries d join public.publisher_content_items ci on ci.id=d.content_item_id where ci.legacy_spp_id='20000000-0000-0000-0000-000000000023' and d.platform='linkedin'), 'succeeded', 'published history with durable ID imports succeeded');
+select throws_ok(
+  $$select public.transfer_publisher_queue_ownership(1, '2026-09-03')$$,
+  '55000',
+  'ownership transfer requires zero live leases',
+  'Instagram container verification blocks ownership transfer and activation'
+);
 
 select * from finish();
 rollback;

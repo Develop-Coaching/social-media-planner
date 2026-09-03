@@ -34,6 +34,29 @@ export function manifestFor(rows) {
     .sort((a, b) => a.legacy_spp_id.localeCompare(b.legacy_spp_id));
 }
 
+export function classifyLegacyPlatformOutcome(row, platform) {
+  const rawId = typeof row.platform_post_ids?.[platform] === "string"
+    ? row.platform_post_ids[platform].trim()
+    : "";
+  const directAmbiguous = /^(pending|unknown|failed|error|processing|publishing|queued|n\/a|null|none|sent)$/i.test(rawId);
+  const containerId = platform === "instagram" && typeof row.platform_post_ids?.instagram_container === "string"
+    ? row.platform_post_ids.instagram_container.trim()
+    : "";
+  const containerSince = platform === "instagram" && typeof row.platform_post_ids?.instagram_container_since === "string"
+    ? row.platform_post_ids.instagram_container_since.trim()
+    : "";
+  const hasContainerMetadata = containerId.length > 0 || containerSince.length > 0;
+  const durable = rawId.length > 0 && !directAmbiguous && !hasContainerMetadata;
+  return {
+    rawId,
+    durable,
+    ambiguous: !durable && (directAmbiguous || hasContainerMetadata),
+    reconciliationMetadata: platform === "instagram" && (containerId || containerSince)
+      ? { instagram_container: containerId || null, instagram_container_since: containerSince || null }
+      : {},
+  };
+}
+
 export function validateRows(rows) {
   if (!Array.isArray(rows) || rows.length === 0) throw new Error("Export must be a non-empty JSON array");
   const ids = new Set();

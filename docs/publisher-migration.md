@@ -43,6 +43,10 @@ npm run migration:reconcile -- \
 
 All 21 queued content items remain `migration_frozen`. Article deliveries remain
 `planning_only` permanently unless a separate, proven article publisher is built.
+An Instagram delivery carrying either legacy `instagram_container` or
+`instagram_container_since` metadata is imported as `verification_required`, with
+both values preserved in `provider_reconciliation_metadata`; ownership transfer is
+blocked until that provider-side container is reconciled.
 
 ## Atomic ownership contract
 
