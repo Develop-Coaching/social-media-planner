@@ -9,6 +9,9 @@ const REQUIRED_KEYS = [
 const STATUSES = new Set(["queued", "publishing", "published", "failed", "cancelled"]);
 const PLATFORMS = new Set(["instagram", "facebook", "linkedin"]);
 const AMBIGUOUS_PROVIDER_ID = /^(pending|unknown|failed|error|processing|publishing|queued|n\/a|null|none|sent)$/i;
+const PROVIDER_EVIDENCE_KEYS = new Set([
+  "verification_method", "verification_result", "checked_at", "provider_reference", "reviewer_note",
+]);
 
 export function sha256(value) {
   return createHash("sha256").update(value).digest("hex");
@@ -62,20 +65,29 @@ export function classifyAuditedLegacyResolution(outcome, audit) {
   if (!outcome?.ambiguous || audit?.event_type !== "legacy_verification_resolved" || !audit.actor?.trim()) return null;
   const details = audit.details;
   const evidence = details?.provider_evidence;
-  if (!evidence || Array.isArray(evidence) || typeof evidence !== "object" || Object.keys(evidence).length === 0) return null;
+  if (!evidence || Array.isArray(evidence) || typeof evidence !== "object" || Object.keys(evidence).length === 0
+    || Buffer.byteLength(stableJson(evidence)) > 4096
+    || Object.keys(evidence).some((key) => !PROVIDER_EVIDENCE_KEYS.has(key))
+    || Object.values(evidence).some((value) => value != null && typeof value !== "string")
+    || /https?:\/\//i.test(stableJson(evidence))
+    || !["api_lookup", "manual_provider_check"].includes(evidence.verification_method)
+    || !["published", "not_found"].includes(evidence.verification_result)
+    || typeof evidence.checked_at !== "string" || evidence.checked_at.length > 64) return null;
   if (details.before?.state !== "verification_required"
     || stableJson(details.before?.provider_reconciliation_metadata ?? {}) !== stableJson(outcome.reconciliationMetadata ?? {})) return null;
 
   if (details.resolution === "confirmed_published") {
     const providerPostId = typeof details.provider_post_id === "string" ? details.provider_post_id.trim() : "";
     const publishedAt = details.published_at;
-    if (!providerPostId || AMBIGUOUS_PROVIDER_ID.test(providerPostId) || !publishedAt
+    if (evidence.verification_result !== "published"
+      || !providerPostId || AMBIGUOUS_PROVIDER_ID.test(providerPostId) || !publishedAt
       || details.after?.state !== "succeeded"
       || details.after?.platform_post_id !== providerPostId
       || details.after?.published_at !== publishedAt) return null;
     return { state: "succeeded", platformPostId: providerPostId, publishedAt };
   }
   if (details.resolution === "confirmed_absent"
+    && evidence.verification_result === "not_found"
     && details.after?.state === "migration_frozen"
     && details.provider_post_id == null && details.published_at == null
     && details.after?.platform_post_id == null && details.after?.published_at == null) {

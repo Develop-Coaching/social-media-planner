@@ -646,7 +646,8 @@ returns table (
   caption text,
   media jsonb,
   scheduled_at timestamptz,
-  legacy_spp_id uuid
+  legacy_spp_id uuid,
+  provider_reconciliation_metadata jsonb
 )
 language plpgsql
 security definer
@@ -709,11 +710,82 @@ begin
   select c.id, c.content_item_id, c.platform, c.idempotency_key,
          c.attempt_count, c.lease_token, c.lease_expires_at,
          ci.user_id, ci.company_id, ci.content_type, ci.caption, ci.media,
-         ci.scheduled_at, ci.legacy_spp_id
+         ci.scheduled_at, ci.legacy_spp_id, c.provider_reconciliation_metadata
   from claimed c
   join attempts a on a.delivery_id = c.id
   join public.publisher_content_items ci on ci.id = c.content_item_id;
 end;
+$$;
+
+create or replace function publisher_private.is_safe_provider_checkpoint(p_value jsonb)
+returns boolean
+language sql
+immutable
+security invoker
+set search_path = ''
+as $$
+  select coalesce(
+    jsonb_typeof(p_value) = 'object'
+    and p_value <> '{}'::jsonb
+    and octet_length(p_value::text) <= 4096
+    and p_value::text !~* 'https?://'
+    and not exists (
+      select 1 from jsonb_object_keys(p_value) k
+      where k <> all(array[
+        'instagram_creation_id', 'instagram_media_kind',
+        'linkedin_video_urn', 'linkedin_image_urns', 'linkedin_media_kind'
+      ])
+    )
+    and (not (p_value ? 'instagram_creation_id') or (
+      jsonb_typeof(p_value->'instagram_creation_id') = 'string'
+      and length(p_value->>'instagram_creation_id') between 1 and 512))
+    and (not (p_value ? 'instagram_media_kind')
+      or p_value->>'instagram_media_kind' in ('image', 'carousel', 'reel'))
+    and (not (p_value ? 'linkedin_video_urn') or (
+      jsonb_typeof(p_value->'linkedin_video_urn') = 'string'
+      and length(p_value->>'linkedin_video_urn') between 1 and 512))
+    and (not (p_value ? 'linkedin_media_kind')
+      or p_value->>'linkedin_media_kind' in ('text', 'image', 'multi_image', 'video'))
+    and (not (p_value ? 'linkedin_image_urns') or (
+      jsonb_typeof(p_value->'linkedin_image_urns') = 'array'
+      and jsonb_array_length(p_value->'linkedin_image_urns') between 1 and 9
+      and not exists (
+        select 1 from jsonb_array_elements(p_value->'linkedin_image_urns') e
+        where jsonb_typeof(e) <> 'string' or length(e #>> '{}') not between 1 and 512
+      )))
+  , false)
+$$;
+
+create or replace function publisher_private.is_safe_provider_evidence(p_value jsonb)
+returns boolean
+language sql
+immutable
+security invoker
+set search_path = ''
+as $$
+  select coalesce(
+    jsonb_typeof(p_value) = 'object'
+    and p_value <> '{}'::jsonb
+    and octet_length(p_value::text) <= 4096
+    and p_value::text !~* 'https?://'
+    and not exists (
+      select 1 from jsonb_object_keys(p_value) k
+      where k <> all(array[
+        'verification_method', 'verification_result', 'checked_at',
+        'provider_reference', 'reviewer_note'
+      ])
+    )
+    and p_value->>'verification_method' in ('api_lookup', 'manual_provider_check')
+    and p_value->>'verification_result' in ('published', 'not_found')
+    and jsonb_typeof(p_value->'checked_at') = 'string'
+    and length(p_value->>'checked_at') between 1 and 64
+    and (not (p_value ? 'provider_reference') or (
+      jsonb_typeof(p_value->'provider_reference') = 'string'
+      and length(p_value->>'provider_reference') between 1 and 512))
+    and (not (p_value ? 'reviewer_note') or (
+      jsonb_typeof(p_value->'reviewer_note') = 'string'
+      and length(p_value->>'reviewer_note') between 1 and 512))
+  , false)
 $$;
 
 create or replace function publisher_private.checkpoint_publisher_delivery(
@@ -729,9 +801,7 @@ as $$
 declare
   v_owner text;
 begin
-  if p_provider_reconciliation_metadata is null
-    or jsonb_typeof(p_provider_reconciliation_metadata) <> 'object'
-    or p_provider_reconciliation_metadata = '{}'::jsonb then
+  if not publisher_private.is_safe_provider_checkpoint(p_provider_reconciliation_metadata) then
     raise exception 'provider reconciliation checkpoint must be a non-empty JSON object' using errcode = '22023';
   end if;
 
@@ -1100,9 +1170,9 @@ declare
 begin
   if p_resolution is null or p_resolution not in ('confirmed_published', 'confirmed_absent')
     or nullif(btrim(p_actor), '') is null
-    or p_provider_evidence is null
-    or jsonb_typeof(p_provider_evidence) <> 'object'
-    or p_provider_evidence = '{}'::jsonb then
+    or not publisher_private.is_safe_provider_evidence(p_provider_evidence)
+    or (p_resolution = 'confirmed_published' and p_provider_evidence->>'verification_result' <> 'published')
+    or (p_resolution = 'confirmed_absent' and p_provider_evidence->>'verification_result' <> 'not_found') then
     raise exception 'verification resolution requires an outcome, actor, and provider evidence' using errcode = '22023';
   end if;
   if p_resolution = 'confirmed_published' and (
@@ -1268,8 +1338,7 @@ begin
           and a.event_type = 'legacy_verification_resolved'
           and nullif(btrim(a.actor), '') is not null
           and a.details->'provider_evidence' is not null
-          and jsonb_typeof(a.details->'provider_evidence') = 'object'
-          and a.details->'provider_evidence' <> '{}'::jsonb
+          and publisher_private.is_safe_provider_evidence(a.details->'provider_evidence')
           and a.details->'before'->>'state' = 'verification_required'
           and a.details->'before'->'provider_reconciliation_metadata'
             is not distinct from d.provider_reconciliation_metadata
@@ -1363,7 +1432,7 @@ returns setof public.scheduled_posts language plpgsql security invoker set searc
 begin perform publisher_private.assert_service_caller(); return query select * from publisher_private.claim_legacy_spp_posts(p_expected_epoch,p_limit,p_lease_seconds,p_now); end $$;
 
 create or replace function public.claim_publisher_deliveries(p_expected_epoch bigint, p_limit integer default 10, p_lease_seconds integer default 300, p_now timestamptz default statement_timestamp())
-returns table (delivery_id uuid, content_item_id uuid, platform text, idempotency_key text, attempt_number integer, lease_token uuid, lease_expires_at timestamptz, user_id text, company_id text, content_type text, caption text, media jsonb, scheduled_at timestamptz, legacy_spp_id uuid)
+returns table (delivery_id uuid, content_item_id uuid, platform text, idempotency_key text, attempt_number integer, lease_token uuid, lease_expires_at timestamptz, user_id text, company_id text, content_type text, caption text, media jsonb, scheduled_at timestamptz, legacy_spp_id uuid, provider_reconciliation_metadata jsonb)
 language plpgsql security invoker set search_path = '' as $$
 begin perform publisher_private.assert_service_caller(); return query select * from publisher_private.claim_publisher_deliveries(p_expected_epoch,p_limit,p_lease_seconds,p_now); end $$;
 
@@ -1485,3 +1554,5 @@ alter default privileges for role postgres in schema public
   revoke usage, select on sequences from anon, authenticated, service_role;
 alter default privileges for role postgres in schema public
   revoke execute on functions from anon, authenticated, service_role;
+alter default privileges for role postgres in schema public
+  revoke execute on functions from public;

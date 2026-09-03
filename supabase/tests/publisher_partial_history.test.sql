@@ -64,7 +64,7 @@ select ok(
   public.resolve_legacy_delivery_verification(
     (select d.id from public.publisher_deliveries d join public.publisher_content_items ci on ci.id=d.content_item_id where ci.legacy_spp_id='20000000-0000-0000-0000-000000000015' and d.platform='instagram'),
     'confirmed_absent', null, null, 'sanitized-reviewer',
-    '{"lookup":"not_found","checked_at":"2026-09-03T04:05:06Z"}'::jsonb
+    '{"verification_method":"api_lookup","verification_result":"not_found","checked_at":"2026-09-03T04:05:06Z"}'::jsonb
   ),
   'provider-confirmed absence resolves to a frozen, safe-to-activate delivery'
 );
@@ -74,7 +74,7 @@ select ok(
     and details->>'resolution' = 'confirmed_absent'
     and details->'before'->>'state' = 'verification_required'
     and details->'after'->>'state' = 'migration_frozen'
-    and details->'provider_evidence'->>'lookup' = 'not_found'
+    and details->'provider_evidence'->>'verification_result' = 'not_found'
    from public.publisher_audit_log
    where event_type = 'legacy_verification_resolved'
      and delivery_id = (select d.id from public.publisher_deliveries d join public.publisher_content_items ci on ci.id=d.content_item_id where ci.legacy_spp_id='20000000-0000-0000-0000-000000000015' and d.platform='instagram')
@@ -90,14 +90,14 @@ select ok(
   public.resolve_legacy_delivery_verification(
     (select d.id from public.publisher_deliveries d join public.publisher_content_items ci on ci.id=d.content_item_id where ci.legacy_spp_id='20000000-0000-0000-0000-000000000016' and d.platform='instagram'),
     'confirmed_published', 'ig-durable-resolved-id', '2026-09-03T05:06:07Z',
-    'sanitized-reviewer', '{"lookup":"published","permalink":"redacted"}'::jsonb
+    'sanitized-reviewer', '{"verification_method":"manual_provider_check","verification_result":"published","checked_at":"2026-09-03T05:06:07Z","provider_reference":"ig-durable-resolved-id"}'::jsonb
   ),
   'provider-confirmed publication resolves with a durable ID'
 );
 select is((select state from public.publisher_deliveries d join public.publisher_content_items ci on ci.id=d.content_item_id where ci.legacy_spp_id='20000000-0000-0000-0000-000000000016' and d.platform='instagram'), 'succeeded', 'confirmed publication is terminal success');
 select is((select platform_post_id from public.publisher_deliveries d join public.publisher_content_items ci on ci.id=d.content_item_id where ci.legacy_spp_id='20000000-0000-0000-0000-000000000016' and d.platform='instagram'), 'ig-durable-resolved-id', 'confirmed publication stores durable provider ID');
 select ok(
-  (select details->'provider_evidence'->>'lookup' = 'published'
+  (select details->'provider_evidence'->>'verification_result' = 'published'
     and details->'after'->>'state' = 'succeeded'
     and details->>'provider_post_id' = 'ig-durable-resolved-id'
    from public.publisher_audit_log

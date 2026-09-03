@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(82);
+select plan(87);
 
 select has_table('public', 'publisher_queue_ownership', 'ownership controller exists');
 select has_table('public', 'publisher_content_items', 'content items exist');
@@ -39,6 +39,18 @@ select ok(has_function_privilege('service_role', 'public.resolve_legacy_delivery
 select ok(not has_function_privilege('anon', 'public.checkpoint_publisher_delivery(uuid,uuid,jsonb)', 'execute'), 'anon cannot checkpoint provider metadata');
 select ok(not has_function_privilege('authenticated', 'public.checkpoint_publisher_delivery(uuid,uuid,jsonb)', 'execute'), 'authenticated cannot checkpoint provider metadata');
 select ok(has_function_privilege('service_role', 'public.checkpoint_publisher_delivery(uuid,uuid,jsonb)', 'execute'), 'service role can checkpoint provider metadata');
+select ok(
+  exists (
+    select 1 from pg_default_acl d join pg_namespace n on n.oid = d.defaclnamespace
+    where n.nspname = 'public' and d.defaclrole = 'postgres'::regrole and d.defaclobjtype = 'f'
+  ) and not exists (
+    select 1 from pg_default_acl d join pg_namespace n on n.oid = d.defaclnamespace
+    cross join lateral aclexplode(d.defaclacl) a
+    where n.nspname = 'public' and d.defaclrole = 'postgres'::regrole and d.defaclobjtype = 'f'
+      and a.grantee = 0 and a.privilege_type = 'EXECUTE'
+  ),
+  'future public functions do not inherit EXECUTE for PUBLIC'
+);
 
 set local role authenticated;
 select throws_ok(
@@ -100,7 +112,7 @@ select is((select count(*)::integer from public.publisher_content_items where mi
 select throws_ok(
   format(
     'select public.checkpoint_publisher_delivery(%L, %L, %L::jsonb)',
-    (select id from public.publisher_deliveries limit 1), gen_random_uuid(), '{"prepare_handle":"sanitized"}'
+    (select id from public.publisher_deliveries limit 1), gen_random_uuid(), '{"instagram_creation_id":"sanitized"}'
   ),
   '40001',
   'replacement publisher does not own the queue',
@@ -250,6 +262,14 @@ select throws_ok(
 create temporary table first_claim as
 select * from public.claim_publisher_deliveries(2, 1, 30, '2026-09-03 00:00:00+00');
 select is((select count(*)::integer from first_claim), 1, 'replacement claims one delivery with shared epoch');
+select is((select provider_reconciliation_metadata from first_claim), '{}'::jsonb, 'claim returns provider reconciliation metadata needed to resume preparation');
+select ok(
+  public.checkpoint_publisher_delivery(
+    (select delivery_id from first_claim), (select lease_token from first_claim),
+    '{"instagram_creation_id":"resume-safe-handle","instagram_media_kind":"reel"}'::jsonb
+  ),
+  'pre-dispatch handle is checkpointed before lease reaping'
+);
 select is((select state from public.publisher_deliveries where id = (select delivery_id from first_claim)), 'leased', 'claimed delivery has a lease');
 select is((select count(*)::integer from public.publisher_delivery_attempts where delivery_id = (select delivery_id from first_claim)), 1, 'claim creates a unique attempt record');
 select is(
@@ -263,13 +283,13 @@ select * from public.claim_publisher_deliveries(2, 1, 30, '2026-09-03 00:02:00+0
 select ok(
   public.checkpoint_publisher_delivery(
     (select delivery_id from second_claim), (select lease_token from second_claim),
-    '{"prepare_handle":"sanitized-handle","prepare_phase":"uploaded"}'::jsonb
+    '{"linkedin_video_urn":"urn:li:video:sanitized","linkedin_media_kind":"video"}'::jsonb
   ),
   'live pre-dispatch lease checkpoints provider reconciliation handles'
 );
 select is(
-  (select provider_reconciliation_metadata->>'prepare_handle' from public.publisher_deliveries where id = (select delivery_id from second_claim)),
-  'sanitized-handle',
+  (select provider_reconciliation_metadata->>'linkedin_video_urn' from public.publisher_deliveries where id = (select delivery_id from second_claim)),
+  'urn:li:video:sanitized',
   'checkpoint merges structured provider reconciliation metadata'
 );
 select ok(
@@ -277,15 +297,24 @@ select ok(
     select 1 from public.publisher_audit_log
     where delivery_id = (select delivery_id from second_claim)
       and event_type = 'delivery_checkpointed'
-      and details->'provider_reconciliation_metadata_after'->>'prepare_handle' = 'sanitized-handle'
+      and details->'provider_reconciliation_metadata_after'->>'linkedin_video_urn' = 'urn:li:video:sanitized'
   ),
   'checkpoint transition records before and after metadata in append-only audit'
 );
 select ok(
   not public.checkpoint_publisher_delivery(
-    (select delivery_id from second_claim), gen_random_uuid(), '{"prepare_handle":"stale"}'::jsonb
+    (select delivery_id from second_claim), gen_random_uuid(), '{"linkedin_video_urn":"urn:li:video:stale"}'::jsonb
   ),
   'stale lease token cannot overwrite provider reconciliation metadata'
+);
+select throws_ok(
+  format(
+    'select public.checkpoint_publisher_delivery(%L, %L, %L::jsonb)',
+    (select delivery_id from second_claim), (select lease_token from second_claim), '{"access_token":"secret"}'
+  ),
+  '22023',
+  'provider reconciliation checkpoint must be a non-empty JSON object',
+  'checkpoint rejects secret-like keys outside the strict allowlist'
 );
 select ok(
   public.mark_publisher_dispatch_started(
@@ -372,6 +401,14 @@ select is(
   (select count(*)::integer from public.publisher_audit_log where event_type = 'ownership_transferred'),
   1,
   'ownership handoff is recorded in append-only audit history'
+);
+
+create temporary table resumed_claims as
+select * from public.claim_publisher_deliveries(2, 100, 30, '2026-09-04 00:00:00+00');
+select is(
+  (select provider_reconciliation_metadata from resumed_claims where delivery_id = (select delivery_id from first_claim)),
+  '{"instagram_creation_id":"resume-safe-handle","instagram_media_kind":"reel"}'::jsonb,
+  'checkpoint metadata survives lease reap and is returned unchanged on reclaim'
 );
 
 select * from finish();

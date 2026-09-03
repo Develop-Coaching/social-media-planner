@@ -89,7 +89,11 @@ test("only complete immutable audit evidence resolves an ambiguous legacy outcom
       },
       provider_post_id: "durable-provider-id",
       published_at: "2026-09-03T03:04:05+00:00",
-      provider_evidence: { lookup: "published" },
+      provider_evidence: {
+        verification_method: "api_lookup",
+        verification_result: "published",
+        checked_at: "2026-09-03T03:04:05+00:00",
+      },
     },
   };
   assert.deepEqual(classifyAuditedLegacyResolution(outcome, confirmedPublished), {
@@ -106,7 +110,11 @@ test("only complete immutable audit evidence resolves an ambiguous legacy outcom
       after: { state: "migration_frozen", platform_post_id: null, published_at: null },
       provider_post_id: null,
       published_at: null,
-      provider_evidence: { lookup: "not_found" },
+      provider_evidence: {
+        verification_method: "manual_provider_check",
+        verification_result: "not_found",
+        checked_at: "2026-09-03T03:04:05+00:00",
+      },
     },
   };
   assert.deepEqual(classifyAuditedLegacyResolution(outcome, confirmedAbsent), {
@@ -114,5 +122,9 @@ test("only complete immutable audit evidence resolves an ambiguous legacy outcom
   });
   assert.equal(classifyAuditedLegacyResolution(outcome, {
     ...confirmedAbsent, details: { ...confirmedAbsent.details, provider_evidence: {} },
+  }), null);
+  assert.equal(classifyAuditedLegacyResolution(outcome, {
+    ...confirmedAbsent,
+    details: { ...confirmedAbsent.details, provider_evidence: { ...confirmedAbsent.details.provider_evidence, access_token: "secret" } },
   }), null);
 });

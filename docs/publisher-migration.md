@@ -59,7 +59,10 @@ provider-confirmed absence returns to `migration_frozen`. Both outcomes require 
 named actor and non-empty provider evidence. The RPC writes an append-only before/
 after audit and refreshes the database-derived attestation in the same transaction.
 The transfer RPC rejects an otherwise edited outcome unless that exact resolution is
-backed by the matching immutable audit record.
+backed by the matching immutable audit record. Provider evidence is a flat, URL-free,
+maximum-4-KiB object containing only `verification_method` (`api_lookup` or
+`manual_provider_check`), `verification_result` (`published` or `not_found`),
+`checked_at`, and optional non-secret `provider_reference` / `reviewer_note` strings.
 
 ## Atomic ownership contract
 
@@ -87,4 +90,10 @@ If provider preparation creates a reconciliation handle before the public POST, 
 only a non-empty JSON object, merges it into the delivery metadata only for the
 replacement owner with the matching live pre-dispatch lease, and records the before/
 after metadata in append-only audit history. A stale token returns `false`; a caller
-must never continue to dispatch after that result.
+must never continue to dispatch after that result. Every subsequent
+`claim_publisher_deliveries` result includes `provider_reconciliation_metadata`, so a
+retry can resume the persisted provider preparation instead of creating a duplicate.
+Checkpoint payloads are URL-free and capped at 4 KiB; the only permitted keys are
+`instagram_creation_id`, `instagram_media_kind`, `linkedin_video_urn`,
+`linkedin_image_urns` (at most nine strings), and `linkedin_media_kind`. Tokens,
+credentials, arbitrary URLs, and nested unapproved data are rejected.
