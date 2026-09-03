@@ -18,12 +18,15 @@ const supabase = createClient(url, key, { auth: { persistSession: false, autoRef
 const expectedIds = loaded.rows.map((row) => row.id);
 const { data: items, error: itemError } = await supabase
   .from("publisher_content_items")
-  .select("legacy_spp_id,legacy_status,content_type,scheduled_at,legacy_payload,legacy_payload_sha256,migration_state,publishability")
-  .in("legacy_spp_id", expectedIds);
+  .select("id,legacy_spp_id,legacy_status,content_type,scheduled_at,legacy_payload,legacy_payload_sha256,migration_state,publishability")
+  .not("legacy_spp_id", "is", null);
 if (itemError) throw new Error(`Content reconciliation failed: ${itemError.message}`);
 
 const byId = new Map(items.map((item) => [item.legacy_spp_id, item]));
 const differences = [];
+for (const item of items) {
+  if (!expectedIds.includes(item.legacy_spp_id)) differences.push({ legacy_spp_id: item.legacy_spp_id, field: "unexpected_content_item" });
+}
 for (const source of loaded.rows) {
   const target = byId.get(source.id);
   if (!target) {
@@ -49,6 +52,40 @@ for (const source of loaded.rows) {
     differences.push({ legacy_spp_id: source.id, field: "publishability" });
   }
 }
+
+const { data: deliveries, error: deliveryError } = await supabase
+  .from("publisher_deliveries")
+  .select("content_item_id,platform,state,idempotency_key,platform_post_id")
+  .in("content_item_id", items.map((item) => item.id));
+if (deliveryError) throw new Error(`Delivery reconciliation failed: ${deliveryError.message}`);
+const deliveryMap = new Map(deliveries.map((delivery) => [`${delivery.content_item_id}:${delivery.platform}`, delivery]));
+let expectedDeliveryCount = 0;
+for (const source of loaded.rows) {
+  const item = byId.get(source.id);
+  if (!item) continue;
+  for (const platform of source.platforms) {
+    expectedDeliveryCount += 1;
+    const delivery = deliveryMap.get(`${item.id}:${platform}`);
+    const rawId = typeof source.platform_post_ids?.[platform] === "string" ? source.platform_post_ids[platform].trim() : "";
+    const ambiguous = /^(pending|unknown|failed|error|processing|publishing|queued|n\/a|null|none|sent)$/i.test(rawId);
+    const durable = rawId.length > 0 && !ambiguous;
+    const expectedState = source.status === "queued" && source.content_type === "article" ? "planning_only"
+      : source.status === "queued" && durable ? "succeeded"
+      : source.status === "queued" && ambiguous ? "verification_required"
+      : source.status === "queued" ? "migration_frozen"
+      : source.status === "published" && durable ? "succeeded"
+      : source.status === "published" ? "historical"
+      : source.status === "cancelled" ? "cancelled"
+      : source.status === "failed" ? "dead_letter" : "verification_required";
+    if (!delivery) differences.push({ legacy_spp_id: source.id, platform, field: "missing_delivery" });
+    else {
+      if (delivery.state !== expectedState) differences.push({ legacy_spp_id: source.id, platform, field: "delivery_state" });
+      if (delivery.idempotency_key !== `legacy-spp:${source.id}:${platform}`) differences.push({ legacy_spp_id: source.id, platform, field: "idempotency_key" });
+      if ((delivery.platform_post_id ?? null) !== (durable ? rawId : null)) differences.push({ legacy_spp_id: source.id, platform, field: "platform_post_id" });
+    }
+  }
+}
+if (deliveries.length !== expectedDeliveryCount) differences.push({ field: "unexpected_delivery_count" });
 
 const report = {
   ...summary(loaded.rows),

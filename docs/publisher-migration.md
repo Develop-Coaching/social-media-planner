@@ -1,10 +1,16 @@
 # Publisher queue migration
 
-Issue #16 introduces a forward-only replacement queue without changing or deleting
-legacy `scheduled_posts` data. The first migration is a snapshot of the repository's
-existing SQL schema because this project previously had no Supabase CLI migration
-history. Before any remote migration, compare that baseline with production and mark
-it applied; do not execute the baseline over the existing database blindly.
+Issue #16 introduces one forward-only additive migration without changing or deleting
+legacy `scheduled_posts` data. The repository previously had no Supabase CLI migration
+history, so the checked-in legacy schema is test-only under `supabase/tests/setup/` and
+is never part of `db push`. The additive migration performs a catalog preflight and
+fails closed unless the required production-shaped legacy tables and columns exist.
+
+Before remote migration, dump the live schema, compare the preflight contract and the
+test fixture against that fresh dump, then use `supabase migration repair --status
+applied <version>` only for migrations independently proven to exist. Never mark the
+new additive migration applied until it has actually run, and never apply the test
+fixture to production.
 
 ## Private export handling
 
@@ -40,7 +46,10 @@ All 21 queued content items remain `migration_frozen`. Article deliveries remain
 
 ## Atomic ownership contract
 
-Both schedulers must claim through the database RPCs and pass the current epoch:
+Both schedulers must claim through the public, service-role-only database wrappers
+and pass the current epoch. Privileged implementations live in the unexposed
+`publisher_private` schema; the runtime has read-only table grants and cannot raw-
+update ownership or delivery state:
 
 - legacy: `claim_legacy_spp_posts`
 - replacement: `claim_publisher_deliveries`

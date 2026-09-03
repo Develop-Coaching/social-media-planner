@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(66);
+select plan(71);
 
 select has_table('public', 'publisher_queue_ownership', 'ownership controller exists');
 select has_table('public', 'publisher_content_items', 'content items exist');
@@ -26,6 +26,10 @@ select ok(not has_table_privilege('service_role', 'public.publisher_deliveries',
 select ok(not has_table_privilege('service_role', 'public.publisher_delivery_attempts', 'delete'), 'service role cannot delete attempts');
 select ok(not has_table_privilege('service_role', 'public.publisher_audit_log', 'update'), 'service role cannot update audit history');
 select ok(not has_table_privilege('service_role', 'public.publisher_audit_log', 'delete'), 'service role cannot delete audit history');
+select ok(not has_table_privilege('service_role', 'public.publisher_content_items', 'insert'), 'service role cannot bypass content import RPC');
+select ok(not has_table_privilege('service_role', 'public.publisher_content_items', 'update'), 'service role cannot mutate legacy content directly');
+select ok(not has_table_privilege('service_role', 'public.publisher_deliveries', 'update'), 'service role cannot mutate delivery state directly');
+select ok(not has_table_privilege('service_role', 'public.publisher_audit_log', 'insert'), 'service role cannot forge audit history directly');
 select ok(not has_function_privilege('anon', 'public.claim_publisher_deliveries(bigint,integer,integer,timestamptz)', 'execute'), 'anon cannot claim');
 select ok(not has_function_privilege('authenticated', 'public.claim_publisher_deliveries(bigint,integer,integer,timestamptz)', 'execute'), 'authenticated cannot claim');
 select ok(has_function_privilege('service_role', 'public.claim_publisher_deliveries(bigint,integer,integer,timestamptz)', 'execute'), 'service role can claim');
@@ -116,7 +120,7 @@ select r.id, r.user_id, r.company_id, r.saved_content_id, r.item_id,
        r.upload_paths, r.cover_path
 from sanitized_export s
 cross join lateral jsonb_populate_record(null::public.scheduled_posts, s.payload) r
-where r.status = 'queued';
+;
 
 select throws_ok(
   $$select public.import_legacy_spp_rows(jsonb_build_array((select payload || '{"caption":"changed"}'::jsonb from sanitized_export limit 1)))$$,
@@ -170,6 +174,13 @@ insert into public.scheduled_posts (
   ('10000000-0000-0000-0000-000000000001', 'fixture-user', 'fixture-company', 'old-reel', 'reel', 'sanitized', array['linkedin'], '2026-08-01', 'queued'),
   ('10000000-0000-0000-0000-000000000002', 'fixture-user', 'fixture-company', 'old-article', 'article', 'sanitized', array['linkedin'], '2026-08-01', 'queued');
 
+select throws_ok(
+  $$update public.scheduled_posts set status = 'publishing' where id = '10000000-0000-0000-0000-000000000001'$$,
+  '42501',
+  'legacy queued posts must be claimed through claim_legacy_spp_posts',
+  'direct legacy queued-to-publishing transition is blocked'
+);
+
 select is(
   (select count(*)::integer from public.claim_legacy_spp_posts(1, 5, 300, '2026-08-02 00:00:00+00')),
   1,
@@ -185,7 +196,7 @@ select ok(
   'legacy dispatch start uses lease token and ownership epoch CAS'
 );
 select throws_ok(
-  $$select public.transfer_publisher_queue_ownership(1, '2026-09-03', repeat('a', 64))$$,
+  $$select public.transfer_publisher_queue_ownership(1, '2026-09-03')$$,
   '55000',
   'ownership transfer requires zero live leases',
   'cutover refuses a live legacy lease'
@@ -200,10 +211,10 @@ select ok(
   'legacy completion clears its lease through token and epoch CAS'
 );
 
-update public.scheduled_posts set status = 'cancelled'
+delete from public.scheduled_posts
 where id in ('10000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000002');
 
-select is(public.transfer_publisher_queue_ownership(1, '2026-09-03', repeat('a', 64)), 2::bigint, 'atomic transfer increments epoch');
+select is(public.transfer_publisher_queue_ownership(1, '2026-09-03'), 2::bigint, 'atomic transfer increments epoch');
 select is((select owner from public.publisher_queue_ownership where source = 'legacy_spp'), 'replacement', 'replacement owns queue after transfer');
 select is((select epoch from public.publisher_queue_ownership where source = 'legacy_spp'), 2::bigint, 'ownership epoch is durable');
 select is((select count(*)::integer from public.publisher_deliveries where state = 'pending'), 21, 'transfer activates only publishable frozen deliveries');

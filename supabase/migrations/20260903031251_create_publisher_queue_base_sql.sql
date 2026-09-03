@@ -5,7 +5,50 @@
 -- and replacement claim functions serialize on publisher_queue_ownership so
 -- there is no interval in which both schedulers may claim a legacy job.
 
+do $$
+declare
+  v_missing text;
+begin
+  select string_agg(required.column_name, ', ' order by required.column_name)
+  into v_missing
+  from (values
+    ('id'), ('user_id'), ('company_id'), ('saved_content_id'), ('item_id'),
+    ('content_type'), ('caption'), ('image_keys'), ('media_urls'), ('video_url'),
+    ('platforms'), ('scheduled_at'), ('status'), ('platform_post_ids'), ('error'),
+    ('retry_count'), ('created_at'), ('updated_at'), ('published_at'),
+    ('upload_paths'), ('cover_path')
+  ) as required(column_name)
+  where not exists (
+    select 1 from information_schema.columns c
+    where c.table_schema = 'public' and c.table_name = 'scheduled_posts'
+      and c.column_name = required.column_name
+  );
+  if to_regclass('public.companies') is null or to_regclass('public.scheduled_posts') is null or v_missing is not null then
+    raise exception 'publisher migration preflight failed; missing legacy schema columns: %', coalesce(v_missing, '(table missing)')
+      using errcode = '55000';
+  end if;
+end;
+$$;
+
 create extension if not exists pgcrypto with schema extensions;
+
+create schema if not exists publisher_private;
+revoke all on schema publisher_private from public, anon, authenticated, service_role;
+
+create or replace function publisher_private.assert_service_caller()
+returns void
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+begin
+  if session_user <> 'postgres'
+    and coalesce(current_setting('request.jwt.claim.role', true), '') <> 'service_role'
+    and coalesce(current_setting('role', true), '') <> 'service_role' then
+    raise exception 'publisher RPC requires service_role' using errcode = '42501';
+  end if;
+end;
+$$;
 
 create table public.publisher_queue_ownership (
   source text primary key,
@@ -17,7 +60,8 @@ create table public.publisher_queue_ownership (
   created_at timestamptz not null default statement_timestamp(),
   updated_at timestamptz not null default statement_timestamp(),
   constraint publisher_queue_ownership_transfer_fields check (
-    (owner = 'legacy' and cutoff_at is null and reconciliation_sha256 is null and transferred_at is null)
+    (owner = 'legacy' and cutoff_at is null and transferred_at is null
+      and (reconciliation_sha256 is null or reconciliation_sha256 ~ '^[0-9a-f]{64}$'))
     or
     (owner = 'replacement' and cutoff_at is not null and reconciliation_sha256 ~ '^[0-9a-f]{64}$' and transferred_at is not null)
   )
@@ -182,6 +226,26 @@ create index scheduled_posts_publisher_lease_idx
   on public.scheduled_posts (publisher_lease_expires_at)
   where status = 'publishing';
 
+create or replace function public.guard_legacy_spp_claim_transition()
+returns trigger
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+begin
+  if old.status = 'queued' and new.status = 'publishing'
+    and coalesce(current_setting('publisher.legacy_claim_rpc', true), '') <> 'enabled' then
+    raise exception 'legacy queued posts must be claimed through claim_legacy_spp_posts'
+      using errcode = '42501';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger guard_legacy_spp_claim_transition
+before update on public.scheduled_posts
+for each row execute function public.guard_legacy_spp_claim_transition();
+
 create or replace function public.protect_legacy_publisher_fields()
 returns trigger
 language plpgsql
@@ -289,10 +353,10 @@ for each row execute function public.prevent_publisher_audit_mutation();
 -- Idempotently imports a complete Social Post Pro export. Existing rows must be
 -- byte-for-byte equivalent as parsed JSON or the import aborts; it never
 -- overwrites migrated content or runtime state.
-create or replace function public.import_legacy_spp_rows(p_rows jsonb)
+create or replace function publisher_private.import_legacy_spp_rows(p_rows jsonb)
 returns jsonb
 language plpgsql
-security invoker
+security definer
 set search_path = ''
 as $$
 declare
@@ -308,10 +372,25 @@ declare
   v_content_type text;
   v_legacy_id uuid;
   v_supplied_payload_sha256 text;
+  v_platform_post_id text;
+  v_platform_id_class text;
+  v_attestation text;
+  v_expected_deliveries integer;
 begin
   if jsonb_typeof(p_rows) <> 'array' then
     raise exception 'p_rows must be a JSON array' using errcode = '22023';
   end if;
+  if jsonb_array_length(p_rows) <> 67
+    or (select count(*) from jsonb_array_elements(p_rows) r where r->>'status' = 'queued') <> 21
+    or (select count(*) from jsonb_array_elements(p_rows) r where r->>'status' <> 'queued') <> 46
+    or (select count(*) from jsonb_array_elements(p_rows) r where r->>'status' = 'queued' and lower(r->>'content_type') = 'article') <> 14
+    or (select count(distinct r->>'id') from jsonb_array_elements(p_rows) r) <> 67
+    or (select count(distinct (r->>'user_id') || chr(0) || (r->>'company_id')) from jsonb_array_elements(p_rows) r) <> 1 then
+    raise exception 'legacy import must be the approved complete 67-row manifest (21 queued, 46 history, 14 queued articles, one tenant)'
+      using errcode = '22023';
+  end if;
+  select sum(jsonb_array_length(r->'platforms')) into v_expected_deliveries
+  from jsonb_array_elements(p_rows) r;
 
   for v_record in select value from jsonb_array_elements(p_rows)
   loop
@@ -390,10 +469,20 @@ begin
           using errcode = '22023';
       end if;
 
+      v_platform_post_id := nullif(btrim(v_record->'platform_post_ids'->>v_platform), '');
+      v_platform_id_class := case
+        when v_platform_post_id is null then 'empty'
+        when lower(v_platform_post_id) ~ '^(pending|unknown|failed|error|processing|publishing|queued|n/a|null|none|sent)$' then 'ambiguous'
+        else 'durable'
+      end;
+
       v_delivery_state := case
         when v_status = 'queued' and v_content_type = 'article' then 'planning_only'
+        when v_status = 'queued' and v_platform_id_class = 'durable' then 'succeeded'
+        when v_status = 'queued' and v_platform_id_class = 'ambiguous' then 'verification_required'
         when v_status = 'queued' then 'migration_frozen'
-        when v_status = 'published' then 'succeeded'
+        when v_status = 'published' and v_platform_id_class = 'durable' then 'succeeded'
+        when v_status = 'published' then 'historical'
         when v_status = 'cancelled' then 'cancelled'
         when v_status = 'failed' then 'dead_letter'
         when v_status = 'publishing' then 'verification_required'
@@ -410,8 +499,10 @@ begin
         'legacy-spp:' || v_legacy_id::text || ':' || v_platform,
         greatest(coalesce((v_record->>'retry_count')::integer, 0), 0),
         case when v_delivery_state = 'migration_frozen' then (v_record->>'scheduled_at')::timestamptz else null end,
-        nullif(v_record->'platform_post_ids'->>v_platform, ''),
-        (v_record->>'published_at')::timestamptz
+        case when v_platform_id_class = 'durable' then v_platform_post_id else null end,
+        case when v_delivery_state = 'succeeded'
+          then coalesce((v_record->>'published_at')::timestamptz, (v_record->>'updated_at')::timestamptz)
+          else null end
       ) on conflict (content_item_id, platform) do nothing;
       if found then
         v_delivery_count := v_delivery_count + 1;
@@ -419,17 +510,39 @@ begin
     end loop;
   end loop;
 
+  if (select count(*) from public.publisher_content_items where legacy_spp_id is not null) <> 67
+    or (select count(*) from public.publisher_deliveries d join public.publisher_content_items ci on ci.id = d.content_item_id where ci.legacy_spp_id is not null) <> v_expected_deliveries then
+    raise exception 'legacy destination contains missing or extra content/deliveries' using errcode = '23514';
+  end if;
+
+  select encode(extensions.digest(string_agg(
+    ci.legacy_spp_id::text || ':' || ci.legacy_payload_sha256 || ':' || d.platform || ':' || d.state || ':' || coalesce(d.platform_post_id, ''),
+    E'\n' order by ci.legacy_spp_id, d.platform
+  ), 'sha256'), 'hex')
+  into v_attestation
+  from public.publisher_content_items ci
+  join public.publisher_deliveries d on d.content_item_id = ci.id
+  where ci.legacy_spp_id is not null;
+
+  update public.publisher_queue_ownership
+  set reconciliation_sha256 = v_attestation, updated_at = statement_timestamp()
+  where source = 'legacy_spp' and owner = 'legacy';
+  if not found then
+    raise exception 'legacy import is closed after ownership transfer' using errcode = '55000';
+  end if;
+
   return jsonb_build_object(
     'inserted_content_items', v_inserted,
     'unchanged_content_items', v_unchanged,
-    'inserted_deliveries', v_delivery_count
+    'inserted_deliveries', v_delivery_count,
+    'database_attestation_sha256', v_attestation
   );
 end;
 $$;
 
 -- Legacy claimant. Issue #17 replaces the old select/update loop with this RPC.
 -- Locking the ownership row makes claims mutually exclusive with cutover.
-create or replace function public.claim_legacy_spp_posts(
+create or replace function publisher_private.claim_legacy_spp_posts(
   p_expected_epoch bigint,
   p_limit integer default 5,
   p_lease_seconds integer default 300,
@@ -437,7 +550,7 @@ create or replace function public.claim_legacy_spp_posts(
 )
 returns setof public.scheduled_posts
 language plpgsql
-security invoker
+security definer
 set search_path = ''
 as $$
 declare
@@ -457,6 +570,8 @@ begin
     raise exception 'legacy ownership mismatch: owner %, epoch %', v_owner, v_epoch
       using errcode = '40001';
   end if;
+
+  perform set_config('publisher.legacy_claim_rpc', 'enabled', true);
 
   return query
   with candidates as (
@@ -484,7 +599,7 @@ begin
 end;
 $$;
 
-create or replace function public.claim_publisher_deliveries(
+create or replace function publisher_private.claim_publisher_deliveries(
   p_expected_epoch bigint,
   p_limit integer default 10,
   p_lease_seconds integer default 300,
@@ -507,7 +622,7 @@ returns table (
   legacy_spp_id uuid
 )
 language plpgsql
-security invoker
+security definer
 set search_path = ''
 as $$
 declare
@@ -539,6 +654,7 @@ begin
       and ci.migration_state in ('native', 'active')
       and ci.approval_state = 'approved'
       and ci.publishability = 'publishable'
+      and ci.content_type <> 'article'
     order by coalesce(d.next_attempt_at, ci.scheduled_at), d.id
     for update of d skip locked
     limit p_limit
@@ -573,14 +689,14 @@ begin
 end;
 $$;
 
-create or replace function public.mark_publisher_dispatch_started(
+create or replace function publisher_private.mark_publisher_dispatch_started(
   p_delivery_id uuid,
   p_lease_token uuid,
   p_request_fingerprint_sha256 text
 )
 returns boolean
 language plpgsql
-security invoker
+security definer
 set search_path = ''
 as $$
 begin
@@ -604,7 +720,7 @@ begin
 end;
 $$;
 
-create or replace function public.complete_publisher_delivery(
+create or replace function publisher_private.complete_publisher_delivery(
   p_delivery_id uuid,
   p_lease_token uuid,
   p_platform_post_id text,
@@ -613,7 +729,7 @@ create or replace function public.complete_publisher_delivery(
 )
 returns boolean
 language plpgsql
-security invoker
+security definer
 set search_path = ''
 as $$
 begin
@@ -639,7 +755,7 @@ begin
 end;
 $$;
 
-create or replace function public.retry_publisher_delivery(
+create or replace function publisher_private.retry_publisher_delivery(
   p_delivery_id uuid,
   p_lease_token uuid,
   p_error text,
@@ -647,7 +763,7 @@ create or replace function public.retry_publisher_delivery(
 )
 returns text
 language plpgsql
-security invoker
+security definer
 set search_path = ''
 as $$
 declare
@@ -672,14 +788,14 @@ begin
 end;
 $$;
 
-create or replace function public.dead_letter_publisher_delivery(
+create or replace function publisher_private.dead_letter_publisher_delivery(
   p_delivery_id uuid,
   p_lease_token uuid,
   p_error text
 )
 returns boolean
 language plpgsql
-security invoker
+security definer
 set search_path = ''
 as $$
 begin
@@ -698,14 +814,14 @@ begin
 end;
 $$;
 
-create or replace function public.mark_publisher_verification_required(
+create or replace function publisher_private.mark_publisher_verification_required(
   p_delivery_id uuid,
   p_lease_token uuid,
   p_error text
 )
 returns boolean
 language plpgsql
-security invoker
+security definer
 set search_path = ''
 as $$
 begin
@@ -725,14 +841,14 @@ begin
 end;
 $$;
 
-create or replace function public.mark_legacy_spp_dispatch_started(
+create or replace function publisher_private.mark_legacy_spp_dispatch_started(
   p_post_id uuid,
   p_lease_token uuid,
   p_expected_epoch bigint
 )
 returns boolean
 language plpgsql
-security invoker
+security definer
 set search_path = ''
 as $$
 declare
@@ -756,7 +872,7 @@ begin
 end;
 $$;
 
-create or replace function public.complete_legacy_spp_claim(
+create or replace function publisher_private.complete_legacy_spp_claim(
   p_post_id uuid,
   p_lease_token uuid,
   p_expected_epoch bigint,
@@ -768,7 +884,7 @@ create or replace function public.complete_legacy_spp_claim(
 )
 returns boolean
 language plpgsql
-security invoker
+security definer
 set search_path = ''
 as $$
 declare
@@ -805,13 +921,13 @@ begin
 end;
 $$;
 
-create or replace function public.reap_expired_legacy_spp_leases(
+create or replace function publisher_private.reap_expired_legacy_spp_leases(
   p_expected_epoch bigint,
   p_now timestamptz default statement_timestamp()
 )
 returns table (post_id uuid, verification_required boolean)
 language plpgsql
-security invoker
+security definer
 set search_path = ''
 as $$
 declare
@@ -849,12 +965,12 @@ $$;
 -- Reaps expired leases conservatively. A pre-dispatch crash is safe to retry;
 -- once a provider request may have begun, human/provider reconciliation is
 -- required because these APIs do not provide a reliable idempotency key.
-create or replace function public.reap_expired_publisher_leases(
+create or replace function publisher_private.reap_expired_publisher_leases(
   p_now timestamptz default statement_timestamp()
 )
 returns table (delivery_id uuid, new_state text)
 language plpgsql
-security invoker
+security definer
 set search_path = ''
 as $$
 begin
@@ -897,25 +1013,22 @@ begin
 end;
 $$;
 
-create or replace function public.transfer_publisher_queue_ownership(
+create or replace function publisher_private.transfer_publisher_queue_ownership(
   p_expected_epoch bigint,
-  p_cutoff_at timestamptz,
-  p_reconciliation_sha256 text
+  p_cutoff_at timestamptz
 )
 returns bigint
 language plpgsql
-security invoker
+security definer
 set search_path = ''
 as $$
 declare
   v_owner text;
   v_epoch bigint;
+  v_stored_attestation text;
+  v_computed_attestation text;
 begin
-  if p_reconciliation_sha256 !~ '^[0-9a-f]{64}$' then
-    raise exception 'reconciliation hash must be lowercase SHA-256' using errcode = '22023';
-  end if;
-
-  select owner, epoch into v_owner, v_epoch
+  select owner, epoch, reconciliation_sha256 into v_owner, v_epoch, v_stored_attestation
   from public.publisher_queue_ownership
   where source = 'legacy_spp'
   for update;
@@ -925,20 +1038,35 @@ begin
       using errcode = '40001';
   end if;
 
+  select encode(extensions.digest(string_agg(
+    ci.legacy_spp_id::text || ':' || ci.legacy_payload_sha256 || ':' || d.platform || ':' || d.state || ':' || coalesce(d.platform_post_id, ''),
+    E'\n' order by ci.legacy_spp_id, d.platform
+  ), 'sha256'), 'hex')
+  into v_computed_attestation
+  from public.publisher_content_items ci
+  join public.publisher_deliveries d on d.content_item_id = ci.id
+  where ci.legacy_spp_id is not null;
+  if v_stored_attestation is null or v_computed_attestation is distinct from v_stored_attestation then
+    raise exception 'database reconciliation attestation is missing or stale' using errcode = '55000';
+  end if;
+
   if exists (select 1 from public.scheduled_posts where status = 'publishing')
     or exists (select 1 from public.scheduled_posts where publisher_verification_required)
     or exists (select 1 from public.publisher_deliveries where state in ('leased', 'verification_required')) then
     raise exception 'ownership transfer requires zero live leases' using errcode = '55000';
   end if;
 
-  if exists (
+  if (select count(*) from public.scheduled_posts) <> 67
+    or (select count(*) from public.publisher_content_items where legacy_spp_id is not null) <> 67
+    or (select count(*) from public.scheduled_posts where status = 'queued') <> 21
+    or (select count(*) from public.publisher_content_items where legacy_status = 'queued') <> 21
+    or exists (
     select 1
     from public.scheduled_posts sp
     left join public.publisher_content_items ci on ci.legacy_spp_id = sp.id
-    where sp.status = 'queued'
-      and (
+    where (
         ci.id is null
-        or ci.migration_state <> 'migration_frozen'
+        or ci.migration_state <> case when sp.status = 'queued' then 'migration_frozen' else 'historical' end
         or ci.legacy_payload is distinct from (
           to_jsonb(sp) - array[
             'publisher_lease_token', 'publisher_lease_expires_at',
@@ -951,16 +1079,52 @@ begin
     select 1
     from public.publisher_content_items ci
     left join public.scheduled_posts sp on sp.id = ci.legacy_spp_id
-    where ci.legacy_status = 'queued'
-      and (sp.id is null or sp.status <> 'queued')
+    where sp.id is null or sp.status <> ci.legacy_status
   ) then
     raise exception 'ownership transfer requires an exact fresh reconciliation of the complete queued set'
       using errcode = '55000';
   end if;
 
+  if (select count(*) from public.publisher_deliveries d join public.publisher_content_items ci on ci.id = d.content_item_id where ci.legacy_spp_id is not null)
+      <> (select sum(jsonb_array_length(ci.legacy_payload->'platforms')) from public.publisher_content_items ci where ci.legacy_spp_id is not null)
+    or exists (
+      select 1
+      from public.publisher_content_items ci
+      cross join lateral jsonb_array_elements_text(ci.legacy_payload->'platforms') p(platform)
+      left join public.publisher_deliveries d on d.content_item_id = ci.id and d.platform = p.platform
+      cross join lateral (
+        select nullif(btrim(ci.legacy_payload->'platform_post_ids'->>p.platform), '') as provider_id
+      ) ids
+      cross join lateral (
+        select case
+          when ids.provider_id is null then 'empty'
+          when lower(ids.provider_id) ~ '^(pending|unknown|failed|error|processing|publishing|queued|n/a|null|none|sent)$' then 'ambiguous'
+          else 'durable'
+        end as id_class
+      ) classified
+      where d.id is null
+        or d.idempotency_key <> 'legacy-spp:' || ci.legacy_spp_id::text || ':' || p.platform
+        or d.state <> case
+          when ci.legacy_status = 'queued' and ci.content_type = 'article' then 'planning_only'
+          when ci.legacy_status = 'queued' and classified.id_class = 'durable' then 'succeeded'
+          when ci.legacy_status = 'queued' and classified.id_class = 'ambiguous' then 'verification_required'
+          when ci.legacy_status = 'queued' then 'migration_frozen'
+          when ci.legacy_status = 'published' and classified.id_class = 'durable' then 'succeeded'
+          when ci.legacy_status = 'published' then 'historical'
+          when ci.legacy_status = 'cancelled' then 'cancelled'
+          when ci.legacy_status = 'failed' then 'dead_letter'
+          when ci.legacy_status = 'publishing' then 'verification_required'
+          else 'historical'
+        end
+        or (classified.id_class = 'durable' and d.platform_post_id is distinct from ids.provider_id)
+    ) then
+    raise exception 'ownership transfer requires exact per-platform delivery reconciliation'
+      using errcode = '55000';
+  end if;
+
   update public.publisher_queue_ownership
   set owner = 'replacement', epoch = epoch + 1, cutoff_at = p_cutoff_at,
-      reconciliation_sha256 = p_reconciliation_sha256,
+      reconciliation_sha256 = v_computed_attestation,
       transferred_at = statement_timestamp(), updated_at = statement_timestamp()
   where source = 'legacy_spp';
 
@@ -979,12 +1143,68 @@ begin
   values ('ownership_transferred', 'cutover', jsonb_build_object(
     'source', 'legacy_spp', 'from_owner', 'legacy', 'to_owner', 'replacement',
     'from_epoch', v_epoch, 'to_epoch', v_epoch + 1,
-    'cutoff_at', p_cutoff_at, 'reconciliation_sha256', p_reconciliation_sha256
+    'cutoff_at', p_cutoff_at, 'reconciliation_sha256', v_computed_attestation
   ));
 
   return v_epoch + 1;
 end;
 $$;
+
+-- Public Data API wrappers contain no privileged SQL. They explicitly verify
+-- the caller, then delegate to locked-search-path implementations in the
+-- unexposed publisher_private schema.
+create or replace function public.import_legacy_spp_rows(p_rows jsonb)
+returns jsonb language plpgsql security invoker set search_path = '' as $$
+begin perform publisher_private.assert_service_caller(); return publisher_private.import_legacy_spp_rows(p_rows); end $$;
+
+create or replace function public.claim_legacy_spp_posts(p_expected_epoch bigint, p_limit integer default 5, p_lease_seconds integer default 300, p_now timestamptz default statement_timestamp())
+returns setof public.scheduled_posts language plpgsql security invoker set search_path = '' as $$
+begin perform publisher_private.assert_service_caller(); return query select * from publisher_private.claim_legacy_spp_posts(p_expected_epoch,p_limit,p_lease_seconds,p_now); end $$;
+
+create or replace function public.claim_publisher_deliveries(p_expected_epoch bigint, p_limit integer default 10, p_lease_seconds integer default 300, p_now timestamptz default statement_timestamp())
+returns table (delivery_id uuid, content_item_id uuid, platform text, idempotency_key text, attempt_number integer, lease_token uuid, lease_expires_at timestamptz, user_id text, company_id text, content_type text, caption text, media jsonb, scheduled_at timestamptz, legacy_spp_id uuid)
+language plpgsql security invoker set search_path = '' as $$
+begin perform publisher_private.assert_service_caller(); return query select * from publisher_private.claim_publisher_deliveries(p_expected_epoch,p_limit,p_lease_seconds,p_now); end $$;
+
+create or replace function public.mark_publisher_dispatch_started(p_delivery_id uuid,p_lease_token uuid,p_request_fingerprint_sha256 text)
+returns boolean language plpgsql security invoker set search_path = '' as $$
+begin perform publisher_private.assert_service_caller(); return publisher_private.mark_publisher_dispatch_started(p_delivery_id,p_lease_token,p_request_fingerprint_sha256); end $$;
+
+create or replace function public.complete_publisher_delivery(p_delivery_id uuid,p_lease_token uuid,p_platform_post_id text,p_live_url text default null,p_provider_response jsonb default null)
+returns boolean language plpgsql security invoker set search_path = '' as $$
+begin perform publisher_private.assert_service_caller(); return publisher_private.complete_publisher_delivery(p_delivery_id,p_lease_token,p_platform_post_id,p_live_url,p_provider_response); end $$;
+
+create or replace function public.retry_publisher_delivery(p_delivery_id uuid,p_lease_token uuid,p_error text,p_next_attempt_at timestamptz)
+returns text language plpgsql security invoker set search_path = '' as $$
+begin perform publisher_private.assert_service_caller(); return publisher_private.retry_publisher_delivery(p_delivery_id,p_lease_token,p_error,p_next_attempt_at); end $$;
+
+create or replace function public.dead_letter_publisher_delivery(p_delivery_id uuid,p_lease_token uuid,p_error text)
+returns boolean language plpgsql security invoker set search_path = '' as $$
+begin perform publisher_private.assert_service_caller(); return publisher_private.dead_letter_publisher_delivery(p_delivery_id,p_lease_token,p_error); end $$;
+
+create or replace function public.mark_publisher_verification_required(p_delivery_id uuid,p_lease_token uuid,p_error text)
+returns boolean language plpgsql security invoker set search_path = '' as $$
+begin perform publisher_private.assert_service_caller(); return publisher_private.mark_publisher_verification_required(p_delivery_id,p_lease_token,p_error); end $$;
+
+create or replace function public.mark_legacy_spp_dispatch_started(p_post_id uuid,p_lease_token uuid,p_expected_epoch bigint)
+returns boolean language plpgsql security invoker set search_path = '' as $$
+begin perform publisher_private.assert_service_caller(); return publisher_private.mark_legacy_spp_dispatch_started(p_post_id,p_lease_token,p_expected_epoch); end $$;
+
+create or replace function public.complete_legacy_spp_claim(p_post_id uuid,p_lease_token uuid,p_expected_epoch bigint,p_status text,p_platform_post_ids jsonb default '{}'::jsonb,p_error text default null,p_retry_count integer default null,p_published_at timestamptz default null)
+returns boolean language plpgsql security invoker set search_path = '' as $$
+begin perform publisher_private.assert_service_caller(); return publisher_private.complete_legacy_spp_claim(p_post_id,p_lease_token,p_expected_epoch,p_status,p_platform_post_ids,p_error,p_retry_count,p_published_at); end $$;
+
+create or replace function public.reap_expired_legacy_spp_leases(p_expected_epoch bigint,p_now timestamptz default statement_timestamp())
+returns table (post_id uuid, verification_required boolean) language plpgsql security invoker set search_path = '' as $$
+begin perform publisher_private.assert_service_caller(); return query select * from publisher_private.reap_expired_legacy_spp_leases(p_expected_epoch,p_now); end $$;
+
+create or replace function public.reap_expired_publisher_leases(p_now timestamptz default statement_timestamp())
+returns table (delivery_id uuid,new_state text) language plpgsql security invoker set search_path = '' as $$
+begin perform publisher_private.assert_service_caller(); return query select * from publisher_private.reap_expired_publisher_leases(p_now); end $$;
+
+create or replace function public.transfer_publisher_queue_ownership(p_expected_epoch bigint,p_cutoff_at timestamptz)
+returns bigint language plpgsql security invoker set search_path = '' as $$
+begin perform publisher_private.assert_service_caller(); return publisher_private.transfer_publisher_queue_ownership(p_expected_epoch,p_cutoff_at); end $$;
 
 alter table public.publisher_queue_ownership enable row level security;
 alter table public.publisher_content_items enable row level security;
@@ -1002,15 +1222,15 @@ revoke all on table public.publisher_delivery_attempts from public, anon, authen
 revoke all on table public.publisher_audit_log from public, anon, authenticated, service_role;
 revoke all on sequence public.publisher_audit_log_id_seq from public, anon, authenticated, service_role;
 
-grant select, insert, update on table public.publisher_queue_ownership to service_role;
-grant select, insert, update on table public.publisher_content_items to service_role;
-grant select, insert, update on table public.publisher_deliveries to service_role;
-grant select, insert, update on table public.publisher_delivery_attempts to service_role;
-grant select, insert on table public.publisher_audit_log to service_role;
-grant usage, select on sequence public.publisher_audit_log_id_seq to service_role;
+grant select on table public.publisher_queue_ownership to service_role;
+grant select on table public.publisher_content_items to service_role;
+grant select on table public.publisher_deliveries to service_role;
+grant select on table public.publisher_delivery_attempts to service_role;
+grant select on table public.publisher_audit_log to service_role;
 grant select, update on table public.scheduled_posts to service_role;
 
 revoke all on function public.protect_legacy_publisher_fields() from public, anon, authenticated, service_role;
+revoke all on function public.guard_legacy_spp_claim_transition() from public, anon, authenticated, service_role;
 revoke all on function public.prevent_publisher_audit_mutation() from public, anon, authenticated, service_role;
 revoke all on function public.protect_planning_only_delivery() from public, anon, authenticated, service_role;
 revoke all on function public.audit_publisher_delivery_transition() from public, anon, authenticated, service_role;
@@ -1026,7 +1246,7 @@ revoke all on function public.mark_legacy_spp_dispatch_started(uuid, uuid, bigin
 revoke all on function public.complete_legacy_spp_claim(uuid, uuid, bigint, text, jsonb, text, integer, timestamptz) from public, anon, authenticated, service_role;
 revoke all on function public.reap_expired_legacy_spp_leases(bigint, timestamptz) from public, anon, authenticated, service_role;
 revoke all on function public.reap_expired_publisher_leases(timestamptz) from public, anon, authenticated, service_role;
-revoke all on function public.transfer_publisher_queue_ownership(bigint, timestamptz, text) from public, anon, authenticated, service_role;
+revoke all on function public.transfer_publisher_queue_ownership(bigint, timestamptz) from public, anon, authenticated, service_role;
 
 grant execute on function public.import_legacy_spp_rows(jsonb) to service_role;
 grant execute on function public.claim_legacy_spp_posts(bigint, integer, integer, timestamptz) to service_role;
@@ -1040,4 +1260,15 @@ grant execute on function public.mark_legacy_spp_dispatch_started(uuid, uuid, bi
 grant execute on function public.complete_legacy_spp_claim(uuid, uuid, bigint, text, jsonb, text, integer, timestamptz) to service_role;
 grant execute on function public.reap_expired_legacy_spp_leases(bigint, timestamptz) to service_role;
 grant execute on function public.reap_expired_publisher_leases(timestamptz) to service_role;
-grant execute on function public.transfer_publisher_queue_ownership(bigint, timestamptz, text) to service_role;
+grant execute on function public.transfer_publisher_queue_ownership(bigint, timestamptz) to service_role;
+
+revoke all on all functions in schema publisher_private from public, anon, authenticated, service_role;
+grant usage on schema publisher_private to service_role;
+grant execute on all functions in schema publisher_private to service_role;
+
+alter default privileges for role postgres in schema public
+  revoke select, insert, update, delete on tables from anon, authenticated, service_role;
+alter default privileges for role postgres in schema public
+  revoke usage, select on sequences from anon, authenticated, service_role;
+alter default privileges for role postgres in schema public
+  revoke execute on functions from anon, authenticated, service_role;

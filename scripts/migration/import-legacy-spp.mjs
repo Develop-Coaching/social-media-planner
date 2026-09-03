@@ -25,20 +25,18 @@ const supabase = createClient(url, key, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
-let inserted = 0;
-let unchanged = 0;
-let deliveries = 0;
-for (let offset = 0; offset < loaded.rows.length; offset += 20) {
-  const { data, error } = await supabase.rpc("import_legacy_spp_rows", {
-    p_rows: loaded.rows.slice(offset, offset + 20).map((row) => ({
+const { data, error } = await supabase.rpc("import_legacy_spp_rows", {
+    p_rows: loaded.rows.map((row) => ({
       ...row,
       __migration_payload_sha256: sha256(stableJson(row)),
     })),
-  });
-  if (error) throw new Error(`Import failed at row ${offset}: ${error.message}`);
-  inserted += data.inserted_content_items;
-  unchanged += data.unchanged_content_items;
-  deliveries += data.inserted_deliveries;
-}
+});
+if (error) throw new Error(`Atomic import failed: ${error.message}`);
 
-console.log(JSON.stringify({ inserted, unchanged, deliveries, manifestSha256: exportSummary.manifestSha256 }, null, 2));
+console.log(JSON.stringify({
+  inserted: data.inserted_content_items,
+  unchanged: data.unchanged_content_items,
+  deliveries: data.inserted_deliveries,
+  databaseAttestationSha256: data.database_attestation_sha256,
+  manifestSha256: exportSummary.manifestSha256,
+}, null, 2));
