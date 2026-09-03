@@ -1,6 +1,6 @@
 import { supabase } from "@/lib/supabase";
 import type { ClaimedPublisherDelivery } from "./queue-types";
-import type { AdapterOutcome, PublisherRepository } from "./runtime-types";
+import type { AdapterOutcome, ProviderCheckpoint, PublisherRepository } from "./runtime-types";
 
 function fail(operation: string, error: { message: string } | null): never {
   throw new Error(`${operation}: ${error?.message ?? "compare-and-set failed"}`);
@@ -30,6 +30,15 @@ export function createPublisherRepository(): PublisherRepository {
         p_request_fingerprint_sha256: fingerprint,
       });
       if (error) fail("mark_publisher_dispatch_started", error);
+      return data === true;
+    },
+    async checkpoint(deliveryId, leaseToken, checkpoint: ProviderCheckpoint) {
+      const { data, error } = await supabase.rpc("checkpoint_publisher_delivery", {
+        p_delivery_id: deliveryId,
+        p_lease_token: leaseToken,
+        p_provider_reconciliation_metadata: checkpoint,
+      });
+      if (error) fail("checkpoint_publisher_delivery", error);
       return data === true;
     },
     async complete(deliveryId, leaseToken, outcome: Extract<AdapterOutcome, { kind: "delivered" }>) {

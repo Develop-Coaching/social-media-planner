@@ -21,6 +21,7 @@ function delivery(overrides: Partial<ClaimedPublisherDelivery> = {}): ClaimedPub
     media: { video_url: "https://media.invalid/reel.mp4" },
     scheduled_at: "2026-09-03T00:00:00.000Z",
     legacy_spp_id: "00000000-0000-4000-8000-000000000004",
+    provider_reconciliation_metadata: {},
     ...overrides,
   };
 }
@@ -37,6 +38,7 @@ function fakeRepository(claims: ClaimedPublisherDelivery[], reaped: Array<{ deli
       return claims;
     },
     async markDispatchStarted(...args) { calls.push({ operation: "mark", args }); return true; },
+    async checkpoint(...args) { calls.push({ operation: "checkpoint", args }); return true; },
     async complete(...args) { calls.push({ operation: "complete", args }); return true; },
     async retry(...args) { calls.push({ operation: "retry", args }); return "retryable"; },
     async deadLetter(...args) { calls.push({ operation: "deadLetter", args }); return true; },
@@ -46,7 +48,7 @@ function fakeRepository(claims: ClaimedPublisherDelivery[], reaped: Array<{ deli
 }
 
 function adapters(overrides: Partial<Record<ClaimedPublisherDelivery["platform"], SyntheticAdapter>> = {}) {
-  const delivered = () => new SyntheticAdapter([{ kind: "delivered", platformPostId: "provider-id", liveUrl: "https://provider.invalid/post" }]);
+  const delivered = () => new SyntheticAdapter([{ kind: "ready" }], [{ kind: "delivered", platformPostId: "provider-id", liveUrl: "https://provider.invalid/post" }]);
   return { instagram: delivered(), facebook: delivered(), linkedin: delivered(), ...overrides };
 }
 
@@ -57,7 +59,7 @@ describe("publisher worker safety", () => {
     const result = await runPublisherTick({ expectedEpoch: 2, dispatchEnabled: false, repository, adapters: registry });
     expect(result).toMatchObject({ dispatchEnabled: false, claimed: 0 });
     expect(calls).toEqual([]);
-    expect(registry.instagram.calls).toEqual([]);
+    expect(registry.instagram.dispatchCalls).toEqual([]);
   });
 
   it("reaps first, dispatch-marks before a provider call, and a repeat tick is empty", async () => {
@@ -71,14 +73,13 @@ describe("publisher worker safety", () => {
     expect(first.succeeded).toEqual([item.delivery_id]);
     expect(second.claimed).toBe(0);
     expect(calls.map((call) => call.operation).slice(0, 4)).toEqual(["reap", "claim", "mark", "complete"]);
-    expect(registry.instagram.calls).toHaveLength(1);
+    expect(registry.instagram.dispatchCalls).toHaveLength(1);
   });
 
   it("records partial platform outcomes independently", async () => {
     const instagram = delivery({ delivery_id: "ig", platform: "instagram", idempotency_key: "content:instagram" });
     const linkedin = delivery({ delivery_id: "li", platform: "linkedin", idempotency_key: "content:linkedin" });
-    const retryAdapter = new SyntheticAdapter([]);
-    retryAdapter.preflight = async () => ({ kind: "safe_retry", error: "source unavailable" });
+    const retryAdapter = new SyntheticAdapter([{ kind: "safe_retry", error: "source unavailable" }]);
     const { repository, calls } = fakeRepository([instagram, linkedin]);
     const result = await runPublisherTick({
       expectedEpoch: 2, dispatchEnabled: true, repository,
@@ -90,8 +91,8 @@ describe("publisher worker safety", () => {
   });
 
   it("never retries automatically after a possible remote success", async () => {
-    const throwing = new SyntheticAdapter([]);
-    throwing.publish = async () => { throw new Error("connection lost after response"); };
+    const throwing = new SyntheticAdapter([{ kind: "ready" }], []);
+    throwing.dispatch = async () => { throw new Error("connection lost after response"); };
     const { repository, calls } = fakeRepository([delivery()]);
     const result = await runPublisherTick({ expectedEpoch: 2, dispatchEnabled: true, repository, adapters: adapters({ instagram: throwing }) });
     expect(result.verificationRequired).toEqual([delivery().delivery_id]);
@@ -101,12 +102,44 @@ describe("publisher worker safety", () => {
 
   it("dead-letters the last bounded attempt before dispatch", async () => {
     const exhausted = delivery({ attempt_number: 3 });
-    const retryAdapter = new SyntheticAdapter([]);
-    retryAdapter.preflight = async () => ({ kind: "safe_retry", error: "still unavailable" });
+    const retryAdapter = new SyntheticAdapter([{ kind: "safe_retry", error: "still unavailable" }]);
     const { repository, calls } = fakeRepository([exhausted]);
     const result = await runPublisherTick({ expectedEpoch: 2, dispatchEnabled: true, repository, adapters: adapters({ instagram: retryAdapter }) });
     expect(result.deadLetter).toEqual([exhausted.delivery_id]);
     expect(calls.some((call) => call.operation === "mark")).toBe(false);
+  });
+
+  it("checkpoints a provider handle before scheduling a safe retry", async () => {
+    const prepared = new SyntheticAdapter([{ kind: "safe_retry", error: "processing", checkpoint: { instagram_creation_id: "container-1", instagram_media_kind: "reel" } }]);
+    const { repository, calls } = fakeRepository([delivery()]);
+    const result = await runPublisherTick({ expectedEpoch: 2, dispatchEnabled: true, repository, adapters: adapters({ instagram: prepared }) });
+    expect(result.retryable).toEqual([delivery().delivery_id]);
+    expect(calls.map((call) => call.operation)).toEqual(["reap", "claim", "checkpoint", "retry"]);
+    expect(prepared.dispatchCalls).toHaveLength(0);
+  });
+
+  it("never dispatches when checkpoint CAS loses the lease", async () => {
+    const prepared = new SyntheticAdapter([{ kind: "ready", checkpoint: { instagram_creation_id: "container-1", instagram_media_kind: "image" } }]);
+    const { repository, calls } = fakeRepository([delivery()]);
+    repository.checkpoint = async (...args) => { calls.push({ operation: "checkpoint", args }); return false; };
+    await runPublisherTick({ expectedEpoch: 2, dispatchEnabled: true, repository, adapters: adapters({ instagram: prepared }) });
+    expect(calls.some((call) => call.operation === "mark")).toBe(false);
+    expect(prepared.dispatchCalls).toHaveLength(0);
+  });
+
+  it("quarantines a safe-retry result returned after dispatch started", async () => {
+    const adapter = new SyntheticAdapter([{ kind: "ready" }], [{ kind: "safe_retry", error: "ambiguous public response" }]);
+    const { repository, calls } = fakeRepository([delivery()]);
+    const result = await runPublisherTick({ expectedEpoch: 2, dispatchEnabled: true, repository, adapters: adapters({ instagram: adapter }) });
+    expect(result.verificationRequired).toEqual([delivery().delivery_id]);
+    expect(calls.some((call) => call.operation === "retry")).toBe(false);
+  });
+
+  it("leaves a dispatch-started lease for reaping when completion RPC fails", async () => {
+    const { repository, calls } = fakeRepository([delivery()]);
+    repository.complete = async (...args) => { calls.push({ operation: "complete", args }); throw new Error("database unavailable"); };
+    await expect(runPublisherTick({ expectedEpoch: 2, dispatchEnabled: true, repository, adapters: adapters() })).rejects.toThrow("database unavailable");
+    expect(calls.some((call) => call.operation === "retry")).toBe(false);
   });
 
   it("defensively dead-letters an article without touching an adapter", async () => {
@@ -115,7 +148,7 @@ describe("publisher worker safety", () => {
     const { repository, calls } = fakeRepository([article]);
     const result = await runPublisherTick({ expectedEpoch: 2, dispatchEnabled: true, repository, adapters: registry });
     expect(result.deadLetter).toEqual([article.delivery_id]);
-    expect(registry.linkedin.calls).toHaveLength(0);
+    expect(registry.linkedin.dispatchCalls).toHaveLength(0);
     expect(calls.some((call) => call.operation === "mark")).toBe(false);
   });
 
@@ -124,7 +157,7 @@ describe("publisher worker safety", () => {
     repository.claim = async () => { throw new Error("replacement ownership mismatch"); };
     const registry = adapters();
     await expect(runPublisherTick({ expectedEpoch: 1, dispatchEnabled: true, repository, adapters: registry })).rejects.toThrow("ownership mismatch");
-    expect(registry.instagram.calls).toEqual([]);
+    expect(registry.instagram.dispatchCalls).toEqual([]);
   });
 });
 

@@ -35,4 +35,5 @@ export interface ClaimedPublisherDelivery {
   media: Record<string, unknown>;
   scheduled_at: string;
   legacy_spp_id: string | null;
+  provider_reconciliation_metadata: Record<string, unknown>;
 }

@@ -5,6 +5,12 @@ export interface PublishRequest {
   requestFingerprint: string;
 }
 
+export type ProviderCheckpoint = Record<string, unknown>;
+
+export type PrepareOutcome =
+  | { kind: "ready"; checkpoint?: ProviderCheckpoint }
+  | { kind: "safe_retry" | "permanent_failure" | "indeterminate"; error: string; checkpoint?: ProviderCheckpoint };
+
 export type AdapterOutcome =
   | { kind: "delivered"; platformPostId: string; liveUrl?: string; providerResponse?: Record<string, unknown> }
   | { kind: "safe_retry"; error: string }
@@ -12,8 +18,8 @@ export type AdapterOutcome =
   | { kind: "indeterminate"; error: string };
 
 export interface PublisherAdapter {
-  preflight?(request: PublishRequest): Promise<Extract<AdapterOutcome, { kind: "safe_retry" | "permanent_failure" }> | null>;
-  publish(request: PublishRequest): Promise<AdapterOutcome>;
+  prepare(request: PublishRequest): Promise<PrepareOutcome>;
+  dispatch(request: PublishRequest, checkpoint: ProviderCheckpoint): Promise<AdapterOutcome>;
 }
 
 export type AdapterRegistry = Record<ClaimedPublisherDelivery["platform"], PublisherAdapter>;
@@ -21,6 +27,7 @@ export type AdapterRegistry = Record<ClaimedPublisherDelivery["platform"], Publi
 export interface PublisherRepository {
   reap(now: Date): Promise<Array<{ delivery_id: string; new_state: string }>>;
   claim(expectedEpoch: number, limit: number, leaseSeconds: number, now: Date): Promise<ClaimedPublisherDelivery[]>;
+  checkpoint(deliveryId: string, leaseToken: string, checkpoint: ProviderCheckpoint): Promise<boolean>;
   markDispatchStarted(deliveryId: string, leaseToken: string, fingerprint: string): Promise<boolean>;
   complete(deliveryId: string, leaseToken: string, outcome: Extract<AdapterOutcome, { kind: "delivered" }>): Promise<boolean>;
   retry(deliveryId: string, leaseToken: string, error: string, nextAttemptAt: Date): Promise<string | null>;

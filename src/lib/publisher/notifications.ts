@@ -15,3 +15,16 @@ export async function notifyPublisherTransitions(result: TickResult): Promise<vo
   const sent = await sendSlackNotification({ text });
   if (!sent.ok) console.error("publisher notification failed:", sent.error);
 }
+
+export async function notifyPublisherTransitionsSafely(
+  result: TickResult,
+  notify: (result: TickResult) => Promise<void> = notifyPublisherTransitions,
+): Promise<boolean> {
+  try {
+    await notify(result);
+    return true;
+  } catch (error) {
+    console.error("publisher notification threw after database outcome committed:", error);
+    return false;
+  }
+}

@@ -6,6 +6,10 @@
 
 import type { PublishPayload, PublishResult } from "./types";
 
+export type InstagramPreparation =
+  | { kind: "ready"; checkpoint: { instagram_creation_id: string; instagram_media_kind: "image" | "carousel" | "reel" } }
+  | { kind: "safe_retry" | "permanent_failure" | "indeterminate"; error: string; checkpoint?: { instagram_creation_id: string; instagram_media_kind: "image" | "carousel" | "reel" } };
+
 function graphBase(): string {
   const version = process.env.META_GRAPH_VERSION || "v24.0";
   if (!/^v\d+\.\d+$/.test(version)) throw new Error("META_GRAPH_VERSION must look like v24.0");
@@ -185,6 +189,81 @@ async function publishInstagramReel(payload: PublishPayload, videoUrl: string): 
   }
 
   return igPublish(containerId);
+}
+
+export async function prepareInstagramForPublisher(
+  payload: PublishPayload,
+  existing: Record<string, unknown>,
+  options: { fetcher?: typeof fetch; sleep?: (milliseconds: number) => Promise<void>; maxPolls?: number } = {},
+): Promise<InstagramPreparation> {
+  const priorId = typeof existing.instagram_creation_id === "string" ? existing.instagram_creation_id : null;
+  const priorKind = existing.instagram_media_kind;
+  if (priorId) {
+    if (priorKind !== "image" && priorKind !== "carousel" && priorKind !== "reel") {
+      return { kind: "permanent_failure", error: "Instagram checkpoint has an invalid media kind" };
+    }
+    const checkpoint: { instagram_creation_id: string; instagram_media_kind: "image" | "carousel" | "reel" } = {
+      instagram_creation_id: priorId,
+      instagram_media_kind: priorKind,
+    };
+    if (priorKind !== "reel") return { kind: "ready", checkpoint };
+    const fetcher = options.fetcher ?? fetch;
+    const sleep = options.sleep ?? ((milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
+    const maxPolls = options.maxPolls ?? 34;
+    for (let attempt = 0; attempt < maxPolls; attempt++) {
+      try {
+        const token = process.env.META_ACCESS_TOKEN!;
+        const response = await fetcher(`${graphBase()}/${encodeURIComponent(priorId)}?fields=status_code,status&access_token=${encodeURIComponent(token)}`, { cache: "no-store" });
+        if (!response.ok) return { kind: "indeterminate", error: `Instagram container status read failed (${response.status})`, checkpoint };
+        const body = (await response.json()) as { status_code?: string; status?: string };
+        const status = body.status_code || body.status || "IN_PROGRESS";
+        if (status === "FINISHED") return { kind: "ready", checkpoint };
+        if (status === "ERROR" || status === "EXPIRED") return { kind: "permanent_failure", error: `Instagram container reached ${status}`, checkpoint };
+      } catch {
+        return { kind: "indeterminate", error: "Instagram container status transport failed", checkpoint };
+      }
+      if (attempt + 1 < maxPolls) await sleep(7000);
+    }
+    return { kind: "indeterminate", error: "Instagram container readiness timed out", checkpoint };
+  }
+
+  if (payload.isReel || payload.videoUrl) {
+    if (!payload.videoUrl) return { kind: "permanent_failure", error: "Instagram reel requires a video URL" };
+    const create = await igCreate({
+      media_type: "REELS", video_url: payload.videoUrl, caption: payload.caption, share_to_feed: true,
+      ...(payload.coverUrl ? { cover_url: payload.coverUrl } : {}),
+    });
+    if (!create.ok) return { kind: "safe_retry", error: `Instagram reel prepare failed: ${JSON.stringify(create.raw)}` };
+    return {
+      kind: "safe_retry",
+      error: "Instagram reel container created; readiness will resume from checkpoint",
+      checkpoint: { instagram_creation_id: create.id!, instagram_media_kind: "reel" },
+    };
+  }
+  if (payload.imageUrls.length > 1) {
+    const childIds: string[] = [];
+    for (const imageUrl of payload.imageUrls.slice(0, 10)) {
+      const child = await igCreate({ image_url: imageUrl, is_carousel_item: true });
+      if (!child.ok) return { kind: "safe_retry", error: `Instagram carousel child prepare failed: ${JSON.stringify(child.raw)}` };
+      childIds.push(child.id!);
+    }
+    const parent = await igCreate({ media_type: "CAROUSEL", children: childIds.join(","), caption: payload.caption });
+    if (!parent.ok) return { kind: "safe_retry", error: `Instagram carousel prepare failed: ${JSON.stringify(parent.raw)}` };
+    return { kind: "ready", checkpoint: { instagram_creation_id: parent.id!, instagram_media_kind: "carousel" } };
+  }
+  const imageUrl = payload.imageUrls[0];
+  if (!imageUrl) return { kind: "permanent_failure", error: "Instagram delivery has no publishable media" };
+  const create = await igCreate({ image_url: imageUrl, caption: payload.caption });
+  if (!create.ok) return { kind: "safe_retry", error: `Instagram image prepare failed: ${JSON.stringify(create.raw)}` };
+  return { kind: "ready", checkpoint: { instagram_creation_id: create.id!, instagram_media_kind: "image" } };
+}
+
+export async function dispatchPreparedInstagram(existing: Record<string, unknown>): Promise<PublishResult> {
+  const creationId = existing.instagram_creation_id;
+  if (typeof creationId !== "string" || !creationId) {
+    return { success: false, platform: "instagram", error: "Instagram dispatch checkpoint is missing creation ID" };
+  }
+  return igPublish(creationId);
 }
 
 // ---------------------------------------------------------------------------

@@ -43,20 +43,30 @@ export async function runPublisherTick(input: {
     const fingerprint = requestFingerprint(delivery);
     const request = { delivery, requestFingerprint: fingerprint };
     const adapter = input.adapters[delivery.platform];
-    let preflight = null;
+    let preparation;
     try {
-      preflight = adapter.preflight ? await adapter.preflight(request) : null;
+      preparation = await adapter.prepare(request);
     } catch (error) {
-      preflight = {
+      preparation = {
         kind: "safe_retry" as const,
-        error: `Adapter preflight threw before dispatch: ${error instanceof Error ? error.message : String(error)}`,
+        error: `Adapter preparation threw before public dispatch: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
-    if (preflight) {
-      if (preflight.kind === "permanent_failure" || delivery.attempt_number >= MAX_ATTEMPTS) {
-        if (await input.repository.deadLetter(id, delivery.lease_token, preflight.error)) result.deadLetter.push(id);
+    const checkpoint = {
+      ...delivery.provider_reconciliation_metadata,
+      ...(preparation.checkpoint ?? {}),
+    };
+    if (preparation.checkpoint) {
+      const saved = await input.repository.checkpoint(id, delivery.lease_token, preparation.checkpoint);
+      if (!saved) continue;
+    }
+    if (preparation.kind !== "ready") {
+      if (preparation.kind === "permanent_failure" || delivery.attempt_number >= MAX_ATTEMPTS) {
+        if (await input.repository.deadLetter(id, delivery.lease_token, preparation.error)) result.deadLetter.push(id);
       } else {
-        const state = await input.repository.retry(id, delivery.lease_token, preflight.error, nextRetryAt(delivery.attempt_number, now));
+        // Even an indeterminate prepare result is retryable: no public-create
+        // request has started and any returned provider handle was checkpointed.
+        const state = await input.repository.retry(id, delivery.lease_token, preparation.error, nextRetryAt(delivery.attempt_number, now));
         if (state === "dead_letter") result.deadLetter.push(id);
         else if (state === "retryable") result.retryable.push(id);
       }
@@ -67,7 +77,7 @@ export async function runPublisherTick(input: {
 
     let outcome;
     try {
-      outcome = await adapter.publish(request);
+      outcome = await adapter.dispatch(request, checkpoint);
     } catch (error) {
       outcome = { kind: "indeterminate" as const, error: `Adapter threw after dispatch began: ${error instanceof Error ? error.message : String(error)}` };
     }
