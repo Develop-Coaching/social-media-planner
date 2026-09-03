@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(87);
+select plan(88);
 
 select has_table('public', 'publisher_queue_ownership', 'ownership controller exists');
 select has_table('public', 'publisher_content_items', 'content items exist');
@@ -259,8 +259,9 @@ select throws_ok(
   'late legacy completion cannot cross ownership handoff'
 );
 
-create temporary table first_claim as
-select * from public.claim_publisher_deliveries(2, 1, 30, '2026-09-03 00:00:00+00');
+create temporary table first_claim_batch as
+select * from public.claim_publisher_deliveries(2, 3, 30, '2026-09-03 00:00:00+00');
+create temporary table first_claim as select * from first_claim_batch where platform = 'instagram';
 select is((select count(*)::integer from first_claim), 1, 'replacement claims one delivery with shared epoch');
 select is((select provider_reconciliation_metadata from first_claim), '{}'::jsonb, 'claim returns provider reconciliation metadata needed to resume preparation');
 select ok(
@@ -278,8 +279,9 @@ select is(
   'expired pre-dispatch lease retries safely'
 );
 
-create temporary table second_claim as
-select * from public.claim_publisher_deliveries(2, 1, 30, '2026-09-03 00:02:00+00');
+create temporary table second_claim_batch as
+select * from public.claim_publisher_deliveries(2, 3, 30, '2026-09-03 00:02:00+00');
+create temporary table second_claim as select * from second_claim_batch where platform = 'linkedin';
 select ok(
   public.checkpoint_publisher_delivery(
     (select delivery_id from second_claim), (select lease_token from second_claim),
@@ -313,8 +315,17 @@ select throws_ok(
     (select delivery_id from second_claim), (select lease_token from second_claim), '{"access_token":"secret"}'
   ),
   '22023',
-  'provider reconciliation checkpoint must be a non-empty JSON object',
+  'provider reconciliation checkpoint is not safe for delivery platform linkedin',
   'checkpoint rejects secret-like keys outside the strict allowlist'
+);
+select throws_ok(
+  format(
+    'select public.checkpoint_publisher_delivery(%L, %L, %L::jsonb)',
+    (select delivery_id from second_claim), (select lease_token from second_claim), '{"instagram_creation_id":"wrong-platform"}'
+  ),
+  '22023',
+  'provider reconciliation checkpoint is not safe for delivery platform linkedin',
+  'LinkedIn delivery rejects otherwise-safe Instagram checkpoint keys'
 );
 select ok(
   public.mark_publisher_dispatch_started(

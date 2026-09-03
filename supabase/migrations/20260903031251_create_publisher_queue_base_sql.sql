@@ -717,7 +717,7 @@ begin
 end;
 $$;
 
-create or replace function publisher_private.is_safe_provider_checkpoint(p_value jsonb)
+create or replace function publisher_private.is_safe_provider_checkpoint(p_value jsonb, p_platform text)
 returns boolean
 language sql
 immutable
@@ -753,6 +753,15 @@ as $$
         select 1 from jsonb_array_elements(p_value->'linkedin_image_urns') e
         where jsonb_typeof(e) <> 'string' or length(e #>> '{}') not between 1 and 512
       )))
+    and (
+      (p_platform = 'instagram'
+        and p_value ?| array['instagram_creation_id', 'instagram_media_kind']
+        and not p_value ?| array['linkedin_video_urn', 'linkedin_image_urns', 'linkedin_media_kind'])
+      or
+      (p_platform = 'linkedin'
+        and p_value ?| array['linkedin_video_urn', 'linkedin_image_urns', 'linkedin_media_kind']
+        and not p_value ?| array['instagram_creation_id', 'instagram_media_kind'])
+    )
   , false)
 $$;
 
@@ -800,11 +809,8 @@ set search_path = ''
 as $$
 declare
   v_owner text;
+  v_platform text;
 begin
-  if not publisher_private.is_safe_provider_checkpoint(p_provider_reconciliation_metadata) then
-    raise exception 'provider reconciliation checkpoint must be a non-empty JSON object' using errcode = '22023';
-  end if;
-
   select owner into v_owner
   from public.publisher_queue_ownership
   where source = 'legacy_spp'
@@ -813,12 +819,21 @@ begin
     raise exception 'replacement publisher does not own the queue' using errcode = '40001';
   end if;
 
+  select d.platform into v_platform
+  from public.publisher_deliveries d
+  where d.id = p_delivery_id and d.state = 'leased'
+    and d.lease_token = p_lease_token and d.lease_phase = 'pre_dispatch'
+    and d.lease_expires_at > statement_timestamp()
+  for update;
+  if v_platform is null then return false; end if;
+  if not publisher_private.is_safe_provider_checkpoint(p_provider_reconciliation_metadata, v_platform) then
+    raise exception 'provider reconciliation checkpoint is not safe for delivery platform %', v_platform using errcode = '22023';
+  end if;
+
   update public.publisher_deliveries d
   set provider_reconciliation_metadata = d.provider_reconciliation_metadata || p_provider_reconciliation_metadata,
       updated_at = statement_timestamp()
-  where d.id = p_delivery_id and d.state = 'leased'
-    and d.lease_token = p_lease_token and d.lease_phase = 'pre_dispatch'
-    and d.lease_expires_at > statement_timestamp();
+  where d.id = p_delivery_id;
   return found;
 end;
 $$;

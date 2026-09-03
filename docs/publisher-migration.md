@@ -96,4 +96,6 @@ retry can resume the persisted provider preparation instead of creating a duplic
 Checkpoint payloads are URL-free and capped at 4 KiB; the only permitted keys are
 `instagram_creation_id`, `instagram_media_kind`, `linkedin_video_urn`,
 `linkedin_image_urns` (at most nine strings), and `linkedin_media_kind`. Tokens,
-credentials, arbitrary URLs, and nested unapproved data are rejected.
+credentials, arbitrary URLs, and nested unapproved data are rejected. Instagram keys
+are accepted only for an Instagram delivery, LinkedIn keys only for a LinkedIn
+delivery, and Facebook deliveries cannot checkpoint preparation metadata.
