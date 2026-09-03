@@ -80,6 +80,17 @@ cutoff, increments the epoch, and activates only publishable frozen deliveries.
 Never update the ownership row directly and never call the transfer before the human
 cutover sign-off.
 
+Immediately before sign-off, call the service-only read-only
+`publisher_cutover_readiness(rows, expected_epoch, safety_seconds)` RPC with the full
+fresh export plus each row's `__migration_payload_sha256`. It uses the database server
+clock, locks the ownership snapshot, binds the exact 67-row export in both directions
+to the legacy source and imported projection, recomputes the database attestation,
+checks delivery/audited-resolution and lease invariants, proves the effective due sets
+agree, and requires zero due work plus the requested safety interval. Its output is
+redacted to server time, owner/epoch, counts, digests, next due time, and check names.
+The transfer RPC repeats this same database validator immediately before mutation, so
+a readiness result is evidence rather than a reusable authorization token.
+
 Call `mark_publisher_dispatch_started` immediately before a provider POST. An expired
 lease before that point may retry; an expired lease afterwards becomes
 `verification_required`, because provider APIs do not supply a dependable request

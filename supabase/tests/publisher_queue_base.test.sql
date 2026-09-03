@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(88);
+select plan(98);
 
 select has_table('public', 'publisher_queue_ownership', 'ownership controller exists');
 select has_table('public', 'publisher_content_items', 'content items exist');
@@ -39,6 +39,9 @@ select ok(has_function_privilege('service_role', 'public.resolve_legacy_delivery
 select ok(not has_function_privilege('anon', 'public.checkpoint_publisher_delivery(uuid,uuid,jsonb)', 'execute'), 'anon cannot checkpoint provider metadata');
 select ok(not has_function_privilege('authenticated', 'public.checkpoint_publisher_delivery(uuid,uuid,jsonb)', 'execute'), 'authenticated cannot checkpoint provider metadata');
 select ok(has_function_privilege('service_role', 'public.checkpoint_publisher_delivery(uuid,uuid,jsonb)', 'execute'), 'service role can checkpoint provider metadata');
+select ok(not has_function_privilege('anon', 'public.publisher_cutover_readiness(jsonb,bigint,integer)', 'execute'), 'anon cannot inspect cutover readiness');
+select ok(not has_function_privilege('authenticated', 'public.publisher_cutover_readiness(jsonb,bigint,integer)', 'execute'), 'authenticated cannot inspect cutover readiness');
+select ok(has_function_privilege('service_role', 'public.publisher_cutover_readiness(jsonb,bigint,integer)', 'execute'), 'service role can inspect cutover readiness');
 select ok(
   exists (
     select 1 from pg_default_acl d join pg_namespace n on n.oid = d.defaclnamespace
@@ -88,7 +91,7 @@ select jsonb_build_object(
   'platforms', case when i <= 14 then jsonb_build_array('linkedin')
                     when i <= 21 then jsonb_build_array('instagram', 'facebook', 'linkedin')
                     else jsonb_build_array('linkedin') end,
-  'scheduled_at', to_jsonb('2026-09-01 00:00:00+00'::timestamptz + i * interval '1 hour'),
+  'scheduled_at', to_jsonb(statement_timestamp() + interval '2 hours' + i * interval '1 minute'),
   'status', case when i <= 21 then 'queued' when i <= 50 then 'published' else 'cancelled' end,
   'platform_post_ids', '{}'::jsonb,
   'error', null,
@@ -148,6 +151,42 @@ select r.id, r.user_id, r.company_id, r.saved_content_id, r.item_id,
 from sanitized_export s
 cross join lateral jsonb_populate_record(null::public.scheduled_posts, s.payload) r
 ;
+
+create temporary table readiness_rows as
+select s.payload || jsonb_build_object('__migration_payload_sha256',ci.legacy_payload_sha256) payload
+from sanitized_export s join public.publisher_content_items ci on ci.legacy_spp_id=(s.payload->>'id')::uuid;
+select ok(
+  (public.publisher_cutover_readiness((select jsonb_agg(payload order by payload->>'id') from readiness_rows),1,3600)->>'ready')::boolean,
+  'readiness returns redacted success for the exact future-safe set'
+);
+select throws_ok(
+  $$select public.publisher_cutover_readiness((select jsonb_agg(case when payload->>'id'='00000000-0000-0000-0000-000000000001' then jsonb_set(payload,'{id}','"90000000-0000-0000-0000-000000000001"') else payload end) from readiness_rows),1,3600)$$,
+  '55000','cutover export/source/import binding mismatch','same-count but different IDs fail exact binding'
+);
+select throws_ok(
+  $$select public.publisher_cutover_readiness((select jsonb_agg(case when payload->>'id'='00000000-0000-0000-0000-000000000001' then jsonb_set(payload,'{company_id}','"second-company"') else payload end) from readiness_rows),1,3600)$$,
+  '22023','cutover readiness requires the exact approved 67-row shape','second tenant is rejected'
+);
+select throws_ok(
+  $$select public.publisher_cutover_readiness((select jsonb_agg(case when payload->>'id'='00000000-0000-0000-0000-000000000001' then jsonb_set(payload,'{scheduled_at}','null'::jsonb) else payload end) from readiness_rows),1,3600)$$,
+  '22023','cutover rows require valid timestamps and hashes','null schedule is rejected before cutover'
+);
+select throws_ok(
+  $$select public.publisher_cutover_readiness((select jsonb_agg(payload) from readiness_rows),1,10800)$$,
+  '55000','cutover safety window is not clear','server clock rejects a near-due cutover'
+);
+update public.scheduled_posts set publisher_lease_token=gen_random_uuid() where id='00000000-0000-0000-0000-000000000015';
+select throws_ok(
+  $$select public.publisher_cutover_readiness((select jsonb_agg(payload) from readiness_rows),1,3600)$$,
+  '55000','cutover readiness requires zero verification and well-formed inactive leases','malformed legacy lease is rejected'
+);
+update public.scheduled_posts set publisher_lease_token=null where id='00000000-0000-0000-0000-000000000015';
+update public.publisher_deliveries set idempotency_key=idempotency_key||':wrong' where id=(select id from public.publisher_deliveries limit 1);
+select throws_ok(
+  $$select public.publisher_cutover_readiness((select jsonb_agg(payload) from readiness_rows),1,3600)$$,
+  '55000','cutover delivery set mismatch','wrong delivery identity is rejected'
+);
+update public.publisher_deliveries set idempotency_key=regexp_replace(idempotency_key,':wrong$','') where idempotency_key like '%:wrong';
 
 select throws_ok(
   $$select public.import_legacy_spp_rows(jsonb_build_array((select payload || '{"caption":"changed"}'::jsonb from sanitized_export limit 1)))$$,
@@ -223,7 +262,7 @@ select ok(
   'legacy dispatch start uses lease token and ownership epoch CAS'
 );
 select throws_ok(
-  $$select public.transfer_publisher_queue_ownership(1, '2026-09-03')$$,
+  $$select public.transfer_publisher_queue_ownership(1, '2099-09-03')$$,
   '55000',
   'ownership transfer requires zero live leases',
   'cutover refuses a live legacy lease'
@@ -241,13 +280,13 @@ select ok(
 delete from public.scheduled_posts
 where id in ('10000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000002');
 
-select is(public.transfer_publisher_queue_ownership(1, '2026-09-03'), 2::bigint, 'atomic transfer increments epoch');
+select is(public.transfer_publisher_queue_ownership(1, '2099-09-03'), 2::bigint, 'atomic transfer increments epoch');
 select is((select owner from public.publisher_queue_ownership where source = 'legacy_spp'), 'replacement', 'replacement owns queue after transfer');
 select is((select epoch from public.publisher_queue_ownership where source = 'legacy_spp'), 2::bigint, 'ownership epoch is durable');
 select is((select count(*)::integer from public.publisher_deliveries where state = 'pending'), 21, 'transfer activates only publishable frozen deliveries');
 select is((select count(*)::integer from public.publisher_deliveries where state = 'planning_only'), 14, 'articles stay planning only after transfer');
 select throws_ok(
-  $$select public.claim_legacy_spp_posts(1, 5, 300, '2026-09-03')$$,
+  $$select public.claim_legacy_spp_posts(1, 5, 300, '2099-09-03')$$,
   '40001',
   'legacy ownership mismatch: owner replacement, epoch 2',
   'legacy scheduler cannot claim after transfer'
@@ -260,7 +299,7 @@ select throws_ok(
 );
 
 create temporary table first_claim_batch as
-select * from public.claim_publisher_deliveries(2, 3, 30, '2026-09-03 00:00:00+00');
+select * from public.claim_publisher_deliveries(2, 3, 30, '2099-09-03 00:00:00+00');
 create temporary table first_claim as select * from first_claim_batch where platform = 'instagram';
 select is((select count(*)::integer from first_claim), 1, 'replacement claims one delivery with shared epoch');
 select is((select provider_reconciliation_metadata from first_claim), '{}'::jsonb, 'claim returns provider reconciliation metadata needed to resume preparation');
@@ -274,13 +313,13 @@ select ok(
 select is((select state from public.publisher_deliveries where id = (select delivery_id from first_claim)), 'leased', 'claimed delivery has a lease');
 select is((select count(*)::integer from public.publisher_delivery_attempts where delivery_id = (select delivery_id from first_claim)), 1, 'claim creates a unique attempt record');
 select is(
-  (select new_state from public.reap_expired_publisher_leases('2026-09-03 00:01:00+00') where delivery_id = (select delivery_id from first_claim)),
+  (select new_state from public.reap_expired_publisher_leases('2099-09-03 00:01:00+00') where delivery_id = (select delivery_id from first_claim)),
   'retryable',
   'expired pre-dispatch lease retries safely'
 );
 
 create temporary table second_claim_batch as
-select * from public.claim_publisher_deliveries(2, 3, 30, '2026-09-03 00:02:00+00');
+select * from public.claim_publisher_deliveries(2, 3, 30, '2099-09-03 00:02:00+00');
 create temporary table second_claim as select * from second_claim_batch where platform = 'linkedin';
 select ok(
   public.checkpoint_publisher_delivery(
@@ -339,24 +378,24 @@ select is(
   'attempt persists indeterminate dispatch phase'
 );
 select is(
-  (select new_state from public.reap_expired_publisher_leases('2026-09-03 00:03:00+00') where delivery_id = (select delivery_id from second_claim)),
+  (select new_state from public.reap_expired_publisher_leases('2099-09-03 00:03:00+00') where delivery_id = (select delivery_id from second_claim)),
   'verification_required',
   'expired post-dispatch lease never auto-retries'
 );
 
 create temporary table retry_claim as
-select * from public.claim_publisher_deliveries(2, 1, 30, '2026-09-03 00:04:00+00');
+select * from public.claim_publisher_deliveries(2, 1, 30, '2099-09-03 00:04:00+00');
 select is(
   public.retry_publisher_delivery(
     (select delivery_id from retry_claim), (select lease_token from retry_claim),
-    'sanitized transient failure', '2026-09-03 00:05:00+00'
+    'sanitized transient failure', '2099-09-03 00:05:00+00'
   ),
   'retryable',
   'explicit safe failure schedules a retry through CAS'
 );
 
 create temporary table dead_claim as
-select * from public.claim_publisher_deliveries(2, 1, 30, '2026-09-03 00:04:00+00');
+select * from public.claim_publisher_deliveries(2, 1, 30, '2099-09-03 00:04:00+00');
 select ok(
   public.dead_letter_publisher_delivery(
     (select delivery_id from dead_claim), (select lease_token from dead_claim), 'sanitized permanent failure'
@@ -365,7 +404,7 @@ select ok(
 );
 
 create temporary table verify_claim as
-select * from public.claim_publisher_deliveries(2, 1, 30, '2026-09-03 00:04:00+00');
+select * from public.claim_publisher_deliveries(2, 1, 30, '2099-09-03 00:04:00+00');
 select ok(
   public.mark_publisher_dispatch_started(
     (select delivery_id from verify_claim), (select lease_token from verify_claim), repeat('c', 64)
@@ -380,7 +419,7 @@ select ok(
 );
 
 create temporary table success_claim as
-select * from public.claim_publisher_deliveries(2, 1, 30, '2026-09-03 00:04:00+00');
+select * from public.claim_publisher_deliveries(2, 1, 30, '2099-09-03 00:04:00+00');
 select ok(
   public.mark_publisher_dispatch_started(
     (select delivery_id from success_claim), (select lease_token from success_claim), repeat('d', 64)
@@ -415,7 +454,7 @@ select is(
 );
 
 create temporary table resumed_claims as
-select * from public.claim_publisher_deliveries(2, 100, 30, '2026-09-04 00:00:00+00');
+select * from public.claim_publisher_deliveries(2, 100, 30, '2099-09-04 00:00:00+00');
 select is(
   (select provider_reconciliation_metadata from resumed_claims where delivery_id = (select delivery_id from first_claim)),
   '{"instagram_creation_id":"resume-safe-handle","instagram_media_kind":"reel"}'::jsonb,

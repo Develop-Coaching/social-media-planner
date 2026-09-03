@@ -388,6 +388,7 @@ declare
   v_ig_container_since text;
   v_reconciliation_metadata jsonb;
   v_attestation text;
+  v_computed_attestation text;
   v_expected_deliveries integer;
 begin
   if jsonb_typeof(p_rows) <> 'array' then
@@ -1253,6 +1254,167 @@ begin
 end;
 $$;
 
+create or replace function publisher_private.publisher_cutover_readiness(
+  p_rows jsonb,
+  p_expected_epoch bigint,
+  p_safety_seconds integer
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_now timestamptz := statement_timestamp();
+  v_owner text;
+  v_epoch bigint;
+  v_attestation text;
+  v_binding text;
+  v_next_due timestamptz;
+  v_due_legacy integer;
+  v_due_replacement integer;
+begin
+  if jsonb_typeof(p_rows) <> 'array' or p_safety_seconds is null
+    or p_safety_seconds < 0 or p_safety_seconds > 86400 then
+    raise exception 'invalid cutover readiness input' using errcode = '22023';
+  end if;
+  if jsonb_array_length(p_rows) <> 67
+    or (select count(*) from jsonb_array_elements(p_rows) r where r->>'status' = 'queued') <> 21
+    or (select count(*) from jsonb_array_elements(p_rows) r where r->>'status' <> 'queued') <> 46
+    or (select count(*) from jsonb_array_elements(p_rows) r where r->>'status' = 'queued' and lower(r->>'content_type') = 'article') <> 14
+    or (select count(*) from jsonb_array_elements(p_rows) r where r->>'status' = 'queued' and lower(r->>'content_type') <> 'article') <> 7
+    or (select count(distinct r->>'id') from jsonb_array_elements(p_rows) r) <> 67
+    or (select count(distinct (r->>'user_id') || chr(0) || (r->>'company_id')) from jsonb_array_elements(p_rows) r) <> 1 then
+    raise exception 'cutover readiness requires the exact approved 67-row shape' using errcode = '22023';
+  end if;
+  if exists (
+    select 1 from jsonb_array_elements(p_rows) r
+    where nullif(r->>'scheduled_at','') is null
+      or nullif(r->>'__migration_payload_sha256','') is null
+      or (r->>'__migration_payload_sha256') !~ '^[0-9a-f]{64}$'
+  ) then raise exception 'cutover rows require valid timestamps and hashes' using errcode = '22023'; end if;
+  perform (r->>'scheduled_at')::timestamptz from jsonb_array_elements(p_rows) r;
+
+  select owner, epoch, reconciliation_sha256 into v_owner, v_epoch, v_attestation
+  from public.publisher_queue_ownership where source='legacy_spp' for share;
+  if v_owner is distinct from 'legacy' or v_epoch is distinct from p_expected_epoch then
+    raise exception 'cutover readiness ownership mismatch' using errcode = '40001';
+  end if;
+
+  if (select count(*) from public.scheduled_posts) <> 67
+    or (select count(*) from public.publisher_content_items where legacy_spp_id is not null) <> 67
+    or exists (
+      select 1 from jsonb_array_elements(p_rows) r
+      full join public.publisher_content_items ci on ci.legacy_spp_id=(r->>'id')::uuid
+      full join public.scheduled_posts sp on sp.id=coalesce(ci.legacy_spp_id,(r->>'id')::uuid)
+      where r is null or ci.id is null or sp.id is null
+        or (r - '__migration_payload_sha256') is distinct from ci.legacy_payload
+        or r->>'__migration_payload_sha256' is distinct from ci.legacy_payload_sha256
+        or ci.legacy_payload is distinct from (to_jsonb(sp) - array[
+          'publisher_lease_token','publisher_lease_expires_at','publisher_lease_phase',
+          'publisher_ownership_epoch','publisher_claim_count','publisher_verification_required'])
+    ) then raise exception 'cutover export/source/import binding mismatch' using errcode = '55000'; end if;
+
+  select encode(extensions.digest(string_agg(
+    ci.legacy_spp_id::text||':'||ci.legacy_payload_sha256||':'||d.platform||':'||d.state||':'||coalesce(d.platform_post_id,'')||':'||d.provider_reconciliation_metadata::text,
+    E'\n' order by ci.legacy_spp_id,d.platform),'sha256'),'hex') into v_computed_attestation
+  from public.publisher_content_items ci join public.publisher_deliveries d on d.content_item_id=ci.id
+  where ci.legacy_spp_id is not null;
+  if v_attestation is null or v_attestation is distinct from v_computed_attestation then
+    raise exception 'database reconciliation attestation is missing or stale' using errcode='55000';
+  end if;
+
+  if exists (select 1 from public.publisher_deliveries where state='verification_required')
+    or exists (select 1 from public.scheduled_posts where publisher_verification_required)
+    or exists (select 1 from public.scheduled_posts where
+      (status='publishing') is distinct from (publisher_lease_token is not null and publisher_lease_expires_at is not null and publisher_lease_phase is not null))
+    or exists (select 1 from public.publisher_deliveries where
+      (state='leased') is distinct from (lease_token is not null and lease_expires_at is not null and lease_phase is not null))
+    or exists (select 1 from public.publisher_delivery_attempts where state in ('claimed','dispatch_started'))
+    or exists (select 1 from public.publisher_delivery_attempts a join public.publisher_deliveries d on d.id=a.delivery_id
+      where a.state in ('claimed','dispatch_started') and (d.state<>'leased' or d.lease_token is distinct from a.lease_token))
+    or exists (select 1 from public.scheduled_posts where status='publishing')
+    or exists (select 1 from public.publisher_deliveries where state='leased') then
+    raise exception 'cutover readiness requires zero verification and well-formed inactive leases' using errcode = '55000';
+  end if;
+
+  if exists (
+    select 1 from public.publisher_content_items ci
+    cross join lateral jsonb_array_elements_text(ci.legacy_payload->'platforms') p(platform)
+    full join public.publisher_deliveries d on d.content_item_id=ci.id and d.platform=p.platform
+    where ci.legacy_spp_id is not null and (d.id is null
+      or d.idempotency_key <> 'legacy-spp:'||ci.legacy_spp_id::text||':'||p.platform)
+  ) or exists (
+    select 1 from public.publisher_deliveries d join public.publisher_content_items ci on ci.id=d.content_item_id
+    where ci.legacy_spp_id is not null and not (ci.legacy_payload->'platforms' ? d.platform)
+  ) then raise exception 'cutover delivery set mismatch' using errcode = '55000'; end if;
+
+  if exists (
+    select 1
+    from public.publisher_content_items ci
+    cross join lateral jsonb_array_elements_text(ci.legacy_payload->'platforms') p(platform)
+    join public.publisher_deliveries d on d.content_item_id=ci.id and d.platform=p.platform
+    cross join lateral (select
+      nullif(btrim(ci.legacy_payload->'platform_post_ids'->>p.platform),'') provider_id,
+      case when p.platform='instagram' then nullif(btrim(ci.legacy_payload->'platform_post_ids'->>'instagram_container'),'') end ig_container,
+      case when p.platform='instagram' then nullif(btrim(ci.legacy_payload->'platform_post_ids'->>'instagram_container_since'),'') end ig_since
+    ) ids
+    cross join lateral (select case
+      when ids.ig_container is not null or ids.ig_since is not null then 'ambiguous'
+      when ids.provider_id is null then 'empty'
+      when lower(ids.provider_id) ~ '^(pending|unknown|failed|error|processing|publishing|queued|n/a|null|none|sent)$' then 'ambiguous'
+      else 'durable' end id_class) classed
+    where ci.legacy_spp_id is not null and (
+      d.provider_reconciliation_metadata is distinct from case
+        when p.platform='instagram' and (ids.ig_container is not null or ids.ig_since is not null)
+        then jsonb_build_object('instagram_container',to_jsonb(ids.ig_container),'instagram_container_since',to_jsonb(ids.ig_since))
+        else '{}'::jsonb end
+      or (classed.id_class='durable'
+        and (ci.legacy_status='published' or (ci.legacy_status='queued' and ci.content_type<>'article'))
+        and (d.state<>'succeeded' or d.platform_post_id is distinct from ids.provider_id or d.published_at is null))
+      or (classed.id_class<>'durable' and ci.legacy_status='queued' and ci.content_type='article' and d.state<>'planning_only')
+      or (classed.id_class='empty' and ci.legacy_status='queued' and ci.content_type<>'article' and d.state<>'migration_frozen')
+      or (classed.id_class='ambiguous' and ci.legacy_status='queued' and ci.content_type<>'article' and not exists (
+        select 1 from public.publisher_audit_log a where a.delivery_id=d.id
+          and a.event_type='legacy_verification_resolved'
+          and a.details->'after' is not distinct from to_jsonb(d)
+          and publisher_private.is_safe_provider_evidence(a.details->'provider_evidence')
+          and ((a.details->>'resolution'='confirmed_published' and d.state='succeeded')
+            or (a.details->>'resolution'='confirmed_absent' and d.state='migration_frozen'))
+      ))
+      or (ci.legacy_status='published' and classed.id_class<>'durable' and d.state<>'historical')
+      or (ci.legacy_status='cancelled' and d.state<>'cancelled')
+      or (ci.legacy_status='failed' and d.state<>'dead_letter')
+    )
+  ) then raise exception 'cutover delivery projection mismatch' using errcode='55000'; end if;
+
+  select count(*)::integer into v_due_legacy from public.scheduled_posts sp
+  join public.publisher_content_items ci on ci.legacy_spp_id=sp.id
+  cross join lateral unnest(sp.platforms) p(platform)
+  join public.publisher_deliveries d on d.content_item_id=ci.id and d.platform=p.platform and d.state='migration_frozen'
+  where sp.status='queued' and lower(sp.content_type)<>'article' and sp.scheduled_at <= v_now;
+  select count(*) into v_due_replacement from public.publisher_deliveries d
+  join public.publisher_content_items ci on ci.id=d.content_item_id
+  where ci.legacy_status='queued' and ci.publishability='publishable'
+    and d.state='migration_frozen' and ci.scheduled_at <= v_now;
+  if v_due_legacy <> v_due_replacement then raise exception 'legacy and replacement effective due sets differ' using errcode='55000'; end if;
+  select min(sp.scheduled_at) into v_next_due from public.scheduled_posts sp
+  join public.publisher_content_items ci on ci.legacy_spp_id=sp.id
+  join public.publisher_deliveries d on d.content_item_id=ci.id and d.state='migration_frozen'
+  where sp.status='queued' and lower(sp.content_type)<>'article';
+  if v_due_legacy <> 0 or v_next_due is null or v_next_due < v_now + make_interval(secs=>p_safety_seconds) then
+    raise exception 'cutover safety window is not clear' using errcode='55000';
+  end if;
+
+  select encode(extensions.digest(string_agg(r->>'id'||':'||r->>'__migration_payload_sha256', E'\n' order by r->>'id'),'sha256'),'hex')
+  into v_binding from jsonb_array_elements(p_rows) r;
+  return jsonb_build_object('ready',true,'server_time',v_now,'owner',v_owner,'epoch',v_epoch,
+    'database_attestation_sha256',v_attestation,'export_binding_sha256',v_binding,
+    'counts',jsonb_build_object('total',67,'queued',21,'history',46,'queued_articles',14,'queued_publishable',7),
+    'next_publishable_at',v_next_due,'checks',jsonb_build_array('binding','delivery_set','leases','due_set','safety_window'));
+end;
+$$;
+
 create or replace function publisher_private.transfer_publisher_queue_ownership(
   p_expected_epoch bigint,
   p_cutoff_at timestamptz
@@ -1407,6 +1569,13 @@ begin
       using errcode = '55000';
   end if;
 
+  perform publisher_private.publisher_cutover_readiness(
+    (select jsonb_agg(ci.legacy_payload || jsonb_build_object('__migration_payload_sha256',ci.legacy_payload_sha256) order by ci.legacy_spp_id)
+     from public.publisher_content_items ci where ci.legacy_spp_id is not null),
+    p_expected_epoch,
+    0
+  );
+
   update public.publisher_queue_ownership
   set owner = 'replacement', epoch = epoch + 1, cutoff_at = p_cutoff_at,
       reconciliation_sha256 = v_computed_attestation,
@@ -1495,6 +1664,10 @@ create or replace function public.resolve_legacy_delivery_verification(p_deliver
 returns boolean language plpgsql security invoker set search_path = '' as $$
 begin perform publisher_private.assert_service_caller(); return publisher_private.resolve_legacy_delivery_verification(p_delivery_id,p_resolution,p_provider_post_id,p_published_at,p_actor,p_provider_evidence); end $$;
 
+create or replace function public.publisher_cutover_readiness(p_rows jsonb,p_expected_epoch bigint,p_safety_seconds integer)
+returns jsonb language plpgsql security invoker set search_path = '' as $$
+begin perform publisher_private.assert_service_caller(); return publisher_private.publisher_cutover_readiness(p_rows,p_expected_epoch,p_safety_seconds); end $$;
+
 create or replace function public.transfer_publisher_queue_ownership(p_expected_epoch bigint,p_cutoff_at timestamptz)
 returns bigint language plpgsql security invoker set search_path = '' as $$
 begin perform publisher_private.assert_service_caller(); return publisher_private.transfer_publisher_queue_ownership(p_expected_epoch,p_cutoff_at); end $$;
@@ -1541,6 +1714,7 @@ revoke all on function public.complete_legacy_spp_claim(uuid, uuid, bigint, text
 revoke all on function public.reap_expired_legacy_spp_leases(bigint, timestamptz) from public, anon, authenticated, service_role;
 revoke all on function public.reap_expired_publisher_leases(timestamptz) from public, anon, authenticated, service_role;
 revoke all on function public.resolve_legacy_delivery_verification(uuid, text, text, timestamptz, text, jsonb) from public, anon, authenticated, service_role;
+revoke all on function public.publisher_cutover_readiness(jsonb, bigint, integer) from public, anon, authenticated, service_role;
 revoke all on function public.transfer_publisher_queue_ownership(bigint, timestamptz) from public, anon, authenticated, service_role;
 
 grant execute on function public.import_legacy_spp_rows(jsonb) to service_role;
@@ -1557,6 +1731,7 @@ grant execute on function public.complete_legacy_spp_claim(uuid, uuid, bigint, t
 grant execute on function public.reap_expired_legacy_spp_leases(bigint, timestamptz) to service_role;
 grant execute on function public.reap_expired_publisher_leases(timestamptz) to service_role;
 grant execute on function public.resolve_legacy_delivery_verification(uuid, text, text, timestamptz, text, jsonb) to service_role;
+grant execute on function public.publisher_cutover_readiness(jsonb, bigint, integer) to service_role;
 grant execute on function public.transfer_publisher_queue_ownership(bigint, timestamptz) to service_role;
 
 revoke all on all functions in schema publisher_private from public, anon, authenticated, service_role;

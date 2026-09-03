@@ -17,14 +17,14 @@ with fixture as (
       when i = 15 then jsonb_build_object(
         'facebook','durable-partial-id',
         'instagram_container','ig-container-sanitized',
-        'instagram_container_since','2026-09-03T01:02:03.000Z'
+        'instagram_container_since','2099-09-03T01:02:03.000Z'
       )
       when i = 16 then jsonb_build_object(
-        'instagram_container_since','2026-09-03T02:03:04.000Z'
+        'instagram_container_since','2099-09-03T02:03:04.000Z'
       )
       when i between 23 and 50 then jsonb_build_object('linkedin','durable-history-' || i)
       else '{}'::jsonb end,
-    'scheduled_at', to_jsonb('2026-09-01 00:00:00+00'::timestamptz + i * interval '1 hour'),
+    'scheduled_at', to_jsonb(statement_timestamp() + interval '2 hours' + i * interval '1 minute'),
     'status', case when i <= 21 then 'queued' when i <= 50 then 'published' else 'cancelled' end,
     'retry_count', 0, 'created_at', to_jsonb('2026-08-01'::timestamptz),
     'updated_at', to_jsonb('2026-08-02'::timestamptz),
@@ -35,13 +35,13 @@ select public.import_legacy_spp_rows(jsonb_agg(payload order by payload->>'id'))
 
 select is((select state from public.publisher_deliveries d join public.publisher_content_items ci on ci.id=d.content_item_id where ci.legacy_spp_id='20000000-0000-0000-0000-000000000015' and d.platform='facebook'), 'succeeded', 'queued platform with durable ID imports terminal-success');
 select is((select state from public.publisher_deliveries d join public.publisher_content_items ci on ci.id=d.content_item_id where ci.legacy_spp_id='20000000-0000-0000-0000-000000000015' and d.platform='instagram'), 'verification_required', 'Instagram auxiliary container requires verification');
-select is((select provider_reconciliation_metadata from public.publisher_deliveries d join public.publisher_content_items ci on ci.id=d.content_item_id where ci.legacy_spp_id='20000000-0000-0000-0000-000000000015' and d.platform='instagram'), '{"instagram_container":"ig-container-sanitized","instagram_container_since":"2026-09-03T01:02:03.000Z"}'::jsonb, 'Instagram container ID and start time are preserved for provider reconciliation');
+select is((select provider_reconciliation_metadata from public.publisher_deliveries d join public.publisher_content_items ci on ci.id=d.content_item_id where ci.legacy_spp_id='20000000-0000-0000-0000-000000000015' and d.platform='instagram'), '{"instagram_container":"ig-container-sanitized","instagram_container_since":"2099-09-03T01:02:03.000Z"}'::jsonb, 'Instagram container ID and start time are preserved for provider reconciliation');
 select is((select state from public.publisher_deliveries d join public.publisher_content_items ci on ci.id=d.content_item_id where ci.legacy_spp_id='20000000-0000-0000-0000-000000000015' and d.platform='linkedin'), 'migration_frozen', 'only unfinished queued platform is frozen');
 select is((select state from public.publisher_deliveries d join public.publisher_content_items ci on ci.id=d.content_item_id where ci.legacy_spp_id='20000000-0000-0000-0000-000000000022' and d.platform='linkedin'), 'historical', 'published history without durable ID is nonclaimable historical');
 select is((select state from public.publisher_deliveries d join public.publisher_content_items ci on ci.id=d.content_item_id where ci.legacy_spp_id='20000000-0000-0000-0000-000000000023' and d.platform='linkedin'), 'succeeded', 'published history with durable ID imports succeeded');
 select is((select state from public.publisher_deliveries d join public.publisher_content_items ci on ci.id=d.content_item_id where ci.legacy_spp_id='20000000-0000-0000-0000-000000000016' and d.platform='instagram'), 'verification_required', 'Instagram container-since alone requires verification');
 select throws_ok(
-  $$select public.transfer_publisher_queue_ownership(1, '2026-09-03')$$,
+  $$select public.transfer_publisher_queue_ownership(1, '2099-09-03')$$,
   '55000',
   'ownership transfer requires zero live leases',
   'Instagram container verification blocks ownership transfer and activation'
@@ -64,7 +64,7 @@ select ok(
   public.resolve_legacy_delivery_verification(
     (select d.id from public.publisher_deliveries d join public.publisher_content_items ci on ci.id=d.content_item_id where ci.legacy_spp_id='20000000-0000-0000-0000-000000000015' and d.platform='instagram'),
     'confirmed_absent', null, null, 'sanitized-reviewer',
-    '{"verification_method":"api_lookup","verification_result":"not_found","checked_at":"2026-09-03T04:05:06Z"}'::jsonb
+    '{"verification_method":"api_lookup","verification_result":"not_found","checked_at":"2099-09-03T04:05:06Z"}'::jsonb
   ),
   'provider-confirmed absence resolves to a frozen, safe-to-activate delivery'
 );
@@ -89,8 +89,8 @@ select isnt(
 select ok(
   public.resolve_legacy_delivery_verification(
     (select d.id from public.publisher_deliveries d join public.publisher_content_items ci on ci.id=d.content_item_id where ci.legacy_spp_id='20000000-0000-0000-0000-000000000016' and d.platform='instagram'),
-    'confirmed_published', 'ig-durable-resolved-id', '2026-09-03T05:06:07Z',
-    'sanitized-reviewer', '{"verification_method":"manual_provider_check","verification_result":"published","checked_at":"2026-09-03T05:06:07Z","provider_reference":"ig-durable-resolved-id"}'::jsonb
+    'confirmed_published', 'ig-durable-resolved-id', '2099-09-03T05:06:07Z',
+    'sanitized-reviewer', '{"verification_method":"manual_provider_check","verification_result":"published","checked_at":"2099-09-03T05:06:07Z","provider_reference":"ig-durable-resolved-id"}'::jsonb
   ),
   'provider-confirmed publication resolves with a durable ID'
 );
@@ -106,7 +106,7 @@ select ok(
    order by id desc limit 1),
   'confirmed-publication audit records evidence and durable provider result'
 );
-select is(public.transfer_publisher_queue_ownership(1, '2026-09-03'), 2::bigint, 'transfer accepts only the fully audited resolutions');
+select is(public.transfer_publisher_queue_ownership(1, '2099-09-03'), 2::bigint, 'transfer accepts only the fully audited resolutions');
 select is((select state from public.publisher_deliveries d join public.publisher_content_items ci on ci.id=d.content_item_id where ci.legacy_spp_id='20000000-0000-0000-0000-000000000015' and d.platform='instagram'), 'pending', 'confirmed absence becomes claimable only after atomic transfer');
 select is((select state from public.publisher_deliveries d join public.publisher_content_items ci on ci.id=d.content_item_id where ci.legacy_spp_id='20000000-0000-0000-0000-000000000016' and d.platform='instagram'), 'succeeded', 'confirmed publication stays terminal through transfer');
 
