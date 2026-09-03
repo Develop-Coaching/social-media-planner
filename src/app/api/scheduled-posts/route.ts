@@ -11,7 +11,7 @@ import type { Platform } from "@/lib/publish/types";
 
 export const dynamic = "force-dynamic";
 
-const VALID_PLATFORMS: Platform[] = ["instagram", "facebook", "linkedin"];
+const VALID_PLATFORMS: Platform[] = ["instagram", "facebook", "linkedin", "youtube"];
 
 function handleError(e: unknown): NextResponse {
   if (e instanceof AuthError) {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { claimDuePosts, markPostResult, resolvePublishPayload } from "@/lib/scheduled-posts";
 import { publishToInstagram, publishToFacebook } from "@/lib/publish/meta";
 import { publishToLinkedIn } from "@/lib/publish/linkedin";
+import { publishToYouTube } from "@/lib/publish/youtube";
 import { sendSlackNotification } from "@/lib/slack";
 import { decideTickOutcome, IG_CONTAINER_KEY, IG_CONTAINER_SINCE_KEY } from "@/lib/publish/outcome";
 import type { Platform, PublishPayload, PublishResult, ScheduledPost } from "@/lib/publish/types";
@@ -15,6 +16,7 @@ const PUBLISHERS: Record<Platform, (payload: PublishPayload) => Promise<PublishR
   instagram: publishToInstagram,
   facebook: publishToFacebook,
   linkedin: publishToLinkedIn,
+  youtube: publishToYouTube,
 };
 
 function isAuthorized(request: NextRequest): boolean {
