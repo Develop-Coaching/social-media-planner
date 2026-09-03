@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createToken, COOKIE_NAME, isAuthEnabled } from "@/lib/auth";
+import { authConfiguration, createToken, COOKIE_NAME, sessionCookieOptions } from "@/lib/auth";
 import { verifyPassword } from "@/lib/users";
 import { createRateLimiter, getClientIP } from "@/lib/rate-limit";
 
@@ -8,8 +8,8 @@ export const dynamic = "force-dynamic";
 const loginLimiter = createRateLimiter("login", { maxAttempts: 5, windowMs: 15 * 60 * 1000 });
 
 export async function POST(request: NextRequest) {
-  if (!isAuthEnabled()) {
-    return NextResponse.json({ error: "Auth not configured" }, { status: 400 });
+  if (!authConfiguration().configured) {
+    return NextResponse.json({ error: "Authentication is not configured" }, { status: 503 });
   }
 
   const ip = getClientIP(request);
@@ -42,13 +42,7 @@ export async function POST(request: NextRequest) {
     const token = await createToken(user.id, user.role, user.onboardingCompleted);
     const response = NextResponse.json({ success: true });
 
-    response.cookies.set(COOKIE_NAME, token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-      maxAge: 7 * 24 * 60 * 60,
-    });
+    response.cookies.set(COOKIE_NAME, token, sessionCookieOptions());
 
     return response;
   } catch {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin, AuthError } from "@/lib/auth-helpers";
 import { getUsers, createUser, deleteUser } from "@/lib/users";
+import { credentialPolicyError } from "@/lib/credential-policy";
 
 export const dynamic = "force-dynamic";
 
@@ -34,8 +35,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (password.length < 8) {
-      return NextResponse.json({ error: "Password must be at least 8 characters" }, { status: 400 });
+    const passwordError = credentialPolicyError(password);
+    if (passwordError) {
+      return NextResponse.json({ error: passwordError }, { status: 400 });
     }
 
     const user = await createUser(

@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createToken, COOKIE_NAME } from "@/lib/auth";
+import { createToken, COOKIE_NAME, sessionCookieOptions } from "@/lib/auth";
 import { hasAnyUsers, createUser, migrateExistingData } from "@/lib/users";
 import { createRateLimiter, getClientIP } from "@/lib/rate-limit";
+import { authConfiguration } from "@/lib/auth";
+import { credentialPolicyError, secureCredentialEqual } from "@/lib/credential-policy";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +11,9 @@ const setupLimiter = createRateLimiter("setup", { maxAttempts: 3, windowMs: 15 *
 
 export async function POST(request: NextRequest) {
   try {
+    if (!authConfiguration().configured) {
+      return NextResponse.json({ error: "Authentication is not securely configured" }, { status: 503 });
+    }
     const ip = getClientIP(request);
     const { allowed, retryAfterMs } = setupLimiter.check(ip);
     if (!allowed) {
@@ -41,12 +46,13 @@ export async function POST(request: NextRequest) {
     }
 
     const adminPassword = process.env.ADMIN_PASSWORD;
-    if (!adminPassword || setupKey !== adminPassword) {
+    if (!adminPassword || !secureCredentialEqual(setupKey, adminPassword)) {
       return NextResponse.json({ error: "Invalid setup key" }, { status: 401 });
     }
 
-    if (password.length < 8) {
-      return NextResponse.json({ error: "Password must be at least 8 characters" }, { status: 400 });
+    const passwordError = credentialPolicyError(password);
+    if (passwordError) {
+      return NextResponse.json({ error: passwordError }, { status: 400 });
     }
 
     const user = await createUser(username, displayName, password, "admin", null);
@@ -61,13 +67,7 @@ export async function POST(request: NextRequest) {
       migratedFiles: migrated,
     });
 
-    response.cookies.set(COOKIE_NAME, token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-      maxAge: 7 * 24 * 60 * 60,
-    });
+    response.cookies.set(COOKIE_NAME, token, sessionCookieOptions());
 
     return response;
   } catch (e) {

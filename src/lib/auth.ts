@@ -1,25 +1,58 @@
 import { SignJWT, jwtVerify } from "jose";
+import { isStrongAuthSecret, isStrongSetupKey } from "./credential-policy";
 
 const COOKIE_NAME = "pc_session";
 const EXPIRY = "7d";
 
 export { COOKIE_NAME };
 
-/**
- * Get the JWT signing secret. When auth is enabled (ADMIN_PASSWORD is set),
- * AUTH_SECRET must also be set — otherwise we throw to prevent using an
- * insecure default. When auth is disabled, a harmless default is fine.
- */
+export function sessionCookieOptions(production = process.env.NODE_ENV === "production") {
+  return {
+    httpOnly: true,
+    secure: production,
+    sameSite: "lax" as const,
+    path: "/",
+    maxAge: 7 * 24 * 60 * 60,
+  };
+}
+
+export interface AuthConfiguration {
+  configured: boolean;
+  missing: Array<"ADMIN_PASSWORD" | "AUTH_SECRET">;
+  invalid: Array<"ADMIN_PASSWORD" | "AUTH_SECRET">;
+}
+
+export function authConfiguration(
+  env?: { ADMIN_PASSWORD?: string; AUTH_SECRET?: string },
+): AuthConfiguration {
+  const source = env ?? process.env;
+  const missing: AuthConfiguration["missing"] = [];
+  const invalid: AuthConfiguration["invalid"] = [];
+  if (!source.ADMIN_PASSWORD?.trim()) missing.push("ADMIN_PASSWORD");
+  if (!source.AUTH_SECRET?.trim()) missing.push("AUTH_SECRET");
+  if (source.ADMIN_PASSWORD && !isStrongSetupKey(source.ADMIN_PASSWORD)) invalid.push("ADMIN_PASSWORD");
+  if (source.AUTH_SECRET && !isStrongAuthSecret(source.AUTH_SECRET)) invalid.push("AUTH_SECRET");
+  return { configured: missing.length === 0 && invalid.length === 0, missing, invalid };
+}
+
 export function getSecret(): Uint8Array {
-  if (process.env.ADMIN_PASSWORD && !process.env.AUTH_SECRET) {
-    throw new Error(
-      "AUTH_SECRET environment variable is required when ADMIN_PASSWORD is set. " +
-      "Generate one with: openssl rand -base64 32"
-    );
+  const configuration = authConfiguration();
+  if (!configuration.configured) {
+    throw new AuthConfigurationError(configuration.missing, configuration.invalid);
   }
-  return new TextEncoder().encode(
-    process.env.AUTH_SECRET || "postpilot-default-secret-change-me"
-  );
+  return new TextEncoder().encode(process.env.AUTH_SECRET!);
+}
+
+export class AuthConfigurationError extends Error {
+  readonly missing: AuthConfiguration["missing"];
+  readonly invalid: AuthConfiguration["invalid"];
+
+  constructor(missing: AuthConfiguration["missing"], invalid: AuthConfiguration["invalid"] = []) {
+    super("Authentication is not configured");
+    this.name = "AuthConfigurationError";
+    this.missing = missing;
+    this.invalid = invalid;
+  }
 }
 
 export type UserRole = "admin" | "agent" | "client";
@@ -59,6 +92,7 @@ export async function getUserFromToken(token: string): Promise<TokenPayload | nu
     if (!userId || !role) return null;
     // Migrate old "user" role JWTs to "client"
     const normalizedRole = role === "user" ? "client" : role;
+    if (!["admin", "agent", "client"].includes(normalizedRole)) return null;
     return {
       userId,
       role: normalizedRole as UserRole,
@@ -70,5 +104,5 @@ export async function getUserFromToken(token: string): Promise<TokenPayload | nu
 }
 
 export function isAuthEnabled(): boolean {
-  return !!process.env.ADMIN_PASSWORD;
+  return authConfiguration().configured;
 }

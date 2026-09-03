@@ -1,16 +1,20 @@
 import { NextResponse } from "next/server";
 import { hasAnyUsers } from "@/lib/users";
-import { isAuthEnabled } from "@/lib/auth";
+import { authConfiguration } from "@/lib/auth";
 
 export async function GET() {
   try {
-    const authEnabled = isAuthEnabled();
-    if (!authEnabled) {
-      return NextResponse.json({ authEnabled: false, needsSetup: false });
+    const configuration = authConfiguration();
+    if (!configuration.configured) {
+      return NextResponse.json(
+        { configured: false, authEnabled: false, needsSetup: false },
+        { status: 503 },
+      );
     }
 
     const hasUsers = await hasAnyUsers();
     return NextResponse.json({
+      configured: true,
       authEnabled: true,
       needsSetup: !hasUsers,
     });

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import ThemeToggle from "@/components/ThemeToggle";
 
-type Mode = "loading" | "login" | "setup";
+type Mode = "loading" | "login" | "setup" | "unavailable";
 
 export default function LoginPage() {
   const [mode, setMode] = useState<Mode>("loading");
@@ -20,18 +20,15 @@ export default function LoginPage() {
 
   useEffect(() => {
     fetch("/api/auth/status")
-      .then((res) => res.json())
-      .then((data) => {
-        if (!data.authEnabled) {
-          // Auth disabled, redirect to app
-          router.push("/");
+      .then(async (res) => ({ ok: res.ok, data: await res.json() }))
+      .then(({ data }) => {
+        if (!data.configured) {
+          setMode("unavailable");
           return;
         }
         setMode(data.needsSetup ? "setup" : "login");
       })
-      .catch(() => {
-        setMode("login");
-      });
+      .catch(() => setMode("unavailable"));
   }, [router]);
 
   async function handleLogin(e: React.FormEvent) {
@@ -112,13 +109,20 @@ export default function LoginPage() {
               )}
             </svg>
           </div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-1">Social Post Pro</h1>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-1">Publishing Queue</h1>
           <p className="text-slate-500 dark:text-slate-400 text-sm">
-            {mode === "setup" ? "Create your admin account to get started" : "Sign in to continue"}
+            {mode === "unavailable" ? "Temporarily unavailable" : mode === "setup" ? "Create your admin account to get started" : "Sign in to continue"}
           </p>
         </div>
 
-        {mode === "setup" ? (
+        {mode === "unavailable" ? (
+          <div role="alert" className="rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-sm border border-red-200 dark:border-red-900/60">
+            <p className="font-semibold text-slate-900 dark:text-white mb-2">Authentication needs attention</p>
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              This deployment is locked because its authentication settings are incomplete. No queue data is accessible. Ask the system owner to restore the required configuration.
+            </p>
+          </div>
+        ) : mode === "setup" ? (
           <form onSubmit={handleSetup} className="rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-sm border border-slate-100 dark:border-slate-700">
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
               Setup Key

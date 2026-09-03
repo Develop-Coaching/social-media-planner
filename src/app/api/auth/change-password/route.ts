@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth, AuthError } from "@/lib/auth-helpers";
 import { getUserById, changePassword } from "@/lib/users";
 import bcrypt from "bcryptjs";
+import { credentialPolicyError } from "@/lib/credential-policy";
 
 export const dynamic = "force-dynamic";
 
@@ -18,8 +19,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Current password and new password are required" }, { status: 400 });
     }
 
-    if (newPassword.length < 8) {
-      return NextResponse.json({ error: "New password must be at least 8 characters" }, { status: 400 });
+    const passwordError = credentialPolicyError(newPassword, "New password");
+    if (passwordError) {
+      return NextResponse.json({ error: passwordError }, { status: 400 });
     }
 
     const user = await getUserById(userId);

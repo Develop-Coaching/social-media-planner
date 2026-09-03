@@ -17,8 +17,8 @@ export default function AccountPage() {
     setError("");
     setSuccess(false);
 
-    if (newPassword.length < 8) {
-      setError("New password must be at least 8 characters");
+    if (newPassword.length < 12) {
+      setError("New password must be at least 12 characters and include three character types");
       return;
     }
 

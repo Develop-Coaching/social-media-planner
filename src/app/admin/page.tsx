@@ -177,8 +177,8 @@ export default function AdminPage() {
   }
 
   async function handleResetPassword(userId: string) {
-    if (resetTempPassword.length < 8) {
-      setResetPasswordError("Password must be at least 8 characters");
+    if (resetTempPassword.length < 12) {
+      setResetPasswordError("Password must be at least 12 characters and include three character types");
       return;
     }
     setResetPasswordSubmitting(true);
