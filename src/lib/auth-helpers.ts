@@ -1,12 +1,9 @@
 import { cookies } from "next/headers";
-import { COOKIE_NAME, getUserFromToken, isAuthEnabled, TokenPayload } from "./auth";
-
-const DEFAULT_USER: TokenPayload = { userId: "default", role: "admin" };
+import { authConfiguration, COOKIE_NAME, getUserFromToken, TokenPayload } from "./auth";
 
 export async function requireAuth(): Promise<TokenPayload> {
-  // When auth is disabled, use a default user so data goes to data/default/
-  if (!isAuthEnabled()) {
-    return DEFAULT_USER;
+  if (!authConfiguration().configured) {
+    throw new AuthError("Authentication is not configured", 503);
   }
 
   const cookieStore = await cookies();

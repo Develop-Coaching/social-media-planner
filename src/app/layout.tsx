@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
-import Script from "next/script";
 import "./globals.css";
 import ToastProvider from "@/components/ToastProvider";
 
 export const metadata: Metadata = {
-  title: "Social Post Pro",
-  description: "Generate weekly themes, posts, reels, articles, carousels & quotes with Claude + Gemini.",
+  title: "Develop Coaching Publishing Queue",
+  description: "Always-on social publishing queue and delivery health.",
 };
 
 export default function RootLayout({
@@ -30,7 +29,6 @@ export default function RootLayout({
       </head>
       <body className="min-h-screen antialiased">
         <ToastProvider>{children}</ToastProvider>
-        <Script src="https://accounts.google.com/gsi/client" strategy="afterInteractive" />
       </body>
     </html>
   );
