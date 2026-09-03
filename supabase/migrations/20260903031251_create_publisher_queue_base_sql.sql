@@ -1277,7 +1277,7 @@ declare
   v_due_replacement integer;
 begin
   if jsonb_typeof(p_rows) <> 'array' or p_safety_seconds is null
-    or p_safety_seconds < 0 or p_safety_seconds > 86400 then
+    or p_safety_seconds < 60 or p_safety_seconds > 86400 then
     raise exception 'invalid cutover readiness input' using errcode = '22023';
   end if;
   if jsonb_array_length(p_rows) <> 67
@@ -1413,10 +1413,21 @@ begin
       and ci.approval_state='approved' and ci.publishability='publishable' and ci.content_type<>'article'
   ) then raise exception 'cutover readiness found noncanonical or native claimant work' using errcode='55000'; end if;
   if v_due_legacy <> v_due_replacement then raise exception 'legacy and replacement effective due sets differ' using errcode='55000'; end if;
-  select min(coalesce(d.next_attempt_at,ci.scheduled_at)) into v_next_due from public.scheduled_posts sp
-  join public.publisher_content_items ci on ci.legacy_spp_id=sp.id
-  join public.publisher_deliveries d on d.content_item_id=ci.id and d.state='migration_frozen'
-  where sp.status='queued' and lower(sp.content_type)<>'article';
+  select min(candidate_at) into v_next_due from (
+    select coalesce(d.next_attempt_at,ci.scheduled_at) candidate_at
+    from public.scheduled_posts sp
+    join public.publisher_content_items ci on ci.legacy_spp_id=sp.id
+    join public.publisher_deliveries d on d.content_item_id=ci.id and d.state='migration_frozen'
+    where sp.status='queued' and lower(sp.content_type)<>'article'
+      and d.attempt_count < d.max_attempts and ci.approval_state='approved'
+      and ci.publishability='publishable' and ci.content_type<>'article'
+    union all
+    select coalesce(d.next_attempt_at,ci.scheduled_at)
+    from public.publisher_deliveries d join public.publisher_content_items ci on ci.id=d.content_item_id
+    where ci.legacy_spp_id is null and d.state in ('pending','retryable')
+      and d.attempt_count < d.max_attempts and ci.migration_state in ('native','active')
+      and ci.approval_state='approved' and ci.publishability='publishable' and ci.content_type<>'article'
+  ) candidates;
   if v_due_legacy <> 0 or v_next_due is null or v_next_due < v_now + make_interval(secs=>p_safety_seconds) then
     raise exception 'cutover safety window is not clear' using errcode='55000';
   end if;

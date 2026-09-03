@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(102);
+select plan(105);
 
 select has_table('public', 'publisher_queue_ownership', 'ownership controller exists');
 select has_table('public', 'publisher_content_items', 'content items exist');
@@ -160,6 +160,14 @@ select ok(
   'readiness returns redacted success for the exact future-safe set'
 );
 select throws_ok(
+  $$select public.publisher_cutover_readiness((select jsonb_agg(payload) from readiness_rows),1,0)$$,
+  '22023','invalid cutover readiness input','zero-second safety window is rejected'
+);
+select throws_ok(
+  $$select public.publisher_cutover_readiness((select jsonb_agg(payload) from readiness_rows),1,59)$$,
+  '22023','invalid cutover readiness input','sub-minute safety window is rejected'
+);
+select throws_ok(
   $$select public.publisher_cutover_readiness((select jsonb_agg(case when payload->>'id'='00000000-0000-0000-0000-000000000001' then jsonb_set(payload,'{id}','"90000000-0000-0000-0000-000000000001"') else payload end) from readiness_rows),1,3600)$$,
   '55000','cutover export/source/import binding mismatch','same-count but different IDs fail exact binding'
 );
@@ -213,6 +221,16 @@ select throws_ok(
 );
 delete from public.publisher_deliveries where idempotency_key='native-due-fixture';
 delete from public.publisher_content_items where caption='native due';
+insert into public.publisher_content_items(user_id,company_id,content_type,caption,scheduled_at,approval_state,publishability,migration_state)
+values('fixture-user','fixture-company','reel','native future',statement_timestamp()+interval '30 minutes','approved','publishable','native');
+insert into public.publisher_deliveries(content_item_id,platform,state,idempotency_key)
+select id,'instagram','pending','native-future-fixture' from public.publisher_content_items where caption='native future';
+select throws_ok(
+  $$select public.publisher_cutover_readiness((select jsonb_agg(payload) from readiness_rows),1,3600)$$,
+  '55000','cutover safety window is not clear','native future claimant inside safety horizon blocks cutover'
+);
+delete from public.publisher_deliveries where idempotency_key='native-future-fixture';
+delete from public.publisher_content_items where caption='native future';
 
 select throws_ok(
   $$select public.import_legacy_spp_rows(jsonb_build_array((select payload || '{"caption":"changed"}'::jsonb from sanitized_export limit 1)))$$,

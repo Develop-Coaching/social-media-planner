@@ -88,6 +88,9 @@ to the legacy source and imported projection, recomputes the database attestatio
 checks delivery/audited-resolution and lease invariants, proves the effective due sets
 agree, and requires zero due work plus the requested safety interval. Its output is
 redacted to server time, owner/epoch, counts, digests, next due time, and check names.
+The safety interval must be between 60 seconds and 24 hours, and its earliest-candidate
+calculation includes both legacy deliveries that transfer would activate and native
+pending/retryable deliveries using the exact claimant timing predicate.
 The transfer RPC repeats this same database validator immediately before mutation, so
 a readiness result is evidence rather than a reusable authorization token. Transfer
 accepts the same `(rows, expected_epoch, safety_seconds)` inputs and records its cutoff
