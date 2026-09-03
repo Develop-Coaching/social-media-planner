@@ -1,0 +1,1043 @@
+-- Narrow, migration-safe publisher queue (issue #16).
+--
+-- This is deliberately additive. The legacy scheduled_posts table remains the
+-- source of truth until transfer_publisher_queue_ownership() commits. Both old
+-- and replacement claim functions serialize on publisher_queue_ownership so
+-- there is no interval in which both schedulers may claim a legacy job.
+
+create extension if not exists pgcrypto with schema extensions;
+
+create table public.publisher_queue_ownership (
+  source text primary key,
+  owner text not null check (owner in ('legacy', 'replacement')),
+  epoch bigint not null check (epoch > 0),
+  cutoff_at timestamptz,
+  reconciliation_sha256 text,
+  transferred_at timestamptz,
+  created_at timestamptz not null default statement_timestamp(),
+  updated_at timestamptz not null default statement_timestamp(),
+  constraint publisher_queue_ownership_transfer_fields check (
+    (owner = 'legacy' and cutoff_at is null and reconciliation_sha256 is null and transferred_at is null)
+    or
+    (owner = 'replacement' and cutoff_at is not null and reconciliation_sha256 ~ '^[0-9a-f]{64}$' and transferred_at is not null)
+  )
+);
+
+insert into public.publisher_queue_ownership (source, owner, epoch)
+values ('legacy_spp', 'legacy', 1);
+
+create table public.publisher_content_items (
+  id uuid primary key default gen_random_uuid(),
+  user_id text not null,
+  company_id text not null,
+  legacy_spp_id uuid unique,
+  item_id text,
+  content_type text not null,
+  caption text not null default '',
+  media jsonb not null default '{}'::jsonb,
+  scheduled_at timestamptz,
+  approval_state text not null default 'draft'
+    check (approval_state in ('draft', 'approved')),
+  publishability text not null default 'publishable'
+    check (publishability in ('publishable', 'planning_only')),
+  migration_state text not null default 'native'
+    check (migration_state in ('native', 'migration_frozen', 'active', 'historical')),
+  legacy_status text,
+  legacy_payload jsonb,
+  legacy_payload_sha256 text,
+  created_at timestamptz not null default statement_timestamp(),
+  updated_at timestamptz not null default statement_timestamp(),
+  foreign key (user_id, company_id)
+    references public.companies(user_id, id) on delete restrict,
+  constraint publisher_content_items_legacy_pair check (
+    (legacy_spp_id is null and legacy_payload is null and legacy_payload_sha256 is null)
+    or
+    (legacy_spp_id is not null and legacy_payload is not null and legacy_payload_sha256 ~ '^[0-9a-f]{64}$')
+  ),
+  constraint publisher_content_items_planning_only check (
+    publishability <> 'planning_only' or content_type = 'article'
+  ),
+  constraint publisher_content_items_legacy_projection check (
+    legacy_spp_id is null or (
+      legacy_spp_id = (legacy_payload->>'id')::uuid
+      and user_id = legacy_payload->>'user_id'
+      and company_id = legacy_payload->>'company_id'
+      and content_type = lower(legacy_payload->>'content_type')
+      and caption = coalesce(legacy_payload->>'caption', '')
+      and scheduled_at = (legacy_payload->>'scheduled_at')::timestamptz
+      and legacy_status = legacy_payload->>'status'
+      and publishability = case when lower(legacy_payload->>'content_type') = 'article'
+        then 'planning_only' else 'publishable' end
+    )
+  )
+);
+
+create index publisher_content_items_tenant_schedule_idx
+  on public.publisher_content_items (user_id, company_id, scheduled_at);
+create index publisher_content_items_migration_idx
+  on public.publisher_content_items (migration_state, scheduled_at)
+  where migration_state = 'migration_frozen';
+
+create table public.publisher_deliveries (
+  id uuid primary key default gen_random_uuid(),
+  content_item_id uuid not null references public.publisher_content_items(id) on delete restrict,
+  platform text not null check (platform in ('instagram', 'facebook', 'linkedin')),
+  state text not null default 'pending' check (state in (
+    'migration_frozen', 'planning_only', 'pending', 'leased', 'retryable',
+    'verification_required', 'succeeded', 'dead_letter', 'cancelled', 'historical'
+  )),
+  idempotency_key text not null unique,
+  attempt_count integer not null default 0 check (attempt_count >= 0),
+  max_attempts integer not null default 3 check (max_attempts > 0),
+  next_attempt_at timestamptz,
+  lease_token uuid,
+  lease_expires_at timestamptz,
+  lease_phase text check (lease_phase in ('pre_dispatch', 'dispatch_started')),
+  platform_post_id text,
+  live_url text,
+  last_error text,
+  published_at timestamptz,
+  created_at timestamptz not null default statement_timestamp(),
+  updated_at timestamptz not null default statement_timestamp(),
+  unique (content_item_id, platform),
+  constraint publisher_deliveries_lease_shape check (
+    (state = 'leased' and lease_token is not null and lease_expires_at is not null and lease_phase is not null)
+    or
+    (state <> 'leased' and lease_token is null and lease_expires_at is null and lease_phase is null)
+  ),
+  constraint publisher_deliveries_planning_only check (
+    state <> 'planning_only' or platform = 'linkedin'
+  ),
+  constraint publisher_deliveries_success_shape check (
+    state <> 'succeeded'
+    or (nullif(btrim(platform_post_id), '') is not null and published_at is not null)
+  )
+);
+
+create index publisher_deliveries_claim_idx
+  on public.publisher_deliveries (state, next_attempt_at, id)
+  where state in ('pending', 'retryable');
+create index publisher_deliveries_item_idx
+  on public.publisher_deliveries (content_item_id);
+
+create table public.publisher_delivery_attempts (
+  id uuid primary key default gen_random_uuid(),
+  delivery_id uuid not null references public.publisher_deliveries(id) on delete restrict,
+  attempt_number integer not null check (attempt_number > 0),
+  idempotency_key text not null unique,
+  lease_token uuid not null unique,
+  state text not null check (state in (
+    'claimed', 'dispatch_started', 'succeeded', 'retryable',
+    'verification_required', 'dead_letter'
+  )),
+  request_fingerprint_sha256 text,
+  provider_response jsonb,
+  error text,
+  claimed_at timestamptz not null default statement_timestamp(),
+  dispatch_started_at timestamptz,
+  finished_at timestamptz,
+  unique (delivery_id, attempt_number)
+);
+
+create index publisher_delivery_attempts_delivery_idx
+  on public.publisher_delivery_attempts (delivery_id, attempt_number desc);
+
+create table public.publisher_audit_log (
+  id bigint generated always as identity primary key,
+  user_id text,
+  company_id text,
+  content_item_id uuid references public.publisher_content_items(id) on delete restrict,
+  delivery_id uuid references public.publisher_deliveries(id) on delete restrict,
+  event_type text not null,
+  actor text not null,
+  details jsonb not null default '{}'::jsonb,
+  occurred_at timestamptz not null default statement_timestamp()
+);
+
+create index publisher_audit_log_tenant_time_idx
+  on public.publisher_audit_log (user_id, company_id, occurred_at desc);
+create index publisher_audit_log_delivery_time_idx
+  on public.publisher_audit_log (delivery_id, occurred_at desc);
+
+alter table public.scheduled_posts
+  add column publisher_lease_token uuid,
+  add column publisher_lease_expires_at timestamptz,
+  add column publisher_lease_phase text,
+  add column publisher_ownership_epoch bigint,
+  add column publisher_claim_count integer not null default 0,
+  add column publisher_verification_required boolean not null default false;
+
+alter table public.scheduled_posts
+  add constraint scheduled_posts_publisher_lease_phase_check
+    check (publisher_lease_phase in ('pre_dispatch', 'dispatch_started')),
+  add constraint scheduled_posts_publisher_claim_count_check
+    check (publisher_claim_count >= 0),
+  add constraint scheduled_posts_publisher_lease_shape_check check (
+    (publisher_lease_token is null and publisher_lease_expires_at is null and publisher_lease_phase is null)
+    or
+    (publisher_lease_token is not null and publisher_lease_expires_at is not null and publisher_lease_phase is not null)
+  );
+
+create index scheduled_posts_publisher_lease_idx
+  on public.scheduled_posts (publisher_lease_expires_at)
+  where status = 'publishing';
+
+create or replace function public.protect_legacy_publisher_fields()
+returns trigger
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+begin
+  if old.legacy_spp_id is not null and (
+    new.legacy_spp_id is distinct from old.legacy_spp_id
+    or new.legacy_payload is distinct from old.legacy_payload
+    or new.legacy_payload_sha256 is distinct from old.legacy_payload_sha256
+    or new.user_id is distinct from old.user_id
+    or new.company_id is distinct from old.company_id
+    or new.item_id is distinct from old.item_id
+    or new.content_type is distinct from old.content_type
+    or new.caption is distinct from old.caption
+    or new.media is distinct from old.media
+    or new.scheduled_at is distinct from old.scheduled_at
+    or new.publishability is distinct from old.publishability
+    or new.legacy_status is distinct from old.legacy_status
+  ) then
+    raise exception 'legacy SPP identity, payload, and publish projection are immutable'
+      using errcode = '23514';
+  end if;
+  return new;
+end;
+$$;
+
+create or replace function public.protect_planning_only_delivery()
+returns trigger
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+begin
+  if exists (
+    select 1 from public.publisher_content_items ci
+    where ci.id = new.content_item_id and ci.publishability = 'planning_only'
+  ) and new.state <> 'planning_only' then
+    raise exception 'planning-only content cannot enter the publisher queue'
+      using errcode = '23514';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger protect_planning_only_delivery
+before insert or update on public.publisher_deliveries
+for each row execute function public.protect_planning_only_delivery();
+
+create or replace function public.audit_publisher_delivery_transition()
+returns trigger
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_user_id text;
+  v_company_id text;
+begin
+  if tg_op = 'INSERT' or new.state is distinct from old.state or new.lease_phase is distinct from old.lease_phase then
+    select ci.user_id, ci.company_id into v_user_id, v_company_id
+    from public.publisher_content_items ci where ci.id = new.content_item_id;
+    insert into public.publisher_audit_log (
+      user_id, company_id, content_item_id, delivery_id, event_type, actor, details
+    ) values (
+      v_user_id, v_company_id, new.content_item_id, new.id,
+      case when tg_op = 'INSERT' then 'delivery_created' else 'delivery_transitioned' end,
+      'database',
+      jsonb_build_object(
+        'from_state', case when tg_op = 'INSERT' then null else old.state end,
+        'to_state', new.state,
+        'lease_phase', new.lease_phase,
+        'attempt_count', new.attempt_count
+      )
+    );
+  end if;
+  return new;
+end;
+$$;
+
+create trigger audit_publisher_delivery_transition
+after insert or update on public.publisher_deliveries
+for each row execute function public.audit_publisher_delivery_transition();
+
+create trigger protect_legacy_publisher_fields
+before update on public.publisher_content_items
+for each row execute function public.protect_legacy_publisher_fields();
+
+create or replace function public.prevent_publisher_audit_mutation()
+returns trigger
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+begin
+  raise exception 'publisher_audit_log is append-only' using errcode = '55000';
+end;
+$$;
+
+create trigger prevent_publisher_audit_update_or_delete
+before update or delete on public.publisher_audit_log
+for each row execute function public.prevent_publisher_audit_mutation();
+
+-- Idempotently imports a complete Social Post Pro export. Existing rows must be
+-- byte-for-byte equivalent as parsed JSON or the import aborts; it never
+-- overwrites migrated content or runtime state.
+create or replace function public.import_legacy_spp_rows(p_rows jsonb)
+returns jsonb
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_record jsonb;
+  v_content_id uuid;
+  v_existing_payload jsonb;
+  v_platform text;
+  v_delivery_state text;
+  v_inserted integer := 0;
+  v_unchanged integer := 0;
+  v_delivery_count integer := 0;
+  v_status text;
+  v_content_type text;
+  v_legacy_id uuid;
+  v_supplied_payload_sha256 text;
+begin
+  if jsonb_typeof(p_rows) <> 'array' then
+    raise exception 'p_rows must be a JSON array' using errcode = '22023';
+  end if;
+
+  for v_record in select value from jsonb_array_elements(p_rows)
+  loop
+    v_supplied_payload_sha256 := v_record->>'__migration_payload_sha256';
+    v_record := v_record - '__migration_payload_sha256';
+    if v_supplied_payload_sha256 is not null and v_supplied_payload_sha256 !~ '^[0-9a-f]{64}$' then
+      raise exception 'invalid migration payload SHA-256' using errcode = '22023';
+    end if;
+    if not (v_record ?& array['id','user_id','company_id','content_type','platforms','scheduled_at','status']) then
+      raise exception 'legacy row is missing required fields' using errcode = '22023';
+    end if;
+    if jsonb_typeof(v_record->'platforms') <> 'array' then
+      raise exception 'legacy row platforms must be an array' using errcode = '22023';
+    end if;
+
+    v_legacy_id := (v_record->>'id')::uuid;
+    v_status := v_record->>'status';
+    v_content_type := lower(v_record->>'content_type');
+
+    insert into public.publisher_content_items (
+      user_id, company_id, legacy_spp_id, item_id, content_type, caption,
+      media, scheduled_at, approval_state, publishability, migration_state,
+      legacy_status, legacy_payload, legacy_payload_sha256, created_at, updated_at
+    ) values (
+      v_record->>'user_id',
+      v_record->>'company_id',
+      v_legacy_id,
+      nullif(v_record->>'item_id', ''),
+      v_content_type,
+      coalesce(v_record->>'caption', ''),
+      jsonb_build_object(
+        'saved_content_id', v_record->'saved_content_id',
+        'image_keys', coalesce(v_record->'image_keys', '[]'::jsonb),
+        'media_urls', coalesce(v_record->'media_urls', '[]'::jsonb),
+        'upload_paths', coalesce(v_record->'upload_paths', '[]'::jsonb),
+        'video_url', v_record->'video_url',
+        'cover_path', v_record->'cover_path'
+      ),
+      (v_record->>'scheduled_at')::timestamptz,
+      case when v_status = 'queued' then 'approved' else 'draft' end,
+      case when v_content_type = 'article' then 'planning_only' else 'publishable' end,
+      case when v_status = 'queued' then 'migration_frozen' else 'historical' end,
+      v_status,
+      v_record,
+      coalesce(v_supplied_payload_sha256, encode(extensions.digest(v_record::text, 'sha256'), 'hex')),
+      coalesce((v_record->>'created_at')::timestamptz, statement_timestamp()),
+      coalesce((v_record->>'updated_at')::timestamptz, statement_timestamp())
+    )
+    on conflict (legacy_spp_id) do nothing
+    returning id into v_content_id;
+
+    if v_content_id is null then
+      select id, legacy_payload into v_content_id, v_existing_payload
+      from public.publisher_content_items
+      where legacy_spp_id = v_legacy_id;
+      if v_existing_payload is distinct from v_record then
+        raise exception 'legacy row % differs from its previous import', v_legacy_id
+          using errcode = '23505';
+      end if;
+      v_unchanged := v_unchanged + 1;
+    else
+      v_inserted := v_inserted + 1;
+      insert into public.publisher_audit_log (
+        user_id, company_id, content_item_id, event_type, actor, details
+      ) values (
+        v_record->>'user_id', v_record->>'company_id', v_content_id,
+        'legacy_imported', 'migration',
+        jsonb_build_object('legacy_spp_id', v_legacy_id, 'legacy_status', v_status)
+      );
+    end if;
+
+    for v_platform in select jsonb_array_elements_text(v_record->'platforms')
+    loop
+      if v_platform not in ('instagram', 'facebook', 'linkedin') then
+        raise exception 'unsupported platform % for legacy row %', v_platform, v_legacy_id
+          using errcode = '22023';
+      end if;
+
+      v_delivery_state := case
+        when v_status = 'queued' and v_content_type = 'article' then 'planning_only'
+        when v_status = 'queued' then 'migration_frozen'
+        when v_status = 'published' then 'succeeded'
+        when v_status = 'cancelled' then 'cancelled'
+        when v_status = 'failed' then 'dead_letter'
+        when v_status = 'publishing' then 'verification_required'
+        else 'historical'
+      end;
+
+      insert into public.publisher_deliveries (
+        content_item_id, platform, state, idempotency_key, attempt_count,
+        next_attempt_at, platform_post_id, published_at
+      ) values (
+        v_content_id,
+        v_platform,
+        v_delivery_state,
+        'legacy-spp:' || v_legacy_id::text || ':' || v_platform,
+        greatest(coalesce((v_record->>'retry_count')::integer, 0), 0),
+        case when v_delivery_state = 'migration_frozen' then (v_record->>'scheduled_at')::timestamptz else null end,
+        nullif(v_record->'platform_post_ids'->>v_platform, ''),
+        (v_record->>'published_at')::timestamptz
+      ) on conflict (content_item_id, platform) do nothing;
+      if found then
+        v_delivery_count := v_delivery_count + 1;
+      end if;
+    end loop;
+  end loop;
+
+  return jsonb_build_object(
+    'inserted_content_items', v_inserted,
+    'unchanged_content_items', v_unchanged,
+    'inserted_deliveries', v_delivery_count
+  );
+end;
+$$;
+
+-- Legacy claimant. Issue #17 replaces the old select/update loop with this RPC.
+-- Locking the ownership row makes claims mutually exclusive with cutover.
+create or replace function public.claim_legacy_spp_posts(
+  p_expected_epoch bigint,
+  p_limit integer default 5,
+  p_lease_seconds integer default 300,
+  p_now timestamptz default statement_timestamp()
+)
+returns setof public.scheduled_posts
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_owner text;
+  v_epoch bigint;
+begin
+  if p_limit < 1 or p_limit > 100 or p_lease_seconds < 30 or p_lease_seconds > 3600 then
+    raise exception 'invalid claim bounds' using errcode = '22023';
+  end if;
+
+  select owner, epoch into v_owner, v_epoch
+  from public.publisher_queue_ownership
+  where source = 'legacy_spp'
+  for update;
+
+  if v_owner <> 'legacy' or v_epoch <> p_expected_epoch then
+    raise exception 'legacy ownership mismatch: owner %, epoch %', v_owner, v_epoch
+      using errcode = '40001';
+  end if;
+
+  return query
+  with candidates as (
+    select sp.id
+    from public.scheduled_posts sp
+    where sp.status = 'queued'
+      and not sp.publisher_verification_required
+      and sp.content_type <> 'article'
+      and sp.scheduled_at <= p_now
+    order by sp.scheduled_at, sp.id
+    for update skip locked
+    limit p_limit
+  )
+  update public.scheduled_posts sp
+  set status = 'publishing',
+      publisher_lease_token = gen_random_uuid(),
+      publisher_lease_expires_at = p_now + make_interval(secs => p_lease_seconds),
+      publisher_lease_phase = 'pre_dispatch',
+      publisher_ownership_epoch = v_epoch,
+      publisher_claim_count = sp.publisher_claim_count + 1,
+      updated_at = p_now
+  from candidates c
+  where sp.id = c.id
+  returning sp.*;
+end;
+$$;
+
+create or replace function public.claim_publisher_deliveries(
+  p_expected_epoch bigint,
+  p_limit integer default 10,
+  p_lease_seconds integer default 300,
+  p_now timestamptz default statement_timestamp()
+)
+returns table (
+  delivery_id uuid,
+  content_item_id uuid,
+  platform text,
+  idempotency_key text,
+  attempt_number integer,
+  lease_token uuid,
+  lease_expires_at timestamptz,
+  user_id text,
+  company_id text,
+  content_type text,
+  caption text,
+  media jsonb,
+  scheduled_at timestamptz,
+  legacy_spp_id uuid
+)
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_owner text;
+  v_epoch bigint;
+begin
+  if p_limit < 1 or p_limit > 100 or p_lease_seconds < 30 or p_lease_seconds > 3600 then
+    raise exception 'invalid claim bounds' using errcode = '22023';
+  end if;
+
+  select owner, epoch into v_owner, v_epoch
+  from public.publisher_queue_ownership
+  where source = 'legacy_spp'
+  for update;
+
+  if v_owner <> 'replacement' or v_epoch <> p_expected_epoch then
+    raise exception 'replacement ownership mismatch: owner %, epoch %', v_owner, v_epoch
+      using errcode = '40001';
+  end if;
+
+  return query
+  with candidates as (
+    select d.id
+    from public.publisher_deliveries d
+    join public.publisher_content_items ci on ci.id = d.content_item_id
+    where d.state in ('pending', 'retryable')
+      and coalesce(d.next_attempt_at, ci.scheduled_at) <= p_now
+      and d.attempt_count < d.max_attempts
+      and ci.migration_state in ('native', 'active')
+      and ci.approval_state = 'approved'
+      and ci.publishability = 'publishable'
+    order by coalesce(d.next_attempt_at, ci.scheduled_at), d.id
+    for update of d skip locked
+    limit p_limit
+  ), claimed as (
+    update public.publisher_deliveries d
+    set state = 'leased',
+        attempt_count = d.attempt_count + 1,
+        lease_token = gen_random_uuid(),
+        lease_expires_at = p_now + make_interval(secs => p_lease_seconds),
+        lease_phase = 'pre_dispatch',
+        updated_at = p_now
+    from candidates c
+    where d.id = c.id
+    returning d.*
+  ), attempts as (
+    insert into public.publisher_delivery_attempts (
+      delivery_id, attempt_number, idempotency_key, lease_token, state, claimed_at
+    )
+    select c.id, c.attempt_count,
+      c.idempotency_key || ':attempt:' || c.attempt_count::text,
+      c.lease_token, 'claimed', p_now
+    from claimed c
+    returning delivery_id
+  )
+  select c.id, c.content_item_id, c.platform, c.idempotency_key,
+         c.attempt_count, c.lease_token, c.lease_expires_at,
+         ci.user_id, ci.company_id, ci.content_type, ci.caption, ci.media,
+         ci.scheduled_at, ci.legacy_spp_id
+  from claimed c
+  join attempts a on a.delivery_id = c.id
+  join public.publisher_content_items ci on ci.id = c.content_item_id;
+end;
+$$;
+
+create or replace function public.mark_publisher_dispatch_started(
+  p_delivery_id uuid,
+  p_lease_token uuid,
+  p_request_fingerprint_sha256 text
+)
+returns boolean
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+begin
+  if p_request_fingerprint_sha256 !~ '^[0-9a-f]{64}$' then
+    raise exception 'request fingerprint must be lowercase SHA-256' using errcode = '22023';
+  end if;
+
+  update public.publisher_deliveries
+  set lease_phase = 'dispatch_started', updated_at = statement_timestamp()
+  where id = p_delivery_id and state = 'leased'
+    and lease_token = p_lease_token and lease_phase = 'pre_dispatch'
+    and lease_expires_at > statement_timestamp();
+  if not found then return false; end if;
+
+  update public.publisher_delivery_attempts
+  set state = 'dispatch_started',
+      request_fingerprint_sha256 = p_request_fingerprint_sha256,
+      dispatch_started_at = statement_timestamp()
+  where delivery_id = p_delivery_id and lease_token = p_lease_token and state = 'claimed';
+  return found;
+end;
+$$;
+
+create or replace function public.complete_publisher_delivery(
+  p_delivery_id uuid,
+  p_lease_token uuid,
+  p_platform_post_id text,
+  p_live_url text default null,
+  p_provider_response jsonb default null
+)
+returns boolean
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+begin
+  if nullif(btrim(p_platform_post_id), '') is null then
+    raise exception 'platform post ID is required for success' using errcode = '22023';
+  end if;
+
+  update public.publisher_deliveries
+  set state = 'succeeded', platform_post_id = p_platform_post_id,
+      live_url = p_live_url, published_at = statement_timestamp(),
+      lease_token = null, lease_expires_at = null, lease_phase = null,
+      last_error = null, updated_at = statement_timestamp()
+  where id = p_delivery_id and state = 'leased'
+    and lease_token = p_lease_token and lease_phase = 'dispatch_started';
+  if not found then return false; end if;
+
+  update public.publisher_delivery_attempts
+  set state = 'succeeded', provider_response = p_provider_response,
+      finished_at = statement_timestamp()
+  where delivery_id = p_delivery_id and lease_token = p_lease_token
+    and state = 'dispatch_started';
+  return found;
+end;
+$$;
+
+create or replace function public.retry_publisher_delivery(
+  p_delivery_id uuid,
+  p_lease_token uuid,
+  p_error text,
+  p_next_attempt_at timestamptz
+)
+returns text
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_state text;
+begin
+  update public.publisher_deliveries
+  set state = case when attempt_count >= max_attempts then 'dead_letter' else 'retryable' end,
+      next_attempt_at = case when attempt_count >= max_attempts then null else p_next_attempt_at end,
+      last_error = p_error,
+      lease_token = null, lease_expires_at = null, lease_phase = null,
+      updated_at = statement_timestamp()
+  where id = p_delivery_id and state = 'leased' and lease_token = p_lease_token
+    and lease_phase = 'pre_dispatch'
+  returning state into v_state;
+  if v_state is null then return null; end if;
+
+  update public.publisher_delivery_attempts
+  set state = v_state, error = p_error, finished_at = statement_timestamp()
+  where delivery_id = p_delivery_id and lease_token = p_lease_token
+    and state = 'claimed';
+  return v_state;
+end;
+$$;
+
+create or replace function public.dead_letter_publisher_delivery(
+  p_delivery_id uuid,
+  p_lease_token uuid,
+  p_error text
+)
+returns boolean
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+begin
+  update public.publisher_deliveries
+  set state = 'dead_letter', next_attempt_at = null, last_error = p_error,
+      lease_token = null, lease_expires_at = null, lease_phase = null,
+      updated_at = statement_timestamp()
+  where id = p_delivery_id and state = 'leased' and lease_token = p_lease_token;
+  if not found then return false; end if;
+
+  update public.publisher_delivery_attempts
+  set state = 'dead_letter', error = p_error, finished_at = statement_timestamp()
+  where delivery_id = p_delivery_id and lease_token = p_lease_token
+    and state in ('claimed', 'dispatch_started');
+  return found;
+end;
+$$;
+
+create or replace function public.mark_publisher_verification_required(
+  p_delivery_id uuid,
+  p_lease_token uuid,
+  p_error text
+)
+returns boolean
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+begin
+  update public.publisher_deliveries
+  set state = 'verification_required', next_attempt_at = null, last_error = p_error,
+      lease_token = null, lease_expires_at = null, lease_phase = null,
+      updated_at = statement_timestamp()
+  where id = p_delivery_id and state = 'leased' and lease_token = p_lease_token
+    and lease_phase = 'dispatch_started';
+  if not found then return false; end if;
+
+  update public.publisher_delivery_attempts
+  set state = 'verification_required', error = p_error, finished_at = statement_timestamp()
+  where delivery_id = p_delivery_id and lease_token = p_lease_token
+    and state = 'dispatch_started';
+  return found;
+end;
+$$;
+
+create or replace function public.mark_legacy_spp_dispatch_started(
+  p_post_id uuid,
+  p_lease_token uuid,
+  p_expected_epoch bigint
+)
+returns boolean
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_owner text;
+  v_epoch bigint;
+begin
+  select owner, epoch into v_owner, v_epoch
+  from public.publisher_queue_ownership where source = 'legacy_spp' for update;
+  if v_owner <> 'legacy' or v_epoch <> p_expected_epoch then
+    raise exception 'legacy ownership mismatch: owner %, epoch %', v_owner, v_epoch using errcode = '40001';
+  end if;
+
+  update public.scheduled_posts
+  set publisher_lease_phase = 'dispatch_started', updated_at = statement_timestamp()
+  where id = p_post_id and status = 'publishing'
+    and publisher_lease_token = p_lease_token
+    and publisher_ownership_epoch = p_expected_epoch
+    and publisher_lease_phase = 'pre_dispatch'
+    and publisher_lease_expires_at > statement_timestamp();
+  return found;
+end;
+$$;
+
+create or replace function public.complete_legacy_spp_claim(
+  p_post_id uuid,
+  p_lease_token uuid,
+  p_expected_epoch bigint,
+  p_status text,
+  p_platform_post_ids jsonb default '{}'::jsonb,
+  p_error text default null,
+  p_retry_count integer default null,
+  p_published_at timestamptz default null
+)
+returns boolean
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_owner text;
+  v_epoch bigint;
+begin
+  if p_status not in ('queued', 'published', 'failed', 'cancelled') then
+    raise exception 'invalid legacy completion status' using errcode = '22023';
+  end if;
+  if p_status = 'published' and p_published_at is null then
+    raise exception 'published legacy claim requires published_at' using errcode = '22023';
+  end if;
+
+  select owner, epoch into v_owner, v_epoch
+  from public.publisher_queue_ownership where source = 'legacy_spp' for update;
+  if v_owner <> 'legacy' or v_epoch <> p_expected_epoch then
+    raise exception 'legacy ownership mismatch: owner %, epoch %', v_owner, v_epoch using errcode = '40001';
+  end if;
+
+  update public.scheduled_posts
+  set status = p_status,
+      platform_post_ids = coalesce(p_platform_post_ids, '{}'::jsonb),
+      error = p_error,
+      retry_count = coalesce(p_retry_count, retry_count),
+      published_at = case when p_status = 'published' then p_published_at else published_at end,
+      publisher_lease_token = null, publisher_lease_expires_at = null,
+      publisher_lease_phase = null, publisher_ownership_epoch = null,
+      publisher_verification_required = false,
+      updated_at = statement_timestamp()
+  where id = p_post_id and status = 'publishing'
+    and publisher_lease_token = p_lease_token
+    and publisher_ownership_epoch = p_expected_epoch;
+  return found;
+end;
+$$;
+
+create or replace function public.reap_expired_legacy_spp_leases(
+  p_expected_epoch bigint,
+  p_now timestamptz default statement_timestamp()
+)
+returns table (post_id uuid, verification_required boolean)
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_owner text;
+  v_epoch bigint;
+begin
+  select owner, epoch into v_owner, v_epoch
+  from public.publisher_queue_ownership where source = 'legacy_spp' for update;
+  if v_owner <> 'legacy' or v_epoch <> p_expected_epoch then
+    raise exception 'legacy ownership mismatch: owner %, epoch %', v_owner, v_epoch using errcode = '40001';
+  end if;
+
+  return query
+  with expired as (
+    select sp.id, sp.publisher_lease_phase
+    from public.scheduled_posts sp
+    where sp.status = 'publishing' and sp.publisher_lease_expires_at <= p_now
+      and sp.publisher_ownership_epoch = p_expected_epoch
+    for update skip locked
+  )
+  update public.scheduled_posts sp
+  set status = case when e.publisher_lease_phase = 'dispatch_started' then 'failed' else 'queued' end,
+      error = case when e.publisher_lease_phase = 'dispatch_started'
+        then 'Legacy lease expired after dispatch began; provider reconciliation required'
+        else 'Legacy lease expired before dispatch began' end,
+      publisher_verification_required = (e.publisher_lease_phase = 'dispatch_started'),
+      publisher_lease_token = null, publisher_lease_expires_at = null,
+      publisher_lease_phase = null, publisher_ownership_epoch = null,
+      updated_at = p_now
+  from expired e where sp.id = e.id
+  returning sp.id, sp.publisher_verification_required;
+end;
+$$;
+
+-- Reaps expired leases conservatively. A pre-dispatch crash is safe to retry;
+-- once a provider request may have begun, human/provider reconciliation is
+-- required because these APIs do not provide a reliable idempotency key.
+create or replace function public.reap_expired_publisher_leases(
+  p_now timestamptz default statement_timestamp()
+)
+returns table (delivery_id uuid, new_state text)
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+begin
+  return query
+  with expired as (
+    select d.id, d.lease_token, d.lease_phase,
+      case
+        when d.lease_phase = 'dispatch_started' then 'verification_required'
+        when d.attempt_count >= d.max_attempts then 'dead_letter'
+        else 'retryable'
+      end as target_state
+    from public.publisher_deliveries d
+    where d.state = 'leased' and d.lease_expires_at <= p_now
+    for update skip locked
+  ), attempts as (
+    update public.publisher_delivery_attempts a
+    set state = e.target_state,
+        error = case when e.lease_phase = 'dispatch_started'
+          then 'Lease expired after dispatch began; provider reconciliation required'
+          else 'Lease expired before dispatch began' end,
+        finished_at = p_now
+    from expired e
+    where a.delivery_id = e.id and a.lease_token = e.lease_token
+    returning a.delivery_id
+  ), updated as (
+    update public.publisher_deliveries d
+    set state = e.target_state,
+        next_attempt_at = case when e.target_state = 'retryable' then p_now else null end,
+        last_error = case when e.lease_phase = 'dispatch_started'
+          then 'Lease expired after dispatch began; provider reconciliation required'
+          else 'Lease expired before dispatch began' end,
+        lease_token = null, lease_expires_at = null, lease_phase = null,
+        updated_at = p_now
+    from expired e
+    join attempts a on a.delivery_id = e.id
+    where d.id = e.id
+    returning d.id, d.state
+  )
+  select u.id, u.state from updated u;
+end;
+$$;
+
+create or replace function public.transfer_publisher_queue_ownership(
+  p_expected_epoch bigint,
+  p_cutoff_at timestamptz,
+  p_reconciliation_sha256 text
+)
+returns bigint
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_owner text;
+  v_epoch bigint;
+begin
+  if p_reconciliation_sha256 !~ '^[0-9a-f]{64}$' then
+    raise exception 'reconciliation hash must be lowercase SHA-256' using errcode = '22023';
+  end if;
+
+  select owner, epoch into v_owner, v_epoch
+  from public.publisher_queue_ownership
+  where source = 'legacy_spp'
+  for update;
+
+  if v_owner <> 'legacy' or v_epoch <> p_expected_epoch then
+    raise exception 'ownership transfer mismatch: owner %, epoch %', v_owner, v_epoch
+      using errcode = '40001';
+  end if;
+
+  if exists (select 1 from public.scheduled_posts where status = 'publishing')
+    or exists (select 1 from public.scheduled_posts where publisher_verification_required)
+    or exists (select 1 from public.publisher_deliveries where state in ('leased', 'verification_required')) then
+    raise exception 'ownership transfer requires zero live leases' using errcode = '55000';
+  end if;
+
+  if exists (
+    select 1
+    from public.scheduled_posts sp
+    left join public.publisher_content_items ci on ci.legacy_spp_id = sp.id
+    where sp.status = 'queued'
+      and (
+        ci.id is null
+        or ci.migration_state <> 'migration_frozen'
+        or ci.legacy_payload is distinct from (
+          to_jsonb(sp) - array[
+            'publisher_lease_token', 'publisher_lease_expires_at',
+            'publisher_lease_phase', 'publisher_ownership_epoch',
+            'publisher_claim_count', 'publisher_verification_required'
+          ]
+        )
+      )
+  ) or exists (
+    select 1
+    from public.publisher_content_items ci
+    left join public.scheduled_posts sp on sp.id = ci.legacy_spp_id
+    where ci.legacy_status = 'queued'
+      and (sp.id is null or sp.status <> 'queued')
+  ) then
+    raise exception 'ownership transfer requires an exact fresh reconciliation of the complete queued set'
+      using errcode = '55000';
+  end if;
+
+  update public.publisher_queue_ownership
+  set owner = 'replacement', epoch = epoch + 1, cutoff_at = p_cutoff_at,
+      reconciliation_sha256 = p_reconciliation_sha256,
+      transferred_at = statement_timestamp(), updated_at = statement_timestamp()
+  where source = 'legacy_spp';
+
+  update public.publisher_content_items
+  set migration_state = 'active', updated_at = statement_timestamp()
+  where migration_state = 'migration_frozen' and legacy_status = 'queued';
+
+  update public.publisher_deliveries d
+  set state = 'pending', updated_at = statement_timestamp()
+  from public.publisher_content_items ci
+  where d.content_item_id = ci.id
+    and d.state = 'migration_frozen'
+    and ci.migration_state = 'active';
+
+  insert into public.publisher_audit_log (event_type, actor, details)
+  values ('ownership_transferred', 'cutover', jsonb_build_object(
+    'source', 'legacy_spp', 'from_owner', 'legacy', 'to_owner', 'replacement',
+    'from_epoch', v_epoch, 'to_epoch', v_epoch + 1,
+    'cutoff_at', p_cutoff_at, 'reconciliation_sha256', p_reconciliation_sha256
+  ));
+
+  return v_epoch + 1;
+end;
+$$;
+
+alter table public.publisher_queue_ownership enable row level security;
+alter table public.publisher_content_items enable row level security;
+alter table public.publisher_deliveries enable row level security;
+alter table public.publisher_delivery_attempts enable row level security;
+alter table public.publisher_audit_log enable row level security;
+
+-- This app authenticates users outside Supabase Auth. Publisher data and RPCs
+-- are therefore server-only: no anon/authenticated grants or policies. The
+-- service role is used only by server runtimes and bypasses RLS by design.
+revoke all on table public.publisher_queue_ownership from public, anon, authenticated, service_role;
+revoke all on table public.publisher_content_items from public, anon, authenticated, service_role;
+revoke all on table public.publisher_deliveries from public, anon, authenticated, service_role;
+revoke all on table public.publisher_delivery_attempts from public, anon, authenticated, service_role;
+revoke all on table public.publisher_audit_log from public, anon, authenticated, service_role;
+revoke all on sequence public.publisher_audit_log_id_seq from public, anon, authenticated, service_role;
+
+grant select, insert, update on table public.publisher_queue_ownership to service_role;
+grant select, insert, update on table public.publisher_content_items to service_role;
+grant select, insert, update on table public.publisher_deliveries to service_role;
+grant select, insert, update on table public.publisher_delivery_attempts to service_role;
+grant select, insert on table public.publisher_audit_log to service_role;
+grant usage, select on sequence public.publisher_audit_log_id_seq to service_role;
+grant select, update on table public.scheduled_posts to service_role;
+
+revoke all on function public.protect_legacy_publisher_fields() from public, anon, authenticated, service_role;
+revoke all on function public.prevent_publisher_audit_mutation() from public, anon, authenticated, service_role;
+revoke all on function public.protect_planning_only_delivery() from public, anon, authenticated, service_role;
+revoke all on function public.audit_publisher_delivery_transition() from public, anon, authenticated, service_role;
+revoke all on function public.import_legacy_spp_rows(jsonb) from public, anon, authenticated, service_role;
+revoke all on function public.claim_legacy_spp_posts(bigint, integer, integer, timestamptz) from public, anon, authenticated, service_role;
+revoke all on function public.claim_publisher_deliveries(bigint, integer, integer, timestamptz) from public, anon, authenticated, service_role;
+revoke all on function public.mark_publisher_dispatch_started(uuid, uuid, text) from public, anon, authenticated, service_role;
+revoke all on function public.complete_publisher_delivery(uuid, uuid, text, text, jsonb) from public, anon, authenticated, service_role;
+revoke all on function public.retry_publisher_delivery(uuid, uuid, text, timestamptz) from public, anon, authenticated, service_role;
+revoke all on function public.dead_letter_publisher_delivery(uuid, uuid, text) from public, anon, authenticated, service_role;
+revoke all on function public.mark_publisher_verification_required(uuid, uuid, text) from public, anon, authenticated, service_role;
+revoke all on function public.mark_legacy_spp_dispatch_started(uuid, uuid, bigint) from public, anon, authenticated, service_role;
+revoke all on function public.complete_legacy_spp_claim(uuid, uuid, bigint, text, jsonb, text, integer, timestamptz) from public, anon, authenticated, service_role;
+revoke all on function public.reap_expired_legacy_spp_leases(bigint, timestamptz) from public, anon, authenticated, service_role;
+revoke all on function public.reap_expired_publisher_leases(timestamptz) from public, anon, authenticated, service_role;
+revoke all on function public.transfer_publisher_queue_ownership(bigint, timestamptz, text) from public, anon, authenticated, service_role;
+
+grant execute on function public.import_legacy_spp_rows(jsonb) to service_role;
+grant execute on function public.claim_legacy_spp_posts(bigint, integer, integer, timestamptz) to service_role;
+grant execute on function public.claim_publisher_deliveries(bigint, integer, integer, timestamptz) to service_role;
+grant execute on function public.mark_publisher_dispatch_started(uuid, uuid, text) to service_role;
+grant execute on function public.complete_publisher_delivery(uuid, uuid, text, text, jsonb) to service_role;
+grant execute on function public.retry_publisher_delivery(uuid, uuid, text, timestamptz) to service_role;
+grant execute on function public.dead_letter_publisher_delivery(uuid, uuid, text) to service_role;
+grant execute on function public.mark_publisher_verification_required(uuid, uuid, text) to service_role;
+grant execute on function public.mark_legacy_spp_dispatch_started(uuid, uuid, bigint) to service_role;
+grant execute on function public.complete_legacy_spp_claim(uuid, uuid, bigint, text, jsonb, text, integer, timestamptz) to service_role;
+grant execute on function public.reap_expired_legacy_spp_leases(bigint, timestamptz) to service_role;
+grant execute on function public.reap_expired_publisher_leases(timestamptz) to service_role;
+grant execute on function public.transfer_publisher_queue_ownership(bigint, timestamptz, text) to service_role;
