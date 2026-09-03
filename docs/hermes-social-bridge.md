@@ -138,25 +138,41 @@ IDs, or the protected schedule ID.
 
 After PR approval, and only in a maintenance window:
 
-1. Confirm the deployed code contains the replacement publisher and matches the
-   reviewed commit. The rolled-back deployment does not satisfy this gate.
+1. Keep production manually pinned to rolled-back deployment
+   `AB86c2PELMezMDjGJjqGo3W8YbLn` during preparation. Disable or avoid any
+   automatic promotion from GitHub `main`; no reviewed commit may become the
+   production deployment merely because these PRs merge.
 2. Back up the database and record current ownership, epoch, queue counts, live
    leases, verification-required rows, and the reconciliation attestation.
-3. Apply `20260903061000_create_hermes_social_bridge.sql` once. Run database
-   advisors and verify the service-role-only grants before adding secrets.
-4. Deploy with a newly generated 32-byte-or-longer
+3. Apply and verify the replacement publisher base migration
+   `20260903031251_create_publisher_queue_base_sql.sql` first. Only after it
+   succeeds, apply `20260903061000_create_hermes_social_bridge.sql`. Run the
+   complete pgTAP suite and database advisors, and verify the service-role-only
+   grants before continuing.
+4. Manually deploy the reviewed replacement-publisher application commit, but
+   initially set `PUBLISHER_DISPATCH_ENABLED=false`. Confirm the deployed SHA
+   and environment explicitly; the rolled-back deployment cannot run this
+   bridge and must not be auto-promoted over the reviewed deployment.
+5. Configure a newly generated 32-byte-or-longer
    `HERMES_SOCIAL_BRIDGE_HMAC_SECRET` and a versioned
    `HERMES_SOCIAL_BRIDGE_KEY_ID`, plus the reviewed immutable
    `HERMES_SOCIAL_BRIDGE_USER_ID` and `HERMES_SOCIAL_BRIDGE_COMPANY_ID` scope.
    Provision the same secret only to the
    deterministic Hermes caller, never to a free-form agent prompt or log sink.
-5. Keep publisher dispatch disabled. Run signed GET smoke tests and a synthetic
-   or non-publishing mutation test approved for the environment.
-6. Separately approve and execute the existing replacement ownership transfer
-   runbook. Update the configured epoch to the returned epoch.
-7. Enable the replacement dispatch gate only after queue reconciliation and
-   operator sign-off. Observe claims and per-platform outcomes before scheduling
-   a real item through Hermes.
+   Keep the Hermes MCP bridge inactive and unavailable to agents at this stage.
+6. With replacement dispatch still disabled, run signed GET smoke tests and a
+   synthetic or explicitly non-publishing test approved for the environment.
+7. In the cutover window, disable the old Social Post Pro publishing cron and
+   prove it can no longer claim work. Complete the existing zero-live-lease and
+   reconciliation checks, then execute the single atomic
+   `transfer_publisher_queue_ownership` operation. Record its returned epoch and
+   update `PUBLISHER_OWNERSHIP_EPOCH` before any replacement claim is allowed.
+8. Reconcile the transferred queue again. Only after operator sign-off, enable
+   `PUBLISHER_DISPATCH_ENABLED=true` and observe replacement claims and
+   per-platform outcomes without activating Hermes scheduling.
+9. Activate the Hermes MCP bridge last. Begin with signed preview/status calls,
+   confirm the seven-line identity-bound HMAC on both sides, and schedule a real
+   approved item only after a separate human go/no-go.
 
 Rollback is operational, not destructive: disable Hermes ingress by removing or
 rotating its key, leave dispatch gated, and soft-cancel affected Hermes schedules
