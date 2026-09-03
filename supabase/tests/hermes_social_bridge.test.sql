@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(43);
+select plan(45);
 
 select has_table('public', 'hermes_social_schedules', 'Hermes schedule links exist');
 select has_table('public', 'hermes_social_schedule_requests', 'Hermes mutation identities exist');
@@ -8,13 +8,13 @@ select ok(not has_table_privilege('anon', 'public.hermes_social_schedules', 'sel
 select ok(not has_table_privilege('authenticated', 'public.hermes_social_schedules', 'select'), 'authenticated cannot read Hermes schedules');
 select ok(not has_table_privilege('service_role', 'public.hermes_social_schedules', 'insert'), 'service role cannot bypass adoption RPC');
 select ok(not has_table_privilege('service_role', 'public.hermes_social_schedule_requests', 'update'), 'service role cannot rewrite request audit');
-select ok(not has_function_privilege('anon', 'public.hermes_adopt_social_schedule(uuid,text,bigint,text,uuid,timestamptz,text,text,text)', 'execute'), 'anon cannot adopt');
-select ok(not has_function_privilege('authenticated', 'public.hermes_cancel_social_schedule(uuid,text,uuid,bigint,text,text,text)', 'execute'), 'authenticated cannot cancel');
-select ok(has_function_privilege('service_role', 'public.hermes_restore_social_schedule(uuid,text,uuid,bigint,text,timestamptz,text)', 'execute'), 'service role can restore through RPC');
+select ok(not has_function_privilege('anon', 'public.hermes_adopt_social_schedule(uuid,text,bigint,text,text,uuid,timestamptz,text,text,text)', 'execute'), 'anon cannot adopt');
+select ok(not has_function_privilege('authenticated', 'public.hermes_cancel_social_schedule(uuid,text,uuid,bigint,text,text,text,text)', 'execute'), 'authenticated cannot cancel');
+select ok(has_function_privilege('service_role', 'public.hermes_restore_social_schedule(uuid,text,uuid,bigint,text,text,timestamptz,text)', 'execute'), 'service role can restore through RPC');
 
 insert into public.companies(user_id,id,name) values
   ('hermes-user','hermes-company','Synthetic Hermes Tenant'),
-  ('other-user','other-company','Synthetic Other Tenant');
+  ('other-user','hermes-company','Synthetic Other Tenant With Same Slug');
 
 update public.publisher_queue_ownership
 set owner='replacement', epoch=2, cutoff_at=statement_timestamp(),
@@ -53,45 +53,45 @@ insert into public.publisher_deliveries(
   ('30000000-0000-4000-8000-000000000003','20000000-0000-4000-8000-000000000001','linkedin','succeeded','legacy-test:linkedin',null,'synthetic-linkedin-id',statement_timestamp());
 
 select is(
-  (public.hermes_preview_legacy_social_schedule('hermes-company','10000000-0000-4000-8000-000000000001')->>'approvalState'),
+  (public.hermes_preview_legacy_social_schedule('hermes-user','hermes-company','10000000-0000-4000-8000-000000000001')->>'approvalState'),
   'approved','preview exposes approval state'
 );
 select is(
-  (public.hermes_preview_legacy_social_schedule('hermes-company','10000000-0000-4000-8000-000000000001')->>'contentFingerprintSha256'),
+  (public.hermes_preview_legacy_social_schedule('hermes-user','hermes-company','10000000-0000-4000-8000-000000000001')->>'contentFingerprintSha256'),
   repeat('b',64),'preview exposes immutable content fingerprint'
 );
 select ok(
-  (public.hermes_preview_legacy_social_schedule('hermes-company','10000000-0000-4000-8000-000000000001')->>'safeToAdopt')::boolean,
+  (public.hermes_preview_legacy_social_schedule('hermes-user','hermes-company','10000000-0000-4000-8000-000000000001')->>'safeToAdopt')::boolean,
   'preview reports safe candidate'
 );
-select is(public.hermes_preview_legacy_social_schedule('other-company','10000000-0000-4000-8000-000000000001'),null::jsonb,'wrong tenant cannot preview candidate');
+select is(public.hermes_preview_legacy_social_schedule('other-user','hermes-company','10000000-0000-4000-8000-000000000001'),null::jsonb,'same company slug under another user cannot preview candidate');
 
 select throws_ok(
   $$select public.hermes_adopt_social_schedule(
-    '40000000-0000-4000-8000-000000000001',repeat('c',64),1,'hermes-company',
+    '40000000-0000-4000-8000-000000000001',repeat('c',64),1,'hermes-user','hermes-company',
     '10000000-0000-4000-8000-000000000001',statement_timestamp()+interval '2 days',
     'approval:test',repeat('b',64),'hermes:test')$$,
   '40001','Hermes ownership mismatch','wrong ownership epoch fails closed'
 );
 select throws_ok(
   $$select public.hermes_adopt_social_schedule(
-    '40000000-0000-4000-8000-000000000002',repeat('c',64),2,'hermes-company',
+    '40000000-0000-4000-8000-000000000002',repeat('c',64),2,'hermes-user','hermes-company',
     '10000000-0000-4000-8000-000000000001',statement_timestamp()+interval '2 days',
     'approval:test',repeat('d',64),'hermes:test')$$,
   '55000','approved imported item is not adoptable','changed content fingerprint fails closed'
 );
 select throws_ok(
   $$select public.hermes_adopt_social_schedule(
-    '40000000-0000-4000-8000-000000000003',repeat('c',64),2,'other-company',
+    '40000000-0000-4000-8000-000000000003',repeat('c',64),2,'other-user','hermes-company',
     '10000000-0000-4000-8000-000000000001',statement_timestamp()+interval '2 days',
     'approval:test',repeat('b',64),'hermes:test')$$,
-  'P0002','approved imported item not found','wrong tenant cannot adopt candidate'
+  'P0002','approved imported item not found','same company slug under another user cannot adopt candidate'
 );
 update public.publisher_deliveries set state='dead_letter'
 where id='30000000-0000-4000-8000-000000000002';
 select throws_ok(
   $$select public.hermes_adopt_social_schedule(
-    '40000000-0000-4000-8000-000000000005',repeat('5',64),2,'hermes-company',
+    '40000000-0000-4000-8000-000000000005',repeat('5',64),2,'hermes-user','hermes-company',
     '10000000-0000-4000-8000-000000000001',statement_timestamp()+interval '2 days',
     'approval:test',repeat('b',64),'hermes:test')$$,
   '55000','legacy item has a non-adoptable delivery state','terminal non-success source state cannot be reset by adoption'
@@ -107,7 +107,7 @@ insert into public.publisher_delivery_attempts(
 );
 select throws_ok(
   $$select public.hermes_adopt_social_schedule(
-    '40000000-0000-4000-8000-000000000006',repeat('6',64),2,'hermes-company',
+    '40000000-0000-4000-8000-000000000006',repeat('6',64),2,'hermes-user','hermes-company',
     '10000000-0000-4000-8000-000000000001',statement_timestamp()+interval '2 days',
     'approval:test',repeat('b',64),'hermes:test')$$,
   '55000','legacy item has historical dispatch ambiguity','cleared delivery state cannot hide a historical dispatch start'
@@ -116,7 +116,7 @@ delete from public.publisher_delivery_attempts where idempotency_key='synthetic-
 
 create temporary table adoption_result as
 select public.hermes_adopt_social_schedule(
-  '40000000-0000-4000-8000-000000000010',repeat('e',64),2,'hermes-company',
+  '40000000-0000-4000-8000-000000000010',repeat('e',64),2,'hermes-user','hermes-company',
   '10000000-0000-4000-8000-000000000001',statement_timestamp()+interval '2 days',
   'approval:test',repeat('b',64),'hermes:test') result;
 
@@ -129,16 +129,26 @@ select is((select count(*)::integer from public.publisher_deliveries where conte
 select is((select count(*)::integer from public.hermes_social_schedule_requests where request_id='40000000-0000-4000-8000-000000000010'),1,'mutation request ID is unique and audited');
 select is(
   (public.hermes_adopt_social_schedule(
-    '40000000-0000-4000-8000-000000000010',repeat('e',64),2,'hermes-company',
+    '40000000-0000-4000-8000-000000000010',repeat('e',64),2,'hermes-user','hermes-company',
     '10000000-0000-4000-8000-000000000001',statement_timestamp()+interval '2 days',
     'approval:test',repeat('b',64),'hermes:test')->>'replayed'),
   'true','exact request replay returns the stored response without another delivery set'
 );
 select is((select count(*)::integer from public.hermes_social_schedules),1,'exact replay cannot duplicate a schedule');
+select is(
+  public.hermes_get_social_schedule((select id from public.hermes_social_schedules),'other-user','hermes-company'),
+  null::jsonb,'same company slug under another user cannot read schedule status'
+);
+select throws_ok(
+  $$select public.hermes_cancel_social_schedule(
+    '40000000-0000-4000-8000-000000000017',repeat('9',64),
+    (select id from public.hermes_social_schedules),2,'other-user','hermes-company','cross tenant','hermes:test')$$,
+  'P0002','Hermes schedule not found','same company slug under another user cannot mutate schedule'
+);
 select throws_ok(
   $$select public.hermes_cancel_social_schedule(
     '40000000-0000-4000-8000-000000000010',repeat('f',64),
-    (select id from public.hermes_social_schedules),2,'hermes-company','different request','hermes:test')$$,
+    (select id from public.hermes_social_schedules),2,'hermes-user','hermes-company','different request','hermes:test')$$,
   '23505','Hermes request ID was already used with different content','same request ID with changed digest conflicts'
 );
 
@@ -148,7 +158,7 @@ where content_item_id=(select target_content_item_id from public.hermes_social_s
 select is(
   (public.hermes_cancel_social_schedule(
     '40000000-0000-4000-8000-000000000011',repeat('1',64),
-    (select id from public.hermes_social_schedules),2,'hermes-company','operator requested','hermes:test')->>'state'),
+    (select id from public.hermes_social_schedules),2,'hermes-user','hermes-company','operator requested','hermes:test')->>'state'),
   'cancelled','soft cancellation succeeds'
 );
 select is((select count(*)::integer from public.publisher_deliveries where content_item_id=(select target_content_item_id from public.hermes_social_schedules) and state='cancelled'),1,'cancel marks only pending/retryable native deliveries');
@@ -160,7 +170,7 @@ where content_item_id=(select target_content_item_id from public.hermes_social_s
 select throws_ok(
   $$select public.hermes_restore_social_schedule(
     '40000000-0000-4000-8000-000000000015',repeat('7',64),
-    (select id from public.hermes_social_schedules),2,'hermes-company',
+    (select id from public.hermes_social_schedules),2,'hermes-user','hermes-company',
     statement_timestamp()+interval '3 days','hermes:test')$$,
   '55000','schedule has no restorable deliveries','restore requires an actual cancelled delivery'
 );
@@ -170,7 +180,7 @@ where content_item_id=(select target_content_item_id from public.hermes_social_s
 select is(
   (public.hermes_restore_social_schedule(
     '40000000-0000-4000-8000-000000000012',repeat('2',64),
-    (select id from public.hermes_social_schedules),2,'hermes-company',
+    (select id from public.hermes_social_schedules),2,'hermes-user','hermes-company',
     statement_timestamp()+interval '3 days','hermes:test')->>'state'),
   'active','cancelled schedule can be safely restored'
 );
@@ -182,7 +192,7 @@ where content_item_id=(select target_content_item_id from public.hermes_social_s
 select throws_ok(
   $$select public.hermes_cancel_social_schedule(
     '40000000-0000-4000-8000-000000000016',repeat('8',64),
-    (select id from public.hermes_social_schedules),2,'hermes-company','terminal test','hermes:test')$$,
+    (select id from public.hermes_social_schedules),2,'hermes-user','hermes-company','terminal test','hermes:test')$$,
   '55000','schedule has no cancellable deliveries','fully terminal schedule cannot be misleadingly cancelled'
 );
 update public.publisher_deliveries set state='pending',next_attempt_at=statement_timestamp()+interval '3 days'
@@ -194,7 +204,7 @@ where content_item_id=(select target_content_item_id from public.hermes_social_s
 select throws_ok(
   $$select public.hermes_cancel_social_schedule(
     '40000000-0000-4000-8000-000000000013',repeat('3',64),
-    (select id from public.hermes_social_schedules),2,'hermes-company','race test','hermes:test')$$,
+    (select id from public.hermes_social_schedules),2,'hermes-user','hermes-company','race test','hermes:test')$$,
   '55000','schedule has a live lease or ambiguous dispatch','cancellation loses safely to a live publisher lease'
 );
 select is((select state from public.hermes_social_schedules),'active','failed racing cancellation leaves schedule active');
@@ -205,7 +215,7 @@ where content_item_id=(select target_content_item_id from public.hermes_social_s
 select throws_ok(
   $$select public.hermes_cancel_social_schedule(
     '40000000-0000-4000-8000-000000000014',repeat('4',64),
-    (select id from public.hermes_social_schedules),2,'hermes-company','ambiguity test','hermes:test')$$,
+    (select id from public.hermes_social_schedules),2,'hermes-user','hermes-company','ambiguity test','hermes:test')$$,
   '55000','schedule has a live lease or ambiguous dispatch','ambiguous provider outcome is preserved and blocks cancellation'
 );
 select is((select state from public.publisher_deliveries where content_item_id=(select target_content_item_id from public.hermes_social_schedules) and platform='instagram'),'verification_required','ambiguous delivery remains untouched');

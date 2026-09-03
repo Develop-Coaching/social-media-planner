@@ -118,6 +118,7 @@ $$;
 
 create or replace function publisher_private.hermes_schedule_result(
   p_schedule_id uuid,
+  p_user_id text,
   p_company_id text
 )
 returns jsonb
@@ -131,7 +132,7 @@ declare
 begin
   select * into v_schedule
   from public.hermes_social_schedules s
-  where s.id = p_schedule_id and s.company_id = p_company_id;
+  where s.id = p_schedule_id and s.user_id = p_user_id and s.company_id = p_company_id;
   if not found then return null; end if;
 
   return jsonb_build_object(
@@ -205,6 +206,7 @@ end;
 $$;
 
 create or replace function publisher_private.hermes_preview_legacy_social_schedule(
+  p_user_id text,
   p_company_id text,
   p_legacy_spp_id uuid
 )
@@ -219,7 +221,8 @@ declare
 begin
   select * into v_content
   from public.publisher_content_items ci
-  where ci.company_id = p_company_id and ci.legacy_spp_id = p_legacy_spp_id;
+  where ci.user_id = p_user_id and ci.company_id = p_company_id
+    and ci.legacy_spp_id = p_legacy_spp_id;
   if not found then return null; end if;
 
   return jsonb_build_object(
@@ -268,6 +271,7 @@ $$;
 
 create or replace function publisher_private.hermes_get_social_schedule(
   p_schedule_id uuid,
+  p_user_id text,
   p_company_id text
 )
 returns jsonb
@@ -276,13 +280,14 @@ stable
 security definer
 set search_path = ''
 as $$
-  select publisher_private.hermes_schedule_result(p_schedule_id, p_company_id)
+  select publisher_private.hermes_schedule_result(p_schedule_id, p_user_id, p_company_id)
 $$;
 
 create or replace function publisher_private.hermes_adopt_social_schedule(
   p_request_id uuid,
   p_request_fingerprint_sha256 text,
   p_expected_epoch bigint,
+  p_user_id text,
   p_company_id text,
   p_legacy_spp_id uuid,
   p_scheduled_at timestamptz,
@@ -310,12 +315,12 @@ begin
     raise exception 'protected schedule cannot be used by the Hermes bridge' using errcode = '42501';
   end if;
 
-  select user_id into strict v_source.user_id
-  from public.companies where id = p_company_id;
+  perform 1 from public.companies where user_id = p_user_id and id = p_company_id;
+  if not found then raise exception 'configured Hermes tenant not found' using errcode = 'P0002'; end if;
 
   v_replay := publisher_private.hermes_reserve_request(
     p_request_id, 'adopt', p_request_fingerprint_sha256,
-    v_source.user_id, p_company_id, v_actor, v_approval);
+    p_user_id, p_company_id, v_actor, v_approval);
   if v_replay is not null then return v_replay; end if;
 
   if p_scheduled_at is null or p_scheduled_at <= statement_timestamp()
@@ -332,7 +337,7 @@ begin
 
   select * into v_source
   from public.publisher_content_items ci
-  where ci.user_id = v_source.user_id and ci.company_id = p_company_id
+  where ci.user_id = p_user_id and ci.company_id = p_company_id
     and ci.legacy_spp_id = p_legacy_spp_id
   for update;
   if not found then raise exception 'approved imported item not found' using errcode = 'P0002'; end if;
@@ -436,7 +441,7 @@ begin
     )
   );
 
-  v_result := publisher_private.hermes_schedule_result(v_schedule_id, p_company_id)
+  v_result := publisher_private.hermes_schedule_result(v_schedule_id, p_user_id, p_company_id)
     || jsonb_build_object('replayed', false);
   update public.hermes_social_schedule_requests
   set schedule_id = v_schedule_id, response = v_result
@@ -450,6 +455,7 @@ create or replace function publisher_private.hermes_cancel_social_schedule(
   p_request_fingerprint_sha256 text,
   p_schedule_id uuid,
   p_expected_epoch bigint,
+  p_user_id text,
   p_company_id text,
   p_reason text,
   p_actor text
@@ -469,7 +475,7 @@ declare
   v_reason text := publisher_private.assert_hermes_text(p_reason, 'cancellation reason', 512);
 begin
   select * into v_schedule from public.hermes_social_schedules s
-  where s.id = p_schedule_id and s.company_id = p_company_id;
+  where s.id = p_schedule_id and s.user_id = p_user_id and s.company_id = p_company_id;
   if not found then raise exception 'Hermes schedule not found' using errcode = 'P0002'; end if;
 
   v_replay := publisher_private.hermes_reserve_request(
@@ -485,7 +491,7 @@ begin
   end if;
 
   select * into v_schedule from public.hermes_social_schedules s
-  where s.id = p_schedule_id and s.company_id = p_company_id for update;
+  where s.id = p_schedule_id and s.user_id = p_user_id and s.company_id = p_company_id for update;
   if v_schedule.state <> 'active' then
     raise exception 'Hermes schedule is not active' using errcode = '55000';
   end if;
@@ -519,7 +525,7 @@ begin
     jsonb_build_object('schedule_id', p_schedule_id, 'reason', v_reason,
       'request_id', p_request_id, 'request_fingerprint_sha256', p_request_fingerprint_sha256)
   );
-  v_result := publisher_private.hermes_schedule_result(p_schedule_id, p_company_id)
+  v_result := publisher_private.hermes_schedule_result(p_schedule_id, p_user_id, p_company_id)
     || jsonb_build_object('replayed', false);
   update public.hermes_social_schedule_requests set schedule_id = p_schedule_id, response = v_result
   where request_id = p_request_id;
@@ -532,6 +538,7 @@ create or replace function publisher_private.hermes_restore_social_schedule(
   p_request_fingerprint_sha256 text,
   p_schedule_id uuid,
   p_expected_epoch bigint,
+  p_user_id text,
   p_company_id text,
   p_scheduled_at timestamptz,
   p_actor text
@@ -550,7 +557,7 @@ declare
   v_actor text := publisher_private.assert_hermes_text(p_actor, 'actor', 128);
 begin
   select * into v_schedule from public.hermes_social_schedules s
-  where s.id = p_schedule_id and s.company_id = p_company_id;
+  where s.id = p_schedule_id and s.user_id = p_user_id and s.company_id = p_company_id;
   if not found then raise exception 'Hermes schedule not found' using errcode = 'P0002'; end if;
 
   v_replay := publisher_private.hermes_reserve_request(
@@ -570,7 +577,7 @@ begin
   end if;
 
   select * into v_schedule from public.hermes_social_schedules s
-  where s.id = p_schedule_id and s.company_id = p_company_id for update;
+  where s.id = p_schedule_id and s.user_id = p_user_id and s.company_id = p_company_id for update;
   if v_schedule.state <> 'cancelled' then
     raise exception 'Hermes schedule is not cancelled' using errcode = '55000';
   end if;
@@ -602,7 +609,7 @@ begin
     jsonb_build_object('schedule_id', p_schedule_id, 'scheduled_at', p_scheduled_at,
       'request_id', p_request_id, 'request_fingerprint_sha256', p_request_fingerprint_sha256)
   );
-  v_result := publisher_private.hermes_schedule_result(p_schedule_id, p_company_id)
+  v_result := publisher_private.hermes_schedule_result(p_schedule_id, p_user_id, p_company_id)
     || jsonb_build_object('replayed', false);
   update public.hermes_social_schedule_requests set schedule_id = p_schedule_id, response = v_result
   where request_id = p_request_id;
@@ -612,36 +619,36 @@ $$;
 
 -- Narrow Data API wrappers. The caller check is inherited from the publisher
 -- base migration and only service_role receives EXECUTE.
-create or replace function public.hermes_preview_legacy_social_schedule(p_company_id text,p_legacy_spp_id uuid)
+create or replace function public.hermes_preview_legacy_social_schedule(p_user_id text,p_company_id text,p_legacy_spp_id uuid)
 returns jsonb language plpgsql security invoker set search_path = '' as $$
-begin perform publisher_private.assert_service_caller(); return publisher_private.hermes_preview_legacy_social_schedule(p_company_id,p_legacy_spp_id); end $$;
+begin perform publisher_private.assert_service_caller(); return publisher_private.hermes_preview_legacy_social_schedule(p_user_id,p_company_id,p_legacy_spp_id); end $$;
 
-create or replace function public.hermes_get_social_schedule(p_schedule_id uuid,p_company_id text)
+create or replace function public.hermes_get_social_schedule(p_schedule_id uuid,p_user_id text,p_company_id text)
 returns jsonb language plpgsql security invoker set search_path = '' as $$
-begin perform publisher_private.assert_service_caller(); return publisher_private.hermes_get_social_schedule(p_schedule_id,p_company_id); end $$;
+begin perform publisher_private.assert_service_caller(); return publisher_private.hermes_get_social_schedule(p_schedule_id,p_user_id,p_company_id); end $$;
 
-create or replace function public.hermes_adopt_social_schedule(p_request_id uuid,p_request_fingerprint_sha256 text,p_expected_epoch bigint,p_company_id text,p_legacy_spp_id uuid,p_scheduled_at timestamptz,p_approval_reference text,p_expected_content_sha256 text,p_actor text)
+create or replace function public.hermes_adopt_social_schedule(p_request_id uuid,p_request_fingerprint_sha256 text,p_expected_epoch bigint,p_user_id text,p_company_id text,p_legacy_spp_id uuid,p_scheduled_at timestamptz,p_approval_reference text,p_expected_content_sha256 text,p_actor text)
 returns jsonb language plpgsql security invoker set search_path = '' as $$
-begin perform publisher_private.assert_service_caller(); return publisher_private.hermes_adopt_social_schedule(p_request_id,p_request_fingerprint_sha256,p_expected_epoch,p_company_id,p_legacy_spp_id,p_scheduled_at,p_approval_reference,p_expected_content_sha256,p_actor); end $$;
+begin perform publisher_private.assert_service_caller(); return publisher_private.hermes_adopt_social_schedule(p_request_id,p_request_fingerprint_sha256,p_expected_epoch,p_user_id,p_company_id,p_legacy_spp_id,p_scheduled_at,p_approval_reference,p_expected_content_sha256,p_actor); end $$;
 
-create or replace function public.hermes_cancel_social_schedule(p_request_id uuid,p_request_fingerprint_sha256 text,p_schedule_id uuid,p_expected_epoch bigint,p_company_id text,p_reason text,p_actor text)
+create or replace function public.hermes_cancel_social_schedule(p_request_id uuid,p_request_fingerprint_sha256 text,p_schedule_id uuid,p_expected_epoch bigint,p_user_id text,p_company_id text,p_reason text,p_actor text)
 returns jsonb language plpgsql security invoker set search_path = '' as $$
-begin perform publisher_private.assert_service_caller(); return publisher_private.hermes_cancel_social_schedule(p_request_id,p_request_fingerprint_sha256,p_schedule_id,p_expected_epoch,p_company_id,p_reason,p_actor); end $$;
+begin perform publisher_private.assert_service_caller(); return publisher_private.hermes_cancel_social_schedule(p_request_id,p_request_fingerprint_sha256,p_schedule_id,p_expected_epoch,p_user_id,p_company_id,p_reason,p_actor); end $$;
 
-create or replace function public.hermes_restore_social_schedule(p_request_id uuid,p_request_fingerprint_sha256 text,p_schedule_id uuid,p_expected_epoch bigint,p_company_id text,p_scheduled_at timestamptz,p_actor text)
+create or replace function public.hermes_restore_social_schedule(p_request_id uuid,p_request_fingerprint_sha256 text,p_schedule_id uuid,p_expected_epoch bigint,p_user_id text,p_company_id text,p_scheduled_at timestamptz,p_actor text)
 returns jsonb language plpgsql security invoker set search_path = '' as $$
-begin perform publisher_private.assert_service_caller(); return publisher_private.hermes_restore_social_schedule(p_request_id,p_request_fingerprint_sha256,p_schedule_id,p_expected_epoch,p_company_id,p_scheduled_at,p_actor); end $$;
+begin perform publisher_private.assert_service_caller(); return publisher_private.hermes_restore_social_schedule(p_request_id,p_request_fingerprint_sha256,p_schedule_id,p_expected_epoch,p_user_id,p_company_id,p_scheduled_at,p_actor); end $$;
 
-revoke all on function public.hermes_preview_legacy_social_schedule(text,uuid) from public,anon,authenticated,service_role;
-revoke all on function public.hermes_get_social_schedule(uuid,text) from public,anon,authenticated,service_role;
-revoke all on function public.hermes_adopt_social_schedule(uuid,text,bigint,text,uuid,timestamptz,text,text,text) from public,anon,authenticated,service_role;
-revoke all on function public.hermes_cancel_social_schedule(uuid,text,uuid,bigint,text,text,text) from public,anon,authenticated,service_role;
-revoke all on function public.hermes_restore_social_schedule(uuid,text,uuid,bigint,text,timestamptz,text) from public,anon,authenticated,service_role;
-grant execute on function public.hermes_preview_legacy_social_schedule(text,uuid) to service_role;
-grant execute on function public.hermes_get_social_schedule(uuid,text) to service_role;
-grant execute on function public.hermes_adopt_social_schedule(uuid,text,bigint,text,uuid,timestamptz,text,text,text) to service_role;
-grant execute on function public.hermes_cancel_social_schedule(uuid,text,uuid,bigint,text,text,text) to service_role;
-grant execute on function public.hermes_restore_social_schedule(uuid,text,uuid,bigint,text,timestamptz,text) to service_role;
+revoke all on function public.hermes_preview_legacy_social_schedule(text,text,uuid) from public,anon,authenticated,service_role;
+revoke all on function public.hermes_get_social_schedule(uuid,text,text) from public,anon,authenticated,service_role;
+revoke all on function public.hermes_adopt_social_schedule(uuid,text,bigint,text,text,uuid,timestamptz,text,text,text) from public,anon,authenticated,service_role;
+revoke all on function public.hermes_cancel_social_schedule(uuid,text,uuid,bigint,text,text,text,text) from public,anon,authenticated,service_role;
+revoke all on function public.hermes_restore_social_schedule(uuid,text,uuid,bigint,text,text,timestamptz,text) from public,anon,authenticated,service_role;
+grant execute on function public.hermes_preview_legacy_social_schedule(text,text,uuid) to service_role;
+grant execute on function public.hermes_get_social_schedule(uuid,text,text) to service_role;
+grant execute on function public.hermes_adopt_social_schedule(uuid,text,bigint,text,text,uuid,timestamptz,text,text,text) to service_role;
+grant execute on function public.hermes_cancel_social_schedule(uuid,text,uuid,bigint,text,text,text,text) to service_role;
+grant execute on function public.hermes_restore_social_schedule(uuid,text,uuid,bigint,text,text,timestamptz,text) to service_role;
 
 revoke all on all functions in schema publisher_private from public,anon,authenticated,service_role;
 grant usage on schema publisher_private to service_role;

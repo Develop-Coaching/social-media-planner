@@ -41,7 +41,7 @@ function timestamp(value: unknown): string {
 
 export function validateAdoptBody(value: unknown) {
   const body = record(value);
-  exactKeys(body, ["expectedEpoch", "companyId", "legacySppId", "scheduledAt", "approvalReference", "expectedContentSha256"]);
+  exactKeys(body, ["expectedEpoch", "legacySppId", "scheduledAt", "approvalReference", "expectedContentSha256"]);
   const legacySppId = text(body.legacySppId, "legacySppId", 36);
   const expectedContentSha256 = text(body.expectedContentSha256, "expectedContentSha256", 64);
   if (!UUID_RE.test(legacySppId) || !SHA256_RE.test(expectedContentSha256)) {
@@ -49,7 +49,6 @@ export function validateAdoptBody(value: unknown) {
   }
   return {
     expectedEpoch: epoch(body.expectedEpoch),
-    companyId: text(body.companyId, "companyId", 256),
     legacySppId,
     scheduledAt: timestamp(body.scheduledAt),
     approvalReference: text(body.approvalReference, "approvalReference", 256),
@@ -59,20 +58,18 @@ export function validateAdoptBody(value: unknown) {
 
 export function validateCancelBody(value: unknown) {
   const body = record(value);
-  exactKeys(body, ["expectedEpoch", "companyId", "reason"]);
+  exactKeys(body, ["expectedEpoch", "reason"]);
   return {
     expectedEpoch: epoch(body.expectedEpoch),
-    companyId: text(body.companyId, "companyId", 256),
     reason: text(body.reason, "reason", 512),
   };
 }
 
 export function validateRestoreBody(value: unknown) {
   const body = record(value);
-  exactKeys(body, ["expectedEpoch", "companyId", "scheduledAt"]);
+  exactKeys(body, ["expectedEpoch", "scheduledAt"]);
   return {
     expectedEpoch: epoch(body.expectedEpoch),
-    companyId: text(body.companyId, "companyId", 256),
     scheduledAt: timestamp(body.scheduledAt),
   };
 }

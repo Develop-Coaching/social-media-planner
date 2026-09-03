@@ -7,11 +7,9 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest, context: { params: Promise<{ scheduleId: string }> }) {
   try {
-    await verifyHermesRequest(request);
-    const companyId = request.nextUrl.searchParams.get("companyId")?.trim();
-    if (!companyId) return jsonNoStore({ error: "companyId is required" }, 400);
+    const verified = await verifyHermesRequest(request);
     const { scheduleId } = await context.params;
-    const result = await getHermesSchedule(companyId, scheduleId);
+    const result = await getHermesSchedule(verified, scheduleId);
     return result ? jsonNoStore(result) : jsonNoStore({ error: "Hermes schedule not found" }, 404);
   } catch (error) {
     return hermesErrorResponse(error);

@@ -23,29 +23,33 @@ async function rpc<T>(name: string, args: Record<string, unknown>): Promise<T> {
   return data as T;
 }
 
-export function previewLegacySchedule(companyId: string, legacySppId: string) {
+export function previewLegacySchedule(identity: RequestIdentity, legacySppId: string) {
   return rpc<Record<string, unknown> | null>("hermes_preview_legacy_social_schedule", {
-    p_company_id: companyId, p_legacy_spp_id: legacySppId,
+    p_user_id: identity.userId, p_company_id: identity.companyId, p_legacy_spp_id: legacySppId,
   });
 }
 
-export function getHermesSchedule(companyId: string, scheduleId: string) {
+export function getHermesSchedule(identity: RequestIdentity, scheduleId: string) {
   return rpc<HermesScheduleResult | null>("hermes_get_social_schedule", {
-    p_company_id: companyId, p_schedule_id: scheduleId,
+    p_user_id: identity.userId, p_company_id: identity.companyId, p_schedule_id: scheduleId,
   });
 }
 
-interface RequestIdentity { requestId: string; requestFingerprintSha256: string; actor: string }
+interface RequestIdentity {
+  requestId: string; requestFingerprintSha256: string; actor: string;
+  userId: string; companyId: string;
+}
 
 export function adoptHermesSchedule(identity: RequestIdentity, input: {
-  expectedEpoch: number; companyId: string; legacySppId: string; scheduledAt: string;
+  expectedEpoch: number; legacySppId: string; scheduledAt: string;
   approvalReference: string; expectedContentSha256: string;
 }) {
   return rpc<HermesScheduleResult>("hermes_adopt_social_schedule", {
     p_request_id: identity.requestId,
     p_request_fingerprint_sha256: identity.requestFingerprintSha256,
     p_expected_epoch: input.expectedEpoch,
-    p_company_id: input.companyId,
+    p_user_id: identity.userId,
+    p_company_id: identity.companyId,
     p_legacy_spp_id: input.legacySppId,
     p_scheduled_at: input.scheduledAt,
     p_approval_reference: input.approvalReference,
@@ -55,28 +59,30 @@ export function adoptHermesSchedule(identity: RequestIdentity, input: {
 }
 
 export function cancelHermesSchedule(identity: RequestIdentity, scheduleId: string, input: {
-  expectedEpoch: number; companyId: string; reason: string;
+  expectedEpoch: number; reason: string;
 }) {
   return rpc<HermesScheduleResult>("hermes_cancel_social_schedule", {
     p_request_id: identity.requestId,
     p_request_fingerprint_sha256: identity.requestFingerprintSha256,
     p_schedule_id: scheduleId,
     p_expected_epoch: input.expectedEpoch,
-    p_company_id: input.companyId,
+    p_user_id: identity.userId,
+    p_company_id: identity.companyId,
     p_reason: input.reason,
     p_actor: identity.actor,
   });
 }
 
 export function restoreHermesSchedule(identity: RequestIdentity, scheduleId: string, input: {
-  expectedEpoch: number; companyId: string; scheduledAt: string;
+  expectedEpoch: number; scheduledAt: string;
 }) {
   return rpc<HermesScheduleResult>("hermes_restore_social_schedule", {
     p_request_id: identity.requestId,
     p_request_fingerprint_sha256: identity.requestFingerprintSha256,
     p_schedule_id: scheduleId,
     p_expected_epoch: input.expectedEpoch,
-    p_company_id: input.companyId,
+    p_user_id: identity.userId,
+    p_company_id: identity.companyId,
     p_scheduled_at: input.scheduledAt,
     p_actor: identity.actor,
   });

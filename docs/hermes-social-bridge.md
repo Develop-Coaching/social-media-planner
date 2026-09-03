@@ -10,7 +10,9 @@ The bridge is inactive until all of these are true:
 1. the additive migration has been reviewed and applied;
 2. `publisher_queue_ownership.source = legacy_spp` has `owner = replacement`;
 3. Hermes has the current ownership epoch and a separately provisioned HMAC key;
-4. the replacement publisher deployment is active and its dispatch gate has
+4. its HMAC key is bound server-side to one immutable
+   `HERMES_SOCIAL_BRIDGE_USER_ID` + `HERMES_SOCIAL_BRIDGE_COMPANY_ID` pair;
+5. the replacement publisher deployment is active and its dispatch gate has
    been deliberately enabled by an operator.
 
 Production is currently rolled back to Vercel deployment
@@ -28,13 +30,15 @@ Every request must include:
 - `X-Hermes-Request-Id`: a UUID (new for each mutation; retries reuse it);
 - `X-Hermes-Signature`: lowercase hexadecimal HMAC-SHA256.
 
-The signature input is five newline-separated values:
+The signature input is seven newline-separated values:
 
 ```text
 METHOD
 PATH?CANONICAL_QUERY
 UNIX_TIMESTAMP
 REQUEST_UUID
+CONFIGURED_USER_ID
+CONFIGURED_COMPANY_ID
 LOWERCASE_SHA256_OF_EXACT_RAW_BODY_BYTES
 ```
 
@@ -42,25 +46,31 @@ LOWERCASE_SHA256_OF_EXACT_RAW_BODY_BYTES
 using code-point order, then rendered with JavaScript `URLSearchParams`. The
 `?` is omitted when there is no query. JSON request bodies use recursively
 key-sorted compact JSON; the verifier hashes the exact bytes sent over HTTP.
-Requests over 16 KiB fail closed. Mutation UUIDs are stored in the database: an exact retry
+The two configured identity lines come from trusted local configuration and are
+never transmitted as headers, query values, or JSON. A configuration mismatch
+therefore produces an invalid signature before any database lookup. Declared
+and chunked bodies over 16 KiB fail closed through a bounded reader. Mutation
+UUIDs are stored in the database: an exact retry
 returns the stored result with `replayed: true`; reuse with a different signed
 request digest returns `409`.
 
 Endpoints:
 
-- `GET /legacy/{legacySppId}?companyId=...` previews the imported candidate and
+- `GET /legacy/{legacySppId}` previews the imported candidate in the key-bound tenant and
   returns its approval state, immutable content fingerprint, inherited platform
   states, and `safeToAdopt`.
 - `POST /adopt` accepts
-  `{expectedEpoch,companyId,legacySppId,scheduledAt,approvalReference,expectedContentSha256}`.
-- `GET /{scheduleId}?companyId=...` returns the safe per-platform outcome.
+  `{expectedEpoch,legacySppId,scheduledAt,approvalReference,expectedContentSha256}`.
+- `GET /{scheduleId}` returns the safe per-platform outcome in the key-bound tenant.
 - `POST /{scheduleId}/cancel` accepts
-  `{expectedEpoch,companyId,reason}`.
+  `{expectedEpoch,reason}`.
 - `POST /{scheduleId}/restore` accepts
-  `{expectedEpoch,companyId,scheduledAt}`.
+  `{expectedEpoch,scheduledAt}`.
 
 The audit actor is not caller-supplied. After HMAC verification the server
 derives it as `hermes:{validated-key-id}`.
+Tenant identity is likewise not caller-supplied: the server injects the user ID
+and company ID bound to that key into every database predicate and RPC.
 
 Platforms are never accepted from Hermes. They are inherited from the approved
 source. The protected live schedule ID
@@ -68,8 +78,8 @@ source. The protected live schedule ID
 
 ## How Chloe schedules through Hermes
 
-1. Ask Hermes to preview the approved Social Post Pro item, supplying its ID and
-   company ID. Confirm `safeToAdopt: true`, the platforms, and current schedule.
+1. Ask Hermes to preview the approved Social Post Pro item by ID. Confirm
+   `safeToAdopt: true`, the key-bound company ID, platforms, and current schedule.
 2. Keep the returned `contentFingerprintSha256`. Record the human approval in an
    opaque reference such as an internal approval record ID; do not put tokens,
    passwords, post copy, or personal notes in `approvalReference`.
@@ -104,7 +114,8 @@ IDs, or the protected schedule ID.
 1. Start Docker, run `npx supabase@2.116.0 start`, then
    `npx supabase@2.116.0 db reset` and
    `npx supabase@2.116.0 test db`.
-2. Set local-only HMAC values and leave `PUBLISHER_DISPATCH_ENABLED=false`.
+2. Set local-only HMAC/key ID and synthetic user/company binding values, and
+   leave `PUBLISHER_DISPATCH_ENABLED=false`.
    Run the app on a non-production port.
 3. Insert the synthetic tenant/import/schedule fixture used by
    `supabase/tests/hermes_social_bridge.test.sql`. Do not import a production
@@ -135,7 +146,9 @@ After PR approval, and only in a maintenance window:
    advisors and verify the service-role-only grants before adding secrets.
 4. Deploy with a newly generated 32-byte-or-longer
    `HERMES_SOCIAL_BRIDGE_HMAC_SECRET` and a versioned
-   `HERMES_SOCIAL_BRIDGE_KEY_ID`. Provision the same secret only to the
+   `HERMES_SOCIAL_BRIDGE_KEY_ID`, plus the reviewed immutable
+   `HERMES_SOCIAL_BRIDGE_USER_ID` and `HERMES_SOCIAL_BRIDGE_COMPANY_ID` scope.
+   Provision the same secret only to the
    deterministic Hermes caller, never to a free-form agent prompt or log sink.
 5. Keep publisher dispatch disabled. Run signed GET smoke tests and a synthetic
    or non-publishing mutation test approved for the environment.
