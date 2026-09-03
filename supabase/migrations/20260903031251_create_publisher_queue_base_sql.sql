@@ -203,6 +203,8 @@ create index publisher_audit_log_tenant_time_idx
   on public.publisher_audit_log (user_id, company_id, occurred_at desc);
 create index publisher_audit_log_delivery_time_idx
   on public.publisher_audit_log (delivery_id, occurred_at desc);
+create index publisher_audit_log_content_item_time_idx
+  on public.publisher_audit_log (content_item_id, occurred_at desc);
 
 alter table public.scheduled_posts
   add column publisher_lease_token uuid,
@@ -398,7 +400,7 @@ begin
     or (select count(*) from jsonb_array_elements(p_rows) r where r->>'status' <> 'queued') <> 46
     or (select count(*) from jsonb_array_elements(p_rows) r where r->>'status' = 'queued' and lower(r->>'content_type') = 'article') <> 14
     or (select count(distinct r->>'id') from jsonb_array_elements(p_rows) r) <> 67
-    or (select count(distinct (r->>'user_id') || chr(0) || (r->>'company_id')) from jsonb_array_elements(p_rows) r) <> 1 then
+    or (select count(distinct ((r->>'user_id'), (r->>'company_id'))) from jsonb_array_elements(p_rows) r) <> 1 then
     raise exception 'legacy import must be the approved complete 67-row manifest (21 queued, 46 history, 14 queued articles, one tenant)'
       using errcode = '22023';
   end if;
@@ -698,14 +700,14 @@ begin
     where d.id = c.id
     returning d.*
   ), attempts as (
-    insert into public.publisher_delivery_attempts (
+    insert into public.publisher_delivery_attempts as inserted_attempt (
       delivery_id, attempt_number, idempotency_key, lease_token, state, claimed_at
     )
     select c.id, c.attempt_count,
       c.idempotency_key || ':attempt:' || c.attempt_count::text,
       c.lease_token, 'claimed', p_now
     from claimed c
-    returning delivery_id
+    returning inserted_attempt.delivery_id
   )
   select c.id, c.content_item_id, c.platform, c.idempotency_key,
          c.attempt_count, c.lease_token, c.lease_expires_at,
@@ -1286,7 +1288,7 @@ begin
     or (select count(*) from jsonb_array_elements(p_rows) r where r->>'status' = 'queued' and lower(r->>'content_type') = 'article') <> 14
     or (select count(*) from jsonb_array_elements(p_rows) r where r->>'status' = 'queued' and lower(r->>'content_type') <> 'article') <> 7
     or (select count(distinct r->>'id') from jsonb_array_elements(p_rows) r) <> 67
-    or (select count(distinct (r->>'user_id') || chr(0) || (r->>'company_id')) from jsonb_array_elements(p_rows) r) <> 1 then
+    or (select count(distinct ((r->>'user_id'), (r->>'company_id'))) from jsonb_array_elements(p_rows) r) <> 1 then
     raise exception 'cutover readiness requires the exact approved 67-row shape' using errcode = '22023';
   end if;
   if exists (
@@ -1307,7 +1309,9 @@ begin
     or (select count(*) from public.publisher_content_items where legacy_spp_id is not null) <> 67
     or exists (
       select 1 from jsonb_array_elements(p_rows) r
-      full join public.publisher_content_items ci on ci.legacy_spp_id=(r->>'id')::uuid
+      full join (
+        select * from public.publisher_content_items where legacy_spp_id is not null
+      ) ci on ci.legacy_spp_id=(r->>'id')::uuid
       full join public.scheduled_posts sp on sp.id=coalesce(ci.legacy_spp_id,(r->>'id')::uuid)
       where r is null or ci.id is null or sp.id is null
         or (r - '__migration_payload_sha256') is distinct from ci.legacy_payload
@@ -1329,7 +1333,13 @@ begin
   if exists (select 1 from public.publisher_deliveries where state='verification_required')
     or exists (select 1 from public.scheduled_posts where publisher_verification_required)
     or exists (select 1 from public.scheduled_posts where
+      (publisher_lease_token is null) is distinct from (publisher_lease_expires_at is null)
+      or (publisher_lease_token is null) is distinct from (publisher_lease_phase is null))
+    or exists (select 1 from public.scheduled_posts where
       (status='publishing') is distinct from (publisher_lease_token is not null and publisher_lease_expires_at is not null and publisher_lease_phase is not null))
+    or exists (select 1 from public.publisher_deliveries where
+      (lease_token is null) is distinct from (lease_expires_at is null)
+      or (lease_token is null) is distinct from (lease_phase is null))
     or exists (select 1 from public.publisher_deliveries where
       (state='leased') is distinct from (lease_token is not null and lease_expires_at is not null and lease_phase is not null))
     or exists (select 1 from public.publisher_delivery_attempts where state in ('claimed','dispatch_started'))
@@ -1432,7 +1442,7 @@ begin
     raise exception 'cutover safety window is not clear' using errcode='55000';
   end if;
 
-  select encode(extensions.digest(string_agg(r->>'id'||':'||r->>'__migration_payload_sha256', E'\n' order by r->>'id'),'sha256'),'hex')
+  select encode(extensions.digest(string_agg((r->>'id')||':'||(r->>'__migration_payload_sha256'), E'\n' order by r->>'id'),'sha256'),'hex')
   into v_binding from jsonb_array_elements(p_rows) r;
   return jsonb_build_object('ready',true,'server_time',v_now,'owner',v_owner,'epoch',v_epoch,
     'database_attestation_sha256',v_attestation,'export_binding_sha256',v_binding,
@@ -1508,7 +1518,8 @@ begin
     select 1
     from public.publisher_content_items ci
     left join public.scheduled_posts sp on sp.id = ci.legacy_spp_id
-    where sp.id is null or sp.status <> ci.legacy_status
+    where ci.legacy_spp_id is not null
+      and (sp.id is null or sp.status <> ci.legacy_status)
   ) then
     raise exception 'ownership transfer requires an exact fresh reconciliation of the complete queued set'
       using errcode = '55000';

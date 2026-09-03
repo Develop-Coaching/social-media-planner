@@ -54,6 +54,8 @@ create table public.hermes_social_schedule_requests (
 
 create index hermes_social_schedule_requests_schedule_idx
   on public.hermes_social_schedule_requests (schedule_id, occurred_at);
+create index hermes_social_schedule_requests_tenant_idx
+  on public.hermes_social_schedule_requests (user_id, company_id);
 
 alter table public.hermes_social_schedules enable row level security;
 alter table public.hermes_social_schedule_requests enable row level security;

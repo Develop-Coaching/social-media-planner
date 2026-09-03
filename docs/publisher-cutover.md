@@ -8,7 +8,7 @@ every production action. Never use the old cron as rollback after ownership chan
 ## Evidence that must exist before scheduling the window
 
 - Reviewed migration, runtime and operator PRs are merged in stack order.
-- A production-shaped Docker migration has run from a fresh database through all 125
+- A production-shaped Docker migration has run from a fresh database through all 170
   pgTAP assertions, concurrent-claim tests and Supabase security/performance advisors.
 - Lint, typecheck, tests, production build and dependency audit have no unexplained
   release blockers.
