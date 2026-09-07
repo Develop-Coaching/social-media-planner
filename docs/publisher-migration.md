@@ -2,9 +2,11 @@
 
 Issue #16 introduces one forward-only additive migration without changing or deleting
 legacy `scheduled_posts` data. The repository previously had no Supabase CLI migration
-history, so the checked-in legacy schema is test-only under `supabase/tests/setup/` and
-is never part of `db push`. The additive migration performs a catalog preflight and
-fails closed unless the required production-shaped legacy tables and columns exist.
+history, so the checked-in legacy schema is test-only under `supabase/fixtures/` and
+is never part of `db push`. `npm run test:db` temporarily mounts that sanitized fixture
+as migration zero only for the local Docker gate and removes it afterward. The
+additive migration performs a catalog preflight and fails closed unless the required
+production-shaped legacy tables and columns exist.
 
 Before remote migration, dump the live schema, compare the preflight contract and the
 test fixture against that fresh dump, then use `supabase migration repair --status

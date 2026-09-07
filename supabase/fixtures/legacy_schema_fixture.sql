@@ -1,7 +1,6 @@
 -- TEST-ONLY legacy schema fixture. Never push this file as a migration.
 -- Supabase schema for PostPilot
--- Run this in the Supabase SQL Editor (https://supabase.com/dashboard → SQL Editor)
--- Also create a Storage bucket called "content-images" (private) in the Storage section
+-- Loaded only by scripts/test/run-supabase-db-gate.mjs against the local stack.
 
 -- 1. Users table (replaces data/users.json)
 CREATE TABLE users (

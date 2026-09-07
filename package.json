@@ -12,6 +12,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "node --test tests/**/*.test.mjs && vitest run",
+    "test:db": "node scripts/test/run-supabase-db-gate.mjs",
     "migration:import": "node scripts/migration/import-legacy-spp.mjs",
     "migration:reconcile": "node scripts/migration/reconcile-legacy-spp.mjs",
     "migration:cutover-readiness": "node scripts/migration/cutover-readiness.mjs",

@@ -111,9 +111,12 @@ Use only a local Supabase stack, synthetic UUIDs, and injected synthetic
 publisher adapters. Never use production exports, real access tokens, real page
 IDs, or the protected schedule ID.
 
-1. Start Docker, run `npx supabase@2.116.0 start`, then
-   `npx supabase@2.116.0 db reset` and
-   `npx supabase@2.116.0 test db`.
+1. Start a Docker-compatible runtime and run `npm run test:db`. The local-only
+   wrapper temporarily copies the sanitized legacy fixture outside automatic pgTAP
+   discovery into migration zero, runs Supabase CLI 2.116.0 start/reset, all 170
+   pgTAP assertions, advisors, and database lint, then removes the temporary migration
+   even when a gate fails. Never copy or rename the fixture into `supabase/migrations`
+   by hand, and never use the wrapper with a linked or remote database.
 2. Set local-only HMAC/key ID and synthetic user/company binding values, and
    leave `PUBLISHER_DISPATCH_ENABLED=false`.
    Run the app on a non-production port.
