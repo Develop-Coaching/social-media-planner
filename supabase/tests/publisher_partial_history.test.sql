@@ -9,9 +9,15 @@ with fixture as (
   select jsonb_build_object(
     'id', '20000000-0000-0000-0000-' || lpad(i::text, 12, '0'),
     'user_id', 'partial-user', 'company_id', 'partial-company',
+    'saved_content_id', null,
     'item_id', 'partial-' || i,
     'content_type', case when i <= 14 then 'article' when i <= 21 then 'reel' else 'post' end,
     'caption', 'Sanitized partial caption ' || i,
+    'image_keys', '[]'::jsonb,
+    'media_urls', '[]'::jsonb,
+    'upload_paths', '[]'::jsonb,
+    'video_url', null,
+    'cover_path', null,
     'platforms', case when i <= 14 or i > 21 then jsonb_build_array('linkedin') else jsonb_build_array('instagram','facebook','linkedin') end,
     'platform_post_ids', case
       when i = 15 then jsonb_build_object(
@@ -26,12 +32,27 @@ with fixture as (
       else '{}'::jsonb end,
     'scheduled_at', to_jsonb(statement_timestamp() + interval '2 hours' + i * interval '1 minute'),
     'status', case when i <= 21 then 'queued' when i <= 50 then 'published' else 'cancelled' end,
-    'retry_count', 0, 'created_at', to_jsonb('2026-08-01'::timestamptz),
+    'error', null, 'retry_count', 0, 'created_at', to_jsonb('2026-08-01'::timestamptz),
     'updated_at', to_jsonb('2026-08-02'::timestamptz),
     'published_at', case when i between 22 and 50 then to_jsonb('2026-08-02'::timestamptz) else 'null'::jsonb end
   ) payload from generate_series(1,67) generated(i)
 )
 select public.import_legacy_spp_rows(jsonb_agg(payload order by payload->>'id')) from fixture;
+
+insert into public.scheduled_posts (
+  id, user_id, company_id, saved_content_id, item_id, content_type, caption,
+  image_keys, media_urls, video_url, platforms, scheduled_at, status,
+  platform_post_ids, error, retry_count, created_at, updated_at, published_at,
+  upload_paths, cover_path
+)
+select r.id, r.user_id, r.company_id, r.saved_content_id, r.item_id,
+       r.content_type, r.caption, r.image_keys, r.media_urls, r.video_url,
+       r.platforms, r.scheduled_at, r.status, r.platform_post_ids, r.error,
+       r.retry_count, r.created_at, r.updated_at, r.published_at,
+       r.upload_paths, r.cover_path
+from public.publisher_content_items ci
+cross join lateral jsonb_populate_record(null::public.scheduled_posts, ci.legacy_payload) r
+where ci.legacy_spp_id is not null;
 
 create temporary table partial_readiness_rows as
 select ci.legacy_payload || jsonb_build_object('__migration_payload_sha256',ci.legacy_payload_sha256) payload

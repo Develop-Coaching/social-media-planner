@@ -121,7 +121,7 @@ select throws_ok(
   'replacement publisher does not own the queue',
   'provider checkpoint is denied before replacement ownership'
 );
-select is((select count(distinct user_id || chr(0) || company_id)::integer from public.publisher_content_items), 1, 'fixture has one tenant');
+select is((select count(distinct (user_id, company_id))::integer from public.publisher_content_items), 1, 'fixture has one tenant');
 select is((select count(*)::integer from public.publisher_deliveries where state = 'migration_frozen'), 21, 'three frozen platform deliveries created for each reel');
 select is((select count(*)::integer from public.publisher_deliveries where state = 'planning_only'), 14, 'article delivery records cannot publish');
 select is(
@@ -183,12 +183,18 @@ select throws_ok(
   $$select public.publisher_cutover_readiness((select jsonb_agg(payload) from readiness_rows),1,10800)$$,
   '55000','cutover safety window is not clear','server clock rejects a near-due cutover'
 );
+alter table public.scheduled_posts drop constraint scheduled_posts_publisher_lease_shape_check;
 update public.scheduled_posts set publisher_lease_token=gen_random_uuid() where id='00000000-0000-0000-0000-000000000015';
 select throws_ok(
   $$select public.publisher_cutover_readiness((select jsonb_agg(payload) from readiness_rows),1,3600)$$,
   '55000','cutover readiness requires zero verification and well-formed inactive leases','malformed legacy lease is rejected'
 );
 update public.scheduled_posts set publisher_lease_token=null where id='00000000-0000-0000-0000-000000000015';
+alter table public.scheduled_posts add constraint scheduled_posts_publisher_lease_shape_check check (
+  (publisher_lease_token is null and publisher_lease_expires_at is null and publisher_lease_phase is null)
+  or
+  (publisher_lease_token is not null and publisher_lease_expires_at is not null and publisher_lease_phase is not null)
+);
 update public.publisher_deliveries set idempotency_key=idempotency_key||':wrong' where id=(select id from public.publisher_deliveries limit 1);
 select throws_ok(
   $$select public.publisher_cutover_readiness((select jsonb_agg(payload) from readiness_rows),1,3600)$$,
@@ -203,13 +209,13 @@ select throws_ok(
 );
 update public.publisher_deliveries d set next_attempt_at=ci.scheduled_at
 from public.publisher_content_items ci where ci.id=d.content_item_id and ci.legacy_spp_id='00000000-0000-0000-0000-000000000015';
-update public.publisher_deliveries d set published_at=d.published_at+interval '1 minute'
+update public.publisher_deliveries d set published_at=statement_timestamp()
 from public.publisher_content_items ci where ci.id=d.content_item_id and ci.legacy_spp_id='00000000-0000-0000-0000-000000000022';
 select throws_ok(
   $$select public.publisher_cutover_readiness((select jsonb_agg(payload) from readiness_rows),1,3600)$$,
   '55000','database reconciliation attestation is missing or stale','published timestamp drift invalidates the database attestation'
 );
-update public.publisher_deliveries d set published_at=coalesce((ci.legacy_payload->>'published_at')::timestamptz,(ci.legacy_payload->>'updated_at')::timestamptz)
+update public.publisher_deliveries d set published_at=null
 from public.publisher_content_items ci where ci.id=d.content_item_id and ci.legacy_spp_id='00000000-0000-0000-0000-000000000022';
 insert into public.publisher_content_items(user_id,company_id,content_type,caption,scheduled_at,approval_state,publishability,migration_state)
 values('fixture-user','fixture-company','reel','native due','2026-01-01','approved','publishable','native');
@@ -219,8 +225,8 @@ select throws_ok(
   $$select public.publisher_cutover_readiness((select jsonb_agg(payload) from readiness_rows),1,3600)$$,
   '55000','cutover readiness found noncanonical or native claimant work','native due claimant work blocks legacy cutover'
 );
-delete from public.publisher_deliveries where idempotency_key='native-due-fixture';
-delete from public.publisher_content_items where caption='native due';
+update public.publisher_deliveries set state='cancelled', next_attempt_at=null where idempotency_key='native-due-fixture';
+update public.publisher_content_items set migration_state='historical' where caption='native due';
 insert into public.publisher_content_items(user_id,company_id,content_type,caption,scheduled_at,approval_state,publishability,migration_state)
 values('fixture-user','fixture-company','reel','native future',statement_timestamp()+interval '30 minutes','approved','publishable','native');
 insert into public.publisher_deliveries(content_item_id,platform,state,idempotency_key)
@@ -229,11 +235,11 @@ select throws_ok(
   $$select public.publisher_cutover_readiness((select jsonb_agg(payload) from readiness_rows),1,3600)$$,
   '55000','cutover safety window is not clear','native future claimant inside safety horizon blocks cutover'
 );
-delete from public.publisher_deliveries where idempotency_key='native-future-fixture';
-delete from public.publisher_content_items where caption='native future';
+update public.publisher_deliveries set state='cancelled', next_attempt_at=null where idempotency_key='native-future-fixture';
+update public.publisher_content_items set migration_state='historical' where caption='native future';
 
 select throws_ok(
-  $$select public.import_legacy_spp_rows(jsonb_build_array((select payload || '{"caption":"changed"}'::jsonb from sanitized_export limit 1)))$$,
+  $$select public.import_legacy_spp_rows((select jsonb_agg(case when payload->>'id'='00000000-0000-0000-0000-000000000001' then payload || '{"caption":"changed"}'::jsonb else payload end order by payload->>'id') from sanitized_export))$$,
   '23505',
   'legacy row 00000000-0000-0000-0000-000000000001 differs from its previous import',
   'changed legacy payload is rejected'
@@ -272,7 +278,7 @@ select throws_ok(
 select throws_ok(
   $$insert into public.publisher_deliveries (content_item_id, platform, state, idempotency_key)
     select id, 'instagram', 'historical', 'legacy-spp:00000000-0000-0000-0000-000000000015:instagram'
-    from public.publisher_content_items where legacy_spp_id = '00000000-0000-0000-0000-000000000001'$$,
+    from public.publisher_content_items where legacy_spp_id = '00000000-0000-0000-0000-000000000015'$$,
   '23505',
   'duplicate key value violates unique constraint "publisher_deliveries_idempotency_key_key"',
   'duplicate platform idempotency key is rejected'
@@ -292,7 +298,7 @@ select throws_ok(
 );
 
 select is(
-  (select count(*)::integer from public.claim_legacy_spp_posts(1, 5, 300, '2026-08-02 00:00:00+00')),
+  (select count(*)::integer from public.claim_legacy_spp_posts(1, 5, 300, statement_timestamp())),
   1,
   'legacy claim is epoch-gated and excludes articles'
 );
