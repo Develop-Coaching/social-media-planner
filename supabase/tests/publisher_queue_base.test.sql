@@ -173,7 +173,7 @@ select throws_ok(
 );
 select throws_ok(
   $$select public.publisher_cutover_readiness((select jsonb_agg(case when payload->>'id'='00000000-0000-0000-0000-000000000001' then jsonb_set(payload,'{company_id}','"second-company"') else payload end) from readiness_rows),1,3600)$$,
-  '22023','cutover readiness requires the exact approved 67-row shape','second tenant is rejected'
+  '22023','cutover readiness requires a valid complete single-tenant export','second tenant is rejected'
 );
 select throws_ok(
   $$select public.publisher_cutover_readiness((select jsonb_agg(case when payload->>'id'='00000000-0000-0000-0000-000000000001' then jsonb_set(payload,'{scheduled_at}','null'::jsonb) else payload end) from readiness_rows),1,3600)$$,
