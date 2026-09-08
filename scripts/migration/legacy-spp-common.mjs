@@ -96,6 +96,11 @@ export function classifyAuditedLegacyResolution(outcome, audit) {
   return null;
 }
 
+export function expectedLegacyPublishedAt(expectedState, source, resolution) {
+  if (expectedState !== "succeeded") return null;
+  return resolution?.publishedAt ?? source.published_at ?? source.updated_at ?? null;
+}
+
 export function validateRows(rows) {
   if (!Array.isArray(rows) || rows.length === 0) throw new Error("Export must be a non-empty JSON array");
   const ids = new Set();

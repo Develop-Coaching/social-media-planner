@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { classifyAuditedLegacyResolution, classifyLegacyPlatformOutcome, manifestFor, sha256, stableJson, summary, validateRows } from "../scripts/migration/legacy-spp-common.mjs";
+import { classifyAuditedLegacyResolution, classifyLegacyPlatformOutcome, expectedLegacyPublishedAt, manifestFor, sha256, stableJson, summary, validateRows } from "../scripts/migration/legacy-spp-common.mjs";
 
 function fixtureRow(index) {
   const queued = index <= 21;
@@ -127,4 +127,34 @@ test("only complete immutable audit evidence resolves an ambiguous legacy outcom
     ...confirmedAbsent,
     details: { ...confirmedAbsent.details, provider_evidence: { ...confirmedAbsent.details.provider_evidence, access_token: "secret" } },
   }), null);
+});
+
+test("terminal non-success deliveries never expect a published timestamp", () => {
+  const source = {
+    published_at: "2026-09-03T03:04:05+00:00",
+    updated_at: "2026-09-03T04:05:06+00:00",
+  };
+  assert.equal(expectedLegacyPublishedAt("cancelled", source), null);
+  assert.equal(expectedLegacyPublishedAt("dead_letter", source), null);
+});
+
+test("succeeded deliveries use the legacy publication timestamp with updated-at fallback", () => {
+  assert.equal(expectedLegacyPublishedAt("succeeded", {
+    published_at: "2026-09-03T03:04:05+00:00",
+    updated_at: "2026-09-03T04:05:06+00:00",
+  }), "2026-09-03T03:04:05+00:00");
+  assert.equal(expectedLegacyPublishedAt("succeeded", {
+    published_at: null,
+    updated_at: "2026-09-03T04:05:06+00:00",
+  }), "2026-09-03T04:05:06+00:00");
+});
+
+test("an audited succeeded resolution overrides legacy timestamps", () => {
+  assert.equal(expectedLegacyPublishedAt("succeeded", {
+    published_at: "2026-09-03T03:04:05+00:00",
+    updated_at: "2026-09-03T04:05:06+00:00",
+  }, {
+    state: "succeeded",
+    publishedAt: "2026-09-03T05:06:07+00:00",
+  }), "2026-09-03T05:06:07+00:00");
 });
