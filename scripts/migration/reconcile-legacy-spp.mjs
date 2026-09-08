@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { classifyAuditedLegacyResolution, classifyLegacyPlatformOutcome, loadExport, manifestFor, parseArgs, sha256, stableJson, summary } from "./legacy-spp-common.mjs";
+import { classifyAuditedLegacyResolution, classifyLegacyPlatformOutcome, expectedLegacyPublishedAt, loadExport, manifestFor, parseArgs, sha256, stableJson, summary } from "./legacy-spp-common.mjs";
 
 const args = parseArgs(process.argv.slice(2));
 const exportDirectory = args.get("export");
@@ -95,8 +95,7 @@ for (const source of loaded.rows) {
       if (delivery.idempotency_key !== `legacy-spp:${source.id}:${platform}`) differences.push({ legacy_spp_id: source.id, platform, field: "idempotency_key" });
       const expectedProviderPostId = durable ? rawId : resolution?.platformPostId ?? null;
       if ((delivery.platform_post_id ?? null) !== expectedProviderPostId) differences.push({ legacy_spp_id: source.id, platform, field: "platform_post_id" });
-      const expectedPublishedAt = resolution?.publishedAt
-        ?? (durable ? source.published_at ?? source.updated_at ?? null : null);
+      const expectedPublishedAt = expectedLegacyPublishedAt(expectedState, source, resolution);
       if (normalizedTimestamp(delivery.published_at) !== normalizedTimestamp(expectedPublishedAt)) {
         differences.push({ legacy_spp_id: source.id, platform, field: "published_at" });
       }
