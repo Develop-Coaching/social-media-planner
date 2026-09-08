@@ -43,13 +43,13 @@ npm run migration:reconcile -- \
   --confirm-sha256 <scheduled_posts.json-sha256>
 ```
 
-All 21 queued content items remain `migration_frozen`. Article deliveries remain
+All content items queued in the confirmed fresh export remain `migration_frozen`. Article deliveries remain
 `planning_only` permanently unless a separate, proven article publisher is built.
 An Instagram delivery carrying either legacy `instagram_container` or
 `instagram_container_since` metadata is imported as `verification_required`, with
 both values preserved in `provider_reconciliation_metadata`; ownership transfer is
 blocked until that provider-side container is reconciled. The frozen 2026-09-03
-67-row export (21 queued, 46 historical) contains zero queued direct platform-result
+67-row export (21 queued, 46 historical) contained zero queued direct platform-result
 IDs, sentinel values, `instagram_container` keys, or `instagram_container_since`
 keys. This is a point-in-time observation only: a fresh cutoff export must still be
 classified and reconciled by the same safeguards.
@@ -85,10 +85,12 @@ cutover sign-off.
 Immediately before sign-off, call the service-only read-only
 `publisher_cutover_readiness(rows, expected_epoch, safety_seconds)` RPC with the full
 fresh export plus each row's `__migration_payload_sha256`. It uses the database server
-clock, locks the ownership snapshot, binds the exact 67-row export in both directions
+clock, locks the ownership snapshot, binds the exact complete 67-row export in both directions
 to the legacy source and imported projection, recomputes the database attestation,
 checks delivery/audited-resolution and lease invariants, proves the effective due sets
-agree, and requires zero due work plus the requested safety interval. Its output is
+agree, and requires zero due work plus the requested safety interval. Queued and
+historical counts are derived from the fresh export because the legacy claimant may
+legitimately move rows to terminal history after the original snapshot. Its output is
 redacted to server time, owner/epoch, counts, digests, next due time, and check names.
 The safety interval must be between 60 seconds and 24 hours, and its earliest-candidate
 calculation includes both legacy deliveries that transfer would activate and native
