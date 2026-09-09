@@ -2,7 +2,7 @@ import { supabase } from "@/lib/supabase";
 import { toOperatorQueueItems, type OperatorQueueItem, type PublisherContentRow, type PublisherDeliveryRow } from "./operator";
 import type { PublisherOwnership } from "./queue-types";
 
-const CONTENT_COLUMNS = "id,legacy_spp_id,content_type,caption,scheduled_at,approval_state,publishability,migration_state,legacy_status";
+const CONTENT_COLUMNS = "id,legacy_spp_id,content_type,caption,scheduled_at,approval_state,publishability,migration_state,legacy_status,source_system,source_id,media_state,media_block_reason,content_state,content_block_reason,source_metadata,ingestion_fingerprint_sha256,lifecycle_version";
 const DELIVERY_COLUMNS = "id,content_item_id,platform,state,attempt_count,max_attempts,next_attempt_at,live_url,last_error,published_at";
 
 export async function listOperatorQueue(userId: string, companyId: string): Promise<OperatorQueueItem[]> {

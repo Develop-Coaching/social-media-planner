@@ -3,6 +3,9 @@ export type PublisherOwner = "legacy" | "replacement";
 export type PublisherDeliveryState =
   | "migration_frozen"
   | "planning_only"
+  | "blocked_media"
+  | "blocked_content"
+  | "stale_schedule"
   | "pending"
   | "leased"
   | "retryable"

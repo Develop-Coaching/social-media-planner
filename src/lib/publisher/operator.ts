@@ -10,6 +10,15 @@ export interface PublisherContentRow {
   publishability: "publishable" | "planning_only";
   migration_state: "native" | "migration_frozen" | "active" | "historical";
   legacy_status: string | null;
+  source_system: string | null;
+  source_id: string | null;
+  media_state: "ready" | "blocked";
+  media_block_reason: string | null;
+  content_state: "ready" | "blocked";
+  content_block_reason: string | null;
+  source_metadata: Record<string, unknown>;
+  ingestion_fingerprint_sha256: string | null;
+  lifecycle_version: number;
 }
 
 export interface PublisherDeliveryRow {
@@ -42,6 +51,9 @@ export type OperatorQueueState =
   | "scheduled"
   | "frozen"
   | "planning_only"
+  | "blocked_media"
+  | "blocked_content"
+  | "stale_schedule"
   | "publishing"
   | "verification_required"
   | "published"
@@ -60,6 +72,15 @@ export interface OperatorQueueItem {
   publishability: PublisherContentRow["publishability"];
   migrationState: PublisherContentRow["migration_state"];
   legacyStatus: string | null;
+  sourceSystem: string | null;
+  sourceId: string | null;
+  mediaState: PublisherContentRow["media_state"];
+  mediaBlockReason: string | null;
+  contentState: PublisherContentRow["content_state"];
+  contentBlockReason: string | null;
+  graphicPrompt: string | null;
+  ingestionFingerprintSha256: string | null;
+  lifecycleVersion: number;
   state: OperatorQueueState;
   nextAction: string;
   deliveries: OperatorDelivery[];
@@ -108,6 +129,9 @@ export function sanitizeOperatorText(value: string | null, limit = 300): string 
 
 function aggregateState(item: PublisherContentRow, deliveries: PublisherDeliveryRow[]): OperatorQueueState {
   if (item.publishability === "planning_only") return "planning_only";
+  if (item.content_state === "blocked" || deliveries.some((delivery) => delivery.state === "blocked_content")) return "blocked_content";
+  if (item.media_state === "blocked" || deliveries.some((delivery) => delivery.state === "blocked_media")) return "blocked_media";
+  if (deliveries.some((delivery) => delivery.state === "stale_schedule")) return "stale_schedule";
   if (item.migration_state === "migration_frozen" || deliveries.some((delivery) => delivery.state === "migration_frozen")) return "frozen";
   if (item.approval_state !== "approved") return "blocked";
   if (deliveries.some((delivery) => delivery.state === "verification_required")) return "verification_required";
@@ -125,6 +149,9 @@ function nextAction(state: OperatorQueueState, item: PublisherContentRow): strin
     case "scheduled": return "No action needed. The publisher will process this when due.";
     case "frozen": return "Migration safeguard is active. This item cannot publish before the signed-off ownership handoff.";
     case "planning_only": return "Planning reminder only. Publish the LinkedIn article manually; this queue will never dispatch it.";
+    case "blocked_media": return "Attach tenant-owned media, then use the guarded release action with a future schedule.";
+    case "blocked_content": return "Correct the content, then use the guarded release action with a future schedule.";
+    case "stale_schedule": return "The publish window was missed. Review and deliberately reschedule instead of catch-up publishing.";
     case "publishing": return "Publishing is in progress. Do not retry or duplicate it manually.";
     case "verification_required": return "Verify the provider account before deciding whether any retry is safe.";
     case "dead_letter": return "Publishing stopped after a terminal failure. Review the platform error and escalate for a guarded retry.";
@@ -161,6 +188,17 @@ export function toOperatorQueueItems(
       publishability: item.publishability,
       migrationState: item.migration_state,
       legacyStatus: sanitizeOperatorText(item.legacy_status, 80),
+      sourceSystem: sanitizeOperatorText(item.source_system, 64),
+      sourceId: sanitizeOperatorText(item.source_id, 200),
+      mediaState: item.media_state,
+      mediaBlockReason: sanitizeOperatorText(item.media_block_reason, 200),
+      contentState: item.content_state,
+      contentBlockReason: sanitizeOperatorText(item.content_block_reason, 200),
+      graphicPrompt: sanitizeOperatorText(typeof item.source_metadata?.graphic_prompt === "string" ? item.source_metadata.graphic_prompt : null, 500),
+      ingestionFingerprintSha256: item.ingestion_fingerprint_sha256?.match(/^[0-9a-f]{64}$/)
+        ? item.ingestion_fingerprint_sha256 : null,
+      lifecycleVersion: Number.isSafeInteger(item.lifecycle_version) && item.lifecycle_version >= 0
+        ? item.lifecycle_version : 0,
       state,
       nextAction: nextAction(state, item),
       deliveries: deliveries.map((delivery) => ({

@@ -1,5 +1,7 @@
 # PostPilot — Social content from your memory
 
+The replacement queue's server-side import contract is documented in [Native publisher ingestion](docs/native-publisher-ingestion.md).
+
 A small web app that uses **Claude** for themes and copy (posts, reels, LinkedIn articles, carousels, quotes, YouTube scripts) and **Gemini** for images. Your context is stored in “memory” so theme ideas and tone stay on-brand.
 
 ## What it does

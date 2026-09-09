@@ -24,13 +24,13 @@ export async function POST(request: NextRequest) {
     if (file.size > MAX_BYTES) {
       return NextResponse.json({ error: "File too large (max 200MB)" }, { status: 413 });
     }
-    await resolveCompanyAccess(userId, role, companyId);
+    const access = await resolveCompanyAccess(userId, role, companyId);
 
     const type = file.type || "application/octet-stream";
     const isVideo = type.startsWith("video");
     const ext = (file.name.split(".").pop() || (isVideo ? "mp4" : "png")).toLowerCase().replace(/[^a-z0-9]/g, "");
     const rand = Math.random().toString(36).slice(2, 10);
-    const path = `uploads/${companyId}/${Date.now()}-${rand}.${ext}`;
+    const path = `uploads/${access.effectiveUserId}/${companyId}/${Date.now()}-${rand}.${ext}`;
 
     const buffer = Buffer.from(await file.arrayBuffer());
     const { error } = await supabase.storage.from(BUCKET).upload(path, buffer, {

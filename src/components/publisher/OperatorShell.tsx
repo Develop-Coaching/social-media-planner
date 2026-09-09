@@ -16,6 +16,8 @@ interface Health {
 const FILTERS: Array<{ id: "all" | OperatorQueueState; label: string }> = [
   { id: "all", label: "All" }, { id: "scheduled", label: "Scheduled" },
   { id: "frozen", label: "Frozen" }, { id: "planning_only", label: "Planning only" },
+  { id: "blocked_media", label: "Needs media" },
+  { id: "blocked_content", label: "Needs edit" }, { id: "stale_schedule", label: "Missed" },
   { id: "published", label: "Published" }, { id: "verification_required", label: "Verify" },
   { id: "dead_letter", label: "Dead letter" },
 ];
@@ -24,6 +26,9 @@ const STATE_STYLE: Record<OperatorQueueState, string> = {
   scheduled: "bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200",
   frozen: "bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-200",
   planning_only: "bg-slate-200 text-slate-800 dark:bg-slate-700 dark:text-slate-100",
+  blocked_media: "bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-950 dark:text-fuchsia-200",
+  blocked_content: "bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-200",
+  stale_schedule: "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-200",
   publishing: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200",
   verification_required: "bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-200",
   published: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200",
