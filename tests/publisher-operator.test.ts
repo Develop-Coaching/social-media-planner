@@ -17,6 +17,15 @@ const content: PublisherContentRow = {
   publishability: "publishable",
   migration_state: "active",
   legacy_status: "queued",
+  source_system: null,
+  source_id: null,
+  media_state: "ready",
+  media_block_reason: null,
+  content_state: "ready",
+  content_block_reason: null,
+  source_metadata: {},
+  ingestion_fingerprint_sha256: null,
+  lifecycle_version: 0,
 };
 
 function delivery(overrides: Partial<PublisherDeliveryRow> = {}): PublisherDeliveryRow {
@@ -70,6 +79,27 @@ describe("operator queue projection", () => {
 
   it("blocks content with no known delivery transition", () => {
     expect(toOperatorQueueItems([content], [])[0].state).toBe("blocked");
+  });
+
+  it("surfaces native inventory waiting for media", () => {
+    const [item] = toOperatorQueueItems(
+      [{ ...content, source_system: "greg_brain", source_id: "post-1", media_state: "blocked", media_block_reason: "graphic missing" }],
+      [delivery({ state: "blocked_media" })],
+    );
+    expect(item.state).toBe("blocked_media");
+    expect(item.nextAction).toContain("Attach");
+    expect(item.mediaBlockReason).toBe("graphic missing");
+    expect(item.lifecycleVersion).toBe(0);
+  });
+
+  it("surfaces overlong or otherwise blocked content before media blockers", () => {
+    const [item] = toOperatorQueueItems(
+      [{ ...content, content_state: "blocked", content_block_reason: "LinkedIn caption exceeds 3000 characters", media_state: "blocked", media_block_reason: "graphic missing", source_metadata: { graphic_prompt: "Draw a safe building site" } }],
+      [delivery({ state: "blocked_content" })],
+    );
+    expect(item.state).toBe("blocked_content");
+    expect(item.contentBlockReason).toContain("3000");
+    expect(item.graphicPrompt).toContain("building site");
   });
 
   it("blocks draft content even when a delivery appears runnable", () => {
