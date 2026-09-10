@@ -87,3 +87,28 @@ export function restoreHermesSchedule(identity: RequestIdentity, scheduleId: str
     p_actor: identity.actor,
   });
 }
+
+export function listHermesQueue(identity: RequestIdentity, input: { limit: number; cursor: string | null; from: string | null; to: string | null }) {
+  return rpc<Record<string, unknown>>("hermes_list_social_queue", {
+    p_user_id: identity.userId, p_company_id: identity.companyId,
+    p_limit: input.limit, p_cursor: input.cursor, p_from: input.from, p_to: input.to,
+  });
+}
+
+export function resolveHermesQueue(identity: RequestIdentity, input: { contentItemId: string | null; legacySppId: string | null; scheduleId: string | null }) {
+  return rpc<Record<string, unknown> | null>("hermes_resolve_social_queue", {
+    p_user_id: identity.userId, p_company_id: identity.companyId,
+    p_content_item_id: input.contentItemId, p_legacy_spp_id: input.legacySppId, p_schedule_id: input.scheduleId,
+  });
+}
+
+export function rescheduleHermesQueue(identity: RequestIdentity, input: {
+  expectedEpoch: number; approvalReference: string;
+  changes: { contentItemId: string; expectedScheduledAt: string; scheduledAt: string; expectedContentSha256: string }[];
+}) {
+  return rpc<Record<string, unknown>>("hermes_reschedule_social_queue", {
+    p_request_id: identity.requestId, p_request_fingerprint_sha256: identity.requestFingerprintSha256,
+    p_user_id: identity.userId, p_company_id: identity.companyId, p_actor: identity.actor,
+    p_expected_epoch: input.expectedEpoch, p_changes: input.changes, p_approval_reference: input.approvalReference,
+  });
+}

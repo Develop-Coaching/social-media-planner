@@ -1,5 +1,11 @@
 # Hermes social scheduling bridge
 
+For listing, resolving and moving existing native or migrated posts in place,
+see [queue lookup and atomic date moves](hermes-queue-rescheduling.md). Those
+operations do not require adoption and must not use cancel-and-recreate. The
+adoption and initial-cutover contract below remains separate. Deployment IDs in
+this historical rollout runbook are not a live production status check.
+
 This bridge lets Hermes move one already-approved imported Social Post Pro item
 onto the deterministic replacement publisher. It does not give Hermes Meta or
 LinkedIn credentials. Hermes can preview, adopt, inspect, soft-cancel, and
@@ -15,7 +21,7 @@ The bridge is inactive until all of these are true:
 5. the replacement publisher deployment is active and its dispatch gate has
    been deliberately enabled by an operator.
 
-Production is currently rolled back to Vercel deployment
+At the initial bridge review, production was rolled back to Vercel deployment
 `AB86c2PELMezMDjGJjqGo3W8YbLn`. Do not migrate, deploy, change cron/ownership,
 or enable dispatch as part of reviewing this PR.
 

@@ -1,6 +1,6 @@
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(62);
+select plan(63);
 
 select has_column('public', 'publisher_content_items', 'source_system', 'native source system is stored');
 select has_column('public', 'publisher_content_items', 'source_id', 'native source id is stored');
