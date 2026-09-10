@@ -73,3 +73,64 @@ export function validateRestoreBody(value: unknown) {
     scheduledAt: timestamp(body.scheduledAt),
   };
 }
+
+function uuid(value: unknown, label: string): string {
+  const result = text(value, label, 36);
+  if (!UUID_RE.test(result)) throw new HermesRepositoryError(`${label} is invalid`, 400);
+  return result.toLowerCase();
+}
+
+function zonedTimestamp(value: unknown): string {
+  const result = timestamp(value);
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(result)) {
+    throw new HermesRepositoryError("Timestamp must include an explicit timezone", 400);
+  }
+  return result;
+}
+
+export function validateRescheduleBody(value: unknown) {
+  const body = record(value);
+  exactKeys(body, ["expectedEpoch", "changes", "approvalReference"]);
+  if (!Array.isArray(body.changes) || body.changes.length < 1 || body.changes.length > 20) {
+    throw new HermesRepositoryError("changes must contain 1–20 items", 400);
+  }
+  const changes = body.changes.map((value) => {
+    const change = record(value);
+    exactKeys(change, ["contentItemId", "expectedScheduledAt", "scheduledAt", "expectedContentSha256"]);
+    const expectedContentSha256 = text(change.expectedContentSha256, "expectedContentSha256", 64);
+    if (!SHA256_RE.test(expectedContentSha256)) throw new HermesRepositoryError("Content fingerprint is invalid", 400);
+    return { contentItemId: uuid(change.contentItemId, "contentItemId"),
+      expectedScheduledAt: zonedTimestamp(change.expectedScheduledAt), scheduledAt: zonedTimestamp(change.scheduledAt), expectedContentSha256 };
+  });
+  if (new Set(changes.map((change) => change.contentItemId)).size !== changes.length) {
+    throw new HermesRepositoryError("Duplicate content item in batch", 400);
+  }
+  return { expectedEpoch: epoch(body.expectedEpoch), changes, approvalReference: text(body.approvalReference, "approvalReference", 256) };
+}
+
+function queryKeys(query: URLSearchParams, allowed: string[]) {
+  for (const key of query.keys()) {
+    if (!allowed.includes(key) || query.getAll(key).length !== 1) {
+      throw new HermesRepositoryError("Unsupported or repeated query field", 400);
+    }
+  }
+}
+
+export function validateQueueQuery(query: URLSearchParams) {
+  queryKeys(query, ["limit", "cursor", "from", "to"]);
+  const limitText = query.get("limit") ?? "50";
+  const limit = Number(limitText);
+  if (!/^\d{1,3}$/.test(limitText) || limit < 1 || limit > 100) throw new HermesRepositoryError("limit must be 1–100", 400);
+  const from = query.has("from") ? zonedTimestamp(query.get("from")) : null;
+  const to = query.has("to") ? zonedTimestamp(query.get("to")) : null;
+  if (from && to && Date.parse(from) >= Date.parse(to)) throw new HermesRepositoryError("from must be before to", 400);
+  return { limit, cursor: query.has("cursor") ? uuid(query.get("cursor"), "cursor") : null, from, to };
+}
+
+export function validateResolveQuery(query: URLSearchParams) {
+  queryKeys(query, ["contentItemId", "legacySppId", "scheduleId"]);
+  if ([...query.keys()].length !== 1) throw new HermesRepositoryError("Exactly one schedule identifier is required", 400);
+  return { contentItemId: query.has("contentItemId") ? uuid(query.get("contentItemId"), "contentItemId") : null,
+    legacySppId: query.has("legacySppId") ? uuid(query.get("legacySppId"), "legacySppId") : null,
+    scheduleId: query.has("scheduleId") ? uuid(query.get("scheduleId"), "scheduleId") : null };
+}
