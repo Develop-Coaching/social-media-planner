@@ -1,6 +1,7 @@
 import { resolvePublishPayload } from "@/lib/scheduled-posts";
 import { dispatchPreparedInstagram, metaFbConfigured, metaIgConfigured, prepareInstagramForPublisher, publishToFacebook } from "@/lib/publish/meta";
 import { dispatchPreparedLinkedIn, linkedInConfigured, prepareLinkedInForPublisher } from "@/lib/publish/linkedin";
+import { dispatchPreparedYouTube, prepareYouTubeForPublisher, youtubeConfigured, youtubeSourceTag } from "@/lib/publish/youtube";
 import type { PublishPayload, PublishResult, ScheduledPost } from "@/lib/publish/types";
 import type { ClaimedPublisherDelivery } from "./queue-types";
 import type { AdapterOutcome, AdapterRegistry, PrepareOutcome, ProviderCheckpoint, PublishRequest, PublisherAdapter } from "./runtime-types";
@@ -46,7 +47,7 @@ function toOutcome(result: PublishResult): AdapterOutcome {
 
 function phasedAdapter(input: {
   configured: () => boolean;
-  prepare(payload: PublishPayload, checkpoint: ProviderCheckpoint): Promise<PrepareOutcome>;
+  prepare(payload: PublishPayload, checkpoint: ProviderCheckpoint, request: PublishRequest): Promise<PrepareOutcome>;
   dispatch(payload: PublishPayload, checkpoint: ProviderCheckpoint): Promise<PublishResult>;
 }): PublisherAdapter {
   const prepared = new Map<string, PublishPayload>();
@@ -59,7 +60,7 @@ function phasedAdapter(input: {
       } catch (error) {
         return { kind: "safe_retry", error: `Media preflight failed: ${error instanceof Error ? error.message : String(error)}` };
       }
-      const result = await input.prepare(payload, request.delivery.provider_reconciliation_metadata);
+      const result = await input.prepare(payload, request.delivery.provider_reconciliation_metadata, request);
       if (result.kind === "ready") prepared.set(request.requestFingerprint, payload);
       else prepared.delete(request.requestFingerprint);
       return result;
@@ -77,7 +78,7 @@ export function createProductionAdapters(): AdapterRegistry {
   return {
     instagram: phasedAdapter({
       configured: metaIgConfigured,
-      prepare: prepareInstagramForPublisher,
+      prepare: (payload, checkpoint) => prepareInstagramForPublisher(payload, checkpoint),
       dispatch: (_payload, checkpoint) => dispatchPreparedInstagram(checkpoint),
     }),
     facebook: phasedAdapter({
@@ -87,8 +88,17 @@ export function createProductionAdapters(): AdapterRegistry {
     }),
     linkedin: phasedAdapter({
       configured: linkedInConfigured,
-      prepare: prepareLinkedInForPublisher,
+      prepare: (payload, checkpoint) => prepareLinkedInForPublisher(payload, checkpoint),
       dispatch: dispatchPreparedLinkedIn,
+    }),
+    youtube: phasedAdapter({
+      configured: youtubeConfigured,
+      prepare: (payload, checkpoint, request) => prepareYouTubeForPublisher(
+        payload,
+        checkpoint,
+        youtubeSourceTag(request.delivery.idempotency_key),
+      ),
+      dispatch: dispatchPreparedYouTube,
     }),
   };
 }

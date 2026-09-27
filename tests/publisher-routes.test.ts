@@ -98,6 +98,22 @@ describe("publisher request boundaries", () => {
     expect(mocks.ingestNativePublisherContent).toHaveBeenCalledWith(expect.objectContaining({ userId: "owner-1", companyId: "company-1" }));
   });
 
+  it("accepts YouTube as a native reel delivery platform", async () => {
+    mocks.requireAgentOrAdmin.mockResolvedValue({ userId: "agent-1", role: "agent" });
+    mocks.resolveCompanyAccess.mockResolvedValue({ effectiveUserId: "owner-1", isAssigned: true });
+    mocks.ingestNativePublisherContent.mockResolvedValue({
+      content_item_id: "content-yt", created: true, publishability: "publishable", media_state: "ready", deliveries: [],
+    });
+    const response = await ingestPost(new NextRequest("https://publisher.example/api/publisher/ingest", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ companyId: "company-1", sourceSystem: "greg_brain", sourceId: "reel-yt",
+        contentType: "reel", caption: "Short", media: { upload_paths: ["owner-1/company-1/reel.mp4"] },
+        scheduledAt: "2099-09-10T00:00:00Z", platforms: ["youtube"], mediaState: "ready" }),
+    }));
+    expect(response.status).toBe(201);
+    expect(mocks.ingestNativePublisherContent).toHaveBeenCalledWith(expect.objectContaining({ platforms: ["youtube"] }));
+  });
+
   it("rejects native articles that could become API-publishable", async () => {
     mocks.requireAgentOrAdmin.mockResolvedValue({ userId: "admin-1", role: "admin" });
     const response = await ingestPost(new NextRequest("https://publisher.example/api/publisher/ingest", {

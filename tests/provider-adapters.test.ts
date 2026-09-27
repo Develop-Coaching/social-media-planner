@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { prepareInstagramForPublisher, publishToFacebook } from "@/lib/publish/meta";
 import { prepareLinkedInForPublisher, publishToLinkedIn } from "@/lib/publish/linkedin";
+import { buildYouTubeMetadata, dispatchPreparedYouTube, prepareYouTubeForPublisher, youtubeSourceTag } from "@/lib/publish/youtube";
 
 const originalEnv = { ...process.env };
 afterEach(() => {
@@ -102,5 +103,58 @@ describe("provider preparation is resumable before public dispatch", () => {
     vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(new Error("source unavailable"));
     const result = await prepareLinkedInForPublisher(payload, {});
     expect(result.kind).toBe("safe_retry");
+  });
+});
+
+describe("YouTube Shorts adapter", () => {
+  const payload = { caption: "A builder title\nUseful detail #Builders #Tips #builders", imageUrls: [], videoUrl: "https://media.invalid/reel.mp4", coverUrl: null, isReel: true };
+
+  it("derives bounded metadata and a stable invisible source tag", () => {
+    const sourceTag = youtubeSourceTag("native:stable-delivery");
+    const metadata = buildYouTubeMetadata(`${"T".repeat(120)}\n${"D".repeat(5100)} #Builders`, sourceTag);
+    expect(Array.from(metadata.title)).toHaveLength(100);
+    expect(Array.from(metadata.description)).toHaveLength(5000);
+    expect(metadata.tags[0]).toBe(sourceTag);
+    expect(metadata.tags.join(",").length).toBeLessThanOrEqual(500);
+    expect(metadata.description).not.toContain(sourceTag);
+    expect(youtubeSourceTag("native:stable-delivery")).toBe(sourceTag);
+  });
+
+  it("prepares without making any provider or media network call", async () => {
+    const fetcher = vi.spyOn(globalThis, "fetch");
+    const sourceTag = youtubeSourceTag("native:one:youtube");
+    const result = await prepareYouTubeForPublisher(payload, {}, sourceTag);
+    expect(result).toEqual({ kind: "ready", checkpoint: { youtube_media_kind: "short", youtube_source_tag: sourceTag } });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("rejects non-video input before public dispatch", async () => {
+    const result = await prepareYouTubeForPublisher({ ...payload, videoUrl: null, isReel: false }, {}, youtubeSourceTag("one"));
+    expect(result.kind).toBe("permanent_failure");
+  });
+
+  it("uploads once and returns the durable ID and Shorts URL", async () => {
+    process.env.YOUTUBE_CLIENT_ID = "client";
+    process.env.YOUTUBE_CLIENT_SECRET = "secret";
+    process.env.YOUTUBE_REFRESH_TOKEN = "refresh";
+    const insert = vi.fn().mockResolvedValue({ data: { id: "video-123" } });
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(new Uint8Array([1, 2, 3])));
+    const sourceTag = youtubeSourceTag("native:one:youtube");
+    const result = await dispatchPreparedYouTube(payload, { youtube_media_kind: "short", youtube_source_tag: sourceTag }, { fetcher, insert });
+    expect(result).toMatchObject({ success: true, externalId: "video-123", externalUrl: "https://www.youtube.com/shorts/video-123" });
+    expect(insert).toHaveBeenCalledTimes(1);
+    expect(insert.mock.calls[0][0].requestBody.snippet.tags[0]).toBe(sourceTag);
+  });
+
+  it("returns an indeterminate-compatible failure when videos.insert has no durable result", async () => {
+    process.env.YOUTUBE_CLIENT_ID = "client";
+    process.env.YOUTUBE_CLIENT_SECRET = "secret";
+    process.env.YOUTUBE_REFRESH_TOKEN = "refresh";
+    const result = await dispatchPreparedYouTube(payload, { youtube_media_kind: "short", youtube_source_tag: youtubeSourceTag("one") }, {
+      fetcher: vi.fn<typeof fetch>().mockResolvedValue(new Response(new Uint8Array([1]))),
+      insert: vi.fn().mockRejectedValue(new Error("connection lost")),
+    });
+    expect(result).toMatchObject({ success: false, platform: "youtube" });
+    expect(result.error).toContain("requires verification");
   });
 });

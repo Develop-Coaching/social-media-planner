@@ -26,7 +26,7 @@ export interface PublisherOwnership {
 export interface ClaimedPublisherDelivery {
   delivery_id: string;
   content_item_id: string;
-  platform: "instagram" | "facebook" | "linkedin";
+  platform: "instagram" | "facebook" | "linkedin" | "youtube";
   idempotency_key: string;
   attempt_number: number;
   lease_token: string;

@@ -11,7 +11,7 @@ export const maxDuration = 300; // IG reels can take minutes to process
 
 const MAX_RETRIES = 3;
 
-const PUBLISHERS: Record<Platform, (payload: PublishPayload) => Promise<PublishResult>> = {
+const PUBLISHERS: Partial<Record<Platform, (payload: PublishPayload) => Promise<PublishResult>>> = {
   instagram: publishToInstagram,
   facebook: publishToFacebook,
   linkedin: publishToLinkedIn,

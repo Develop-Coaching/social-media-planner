@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { requestFingerprint } from "@/lib/publisher/fingerprint";
-import { SyntheticAdapter } from "@/lib/publisher/adapters";
+import { createProductionAdapters, SyntheticAdapter } from "@/lib/publisher/adapters";
 import { runPublisherTick } from "@/lib/publisher/worker";
 import type { ClaimedPublisherDelivery } from "@/lib/publisher/queue-types";
 import type { PublisherRepository } from "@/lib/publisher/runtime-types";
@@ -49,7 +49,7 @@ function fakeRepository(claims: ClaimedPublisherDelivery[], reaped: Array<{ deli
 
 function adapters(overrides: Partial<Record<ClaimedPublisherDelivery["platform"], SyntheticAdapter>> = {}) {
   const delivered = () => new SyntheticAdapter([{ kind: "ready" }], [{ kind: "delivered", platformPostId: "provider-id", liveUrl: "https://provider.invalid/post" }]);
-  return { instagram: delivered(), facebook: delivered(), linkedin: delivered(), ...overrides };
+  return { instagram: delivered(), facebook: delivered(), linkedin: delivered(), youtube: delivered(), ...overrides };
 }
 
 describe("publisher worker safety", () => {
@@ -98,6 +98,42 @@ describe("publisher worker safety", () => {
     expect(result.verificationRequired).toEqual([delivery().delivery_id]);
     expect(calls.some((call) => call.operation === "retry")).toBe(false);
     expect(calls.some((call) => call.operation === "verification")).toBe(true);
+  });
+
+  it("quarantines an uncertain YouTube videos.insert outcome without an automatic duplicate retry", async () => {
+    const youtube = new SyntheticAdapter([{ kind: "ready", checkpoint: { youtube_media_kind: "short", youtube_source_tag: "dcsrc_0123456789abcdef01234567" } }], [
+      { kind: "indeterminate", error: "videos.insert connection lost" },
+    ]);
+    const item = delivery({ platform: "youtube", idempotency_key: "native:one:youtube" });
+    const { repository, calls } = fakeRepository([item]);
+    const result = await runPublisherTick({ expectedEpoch: 2, dispatchEnabled: true, repository, adapters: adapters({ youtube }) });
+    expect(result.verificationRequired).toEqual([item.delivery_id]);
+    expect(calls.map((call) => call.operation)).toEqual(["reap", "claim", "checkpoint", "mark", "verification"]);
+    expect(calls.some((call) => call.operation === "retry")).toBe(false);
+    expect(youtube.dispatchCalls).toHaveLength(1);
+  });
+
+  it("retries a YouTube delivery safely when credentials are missing before dispatch", async () => {
+    const original = {
+      YOUTUBE_CLIENT_ID: process.env.YOUTUBE_CLIENT_ID,
+      YOUTUBE_CLIENT_SECRET: process.env.YOUTUBE_CLIENT_SECRET,
+      YOUTUBE_REFRESH_TOKEN: process.env.YOUTUBE_REFRESH_TOKEN,
+    };
+    delete process.env.YOUTUBE_CLIENT_ID;
+    delete process.env.YOUTUBE_CLIENT_SECRET;
+    delete process.env.YOUTUBE_REFRESH_TOKEN;
+    try {
+      const item = delivery({ platform: "youtube", idempotency_key: "native:missing:youtube" });
+      const { repository, calls } = fakeRepository([item]);
+      const result = await runPublisherTick({ expectedEpoch: 2, dispatchEnabled: true, repository, adapters: createProductionAdapters() });
+      expect(result.retryable).toEqual([item.delivery_id]);
+      expect(calls.map((call) => call.operation)).toEqual(["reap", "claim", "retry"]);
+    } finally {
+      for (const [key, value] of Object.entries(original)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
   });
 
   it("dead-letters the last bounded attempt before dispatch", async () => {
