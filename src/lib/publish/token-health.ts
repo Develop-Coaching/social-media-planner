@@ -137,6 +137,54 @@ async function checkLinkedInToken(): Promise<TokenStatus> {
   }
 }
 
+// YouTube: a Google refresh token carries no fixed expiry, so there is no
+// countdown to warn on like Meta/LinkedIn. The meaningful check is whether it
+// still exchanges for an access token: a revoked or reset token fails with
+// invalid_grant. This hits the OAuth endpoint, not the Data API, so it costs
+// no YouTube quota (videos.insert is 1600 of ~10k units a day).
+async function checkYouTubeToken(): Promise<TokenStatus> {
+  const label = "YouTube (channel upload)";
+  const clientId = process.env.YOUTUBE_CLIENT_ID;
+  const clientSecret = process.env.YOUTUBE_CLIENT_SECRET;
+  const refreshToken = process.env.YOUTUBE_REFRESH_TOKEN;
+
+  if (!clientId || !clientSecret || !refreshToken) {
+    return {
+      label, configured: false, valid: null, expiresAt: null, daysLeft: null,
+      severity: "unknown", detail: "not configured (YOUTUBE_CLIENT_ID / _SECRET / _REFRESH_TOKEN)",
+    };
+  }
+
+  try {
+    const res = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: refreshToken,
+        grant_type: "refresh_token",
+      }),
+    });
+    const json = (await res.json()) as { access_token?: string; error?: string; error_description?: string };
+    const valid = res.ok && !!json.access_token;
+    // expiresAt stays null: the ACCESS token expires in an hour and is renewed
+    // on every publish, so its expiry is not the thing worth alerting on.
+    const { severity, daysLeft } = classifyExpiry(valid, null, nowSeconds());
+    return {
+      label, configured: true, valid, expiresAt: null, daysLeft, severity,
+      detail: valid
+        ? "refresh token valid (no expiry)"
+        : `refresh token rejected: ${json.error || res.status}${json.error === "invalid_grant" ? " (revoked or reset, reconnect needed)" : ""}`,
+    };
+  } catch (e) {
+    return {
+      label, configured: true, valid: null, expiresAt: null, daysLeft: null,
+      severity: "unknown", detail: e instanceof Error ? e.message : String(e),
+    };
+  }
+}
+
 // Runs every configured token check. Skips checks whose env vars are absent so
 // the report only covers credentials this deployment actually uses.
 export async function checkAllTokens(): Promise<TokenStatus[]> {
@@ -151,6 +199,9 @@ export async function checkAllTokens(): Promise<TokenStatus[]> {
     checks.push(checkMetaToken("Meta (Facebook page)", pageToken));
   }
   checks.push(checkLinkedInToken());
+  if (process.env.YOUTUBE_REFRESH_TOKEN) {
+    checks.push(checkYouTubeToken());
+  }
 
   return Promise.all(checks);
 }
