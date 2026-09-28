@@ -1,0 +1,26 @@
+{
+  "reviewedAt": "2026-09-28",
+  "issue": 37,
+  "contentItemIds": [
+    "d0d4cbb7-1de9-41b8-b50a-f476b24b995c",
+    "41ab674a-4a3a-416c-911f-b05c606e3483",
+    "166a0037-009a-4182-a4ee-8a84e0e30880",
+    "74a49dce-c484-45c4-9fe0-b1db0db670bd",
+    "85474159-2c7f-470e-bfb7-c3c839eb6bb0",
+    "666b0a55-9e43-408a-baaf-07b2c36594d0",
+    "b6b9ce60-d19b-4063-b2bd-0713fca6a44f",
+    "ad50ba52-9404-421b-9607-348f44910670",
+    "e9d72e76-8e66-4e60-8eea-262ba7c9c6c7"
+  ],
+  "auditEvidence": [
+    { "contentItemId": "d0d4cbb7-1de9-41b8-b50a-f476b24b995c", "source": "legacy:367259e6", "state": "historical/published", "succeeded": ["facebook", "instagram", "linkedin"] },
+    { "contentItemId": "41ab674a-4a3a-416c-911f-b05c606e3483", "source": "legacy:b1c39beb", "state": "historical/published", "succeeded": ["facebook", "instagram", "linkedin"] },
+    { "contentItemId": "166a0037-009a-4182-a4ee-8a84e0e30880", "source": "legacy:cc2ee625", "state": "historical/published", "succeeded": ["facebook", "instagram", "linkedin"] },
+    { "contentItemId": "74a49dce-c484-45c4-9fe0-b1db0db670bd", "source": "legacy:22a13b1c", "state": "active/queued", "succeeded": ["facebook", "instagram", "linkedin"] },
+    { "contentItemId": "85474159-2c7f-470e-bfb7-c3c839eb6bb0", "source": "codex-video-edit:2026-09-10-muster-hr-v1", "state": "native", "succeeded": ["facebook", "instagram", "linkedin"] },
+    { "contentItemId": "666b0a55-9e43-408a-baaf-07b2c36594d0", "source": "codex:2026-09-13-r04-supplier-checks-instagram", "state": "native", "succeeded": ["instagram"] },
+    { "contentItemId": "b6b9ce60-d19b-4063-b2bd-0713fca6a44f", "source": "legacy:86d30fe9", "state": "active/queued", "succeeded": ["facebook", "instagram", "linkedin"] },
+    { "contentItemId": "ad50ba52-9404-421b-9607-348f44910670", "source": "legacy:d5ce84ec", "state": "active/queued", "succeeded": ["facebook", "instagram", "linkedin"] },
+    { "contentItemId": "e9d72e76-8e66-4e60-8eea-262ba7c9c6c7", "source": "legacy:1daf11b8", "state": "active/queued", "succeeded": ["facebook", "instagram", "linkedin"] }
+  ]
+}

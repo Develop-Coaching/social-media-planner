@@ -78,7 +78,13 @@ export function parseNativeIngestionBody(value: unknown): Omit<NativeIngestionIn
     || value.platforms.some((platform) => !NATIVE_PLATFORMS.includes(platform as NativePlatform))) {
     throw new NativeIngestionValidationError("Invalid platforms");
   }
-  const platforms = [...new Set(value.platforms as NativePlatform[])].sort() as NativePlatform[];
+  const requestedPlatforms = [...new Set(value.platforms as NativePlatform[])];
+  if (requestedPlatforms.includes("youtube") && contentType !== "reel" && contentType !== "video") {
+    throw new NativeIngestionValidationError("YouTube is only valid for reel or video content");
+  }
+  // The database owns reel defaulting because it can distinguish a new source
+  // from an exact replay of a pre-default immutable ingestion envelope.
+  const platforms = requestedPlatforms.sort() as NativePlatform[];
   const mediaBlockReason = typeof value.mediaBlockReason === "string" ? value.mediaBlockReason.trim() : null;
   if (mediaBlockReason && mediaBlockReason.length > 500) throw new NativeIngestionValidationError("Media block reason is too long");
   const contentState = value.contentState ?? "ready";

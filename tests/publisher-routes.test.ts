@@ -98,7 +98,7 @@ describe("publisher request boundaries", () => {
     expect(mocks.ingestNativePublisherContent).toHaveBeenCalledWith(expect.objectContaining({ userId: "owner-1", companyId: "company-1" }));
   });
 
-  it("accepts YouTube as a native reel delivery platform", async () => {
+  it("passes a reel through to the database-owned YouTube default", async () => {
     mocks.requireAgentOrAdmin.mockResolvedValue({ userId: "agent-1", role: "agent" });
     mocks.resolveCompanyAccess.mockResolvedValue({ effectiveUserId: "owner-1", isAssigned: true });
     mocks.ingestNativePublisherContent.mockResolvedValue({
@@ -108,10 +108,23 @@ describe("publisher request boundaries", () => {
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ companyId: "company-1", sourceSystem: "greg_brain", sourceId: "reel-yt",
         contentType: "reel", caption: "Short", media: { upload_paths: ["owner-1/company-1/reel.mp4"] },
-        scheduledAt: "2099-09-10T00:00:00Z", platforms: ["youtube"], mediaState: "ready" }),
+        scheduledAt: "2099-09-10T00:00:00Z", platforms: ["instagram"], mediaState: "ready" }),
     }));
     expect(response.status).toBe(201);
-    expect(mocks.ingestNativePublisherContent).toHaveBeenCalledWith(expect.objectContaining({ platforms: ["youtube"] }));
+    expect(mocks.ingestNativePublisherContent).toHaveBeenCalledWith(expect.objectContaining({ platforms: ["instagram"] }));
+  });
+
+  it("rejects YouTube on non-video native content", async () => {
+    mocks.requireAgentOrAdmin.mockResolvedValue({ userId: "agent-1", role: "agent" });
+    const response = await ingestPost(new NextRequest("https://publisher.example/api/publisher/ingest", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ companyId: "company-1", sourceSystem: "greg_brain", sourceId: "post-yt",
+        contentType: "post", caption: "Text", media: {}, scheduledAt: "2099-09-10T00:00:00Z",
+        platforms: ["youtube"], mediaState: "ready" }),
+    }));
+    expect(response.status).toBe(400);
+    expect(mocks.resolveCompanyAccess).not.toHaveBeenCalled();
+    expect(mocks.ingestNativePublisherContent).not.toHaveBeenCalled();
   });
 
   it("rejects native articles that could become API-publishable", async () => {
