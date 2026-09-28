@@ -15,6 +15,7 @@
     "test:db": "node scripts/test/run-supabase-db-gate.mjs",
     "migration:import": "node scripts/migration/import-legacy-spp.mjs",
     "migration:reconcile": "node scripts/migration/reconcile-legacy-spp.mjs",
+    "migration:youtube-backfill": "node scripts/migration/youtube-backfill.mjs",
     "migration:cutover-readiness": "node scripts/migration/cutover-readiness.mjs",
     "migration:transfer-ownership": "node scripts/migration/transfer-publisher-ownership.mjs"
   },

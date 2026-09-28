@@ -20,7 +20,7 @@ select throws_ok(
   $$select public.ingest_native_publisher_content(
     'youtube-user','youtube-company','greg_brain','text-youtube','post','No video','{}',
     '2099-09-28T01:00:00Z',array['youtube'],'ready',null)$$,
-  '22023','ready media does not satisfy the platform requirements','YouTube ready inventory fails closed without video media'
+  '22023','YouTube is only valid for reel or video content','YouTube ready inventory fails closed for non-video content'
 );
 
 create temporary table youtube_claim as
