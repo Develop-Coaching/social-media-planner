@@ -1,7 +1,7 @@
 export type IdentityHealthState = "ok" | "misconfigured" | "unhealthy" | "unknown";
 
 export interface PublisherIdentityHealth {
-  platform: "instagram" | "facebook" | "linkedin";
+  platform: "instagram" | "facebook" | "linkedin" | "youtube";
   configured: boolean;
   state: IdentityHealthState;
   identity: string | null;
@@ -14,6 +14,14 @@ type Fetcher = typeof fetch;
 
 const IG_PERMISSIONS = ["instagram_basic", "instagram_content_publish", "pages_read_engagement"];
 const FB_PERMISSIONS = ["pages_manage_posts"];
+const YOUTUBE_TOKEN_URL = "https://oauth2.googleapis.com/token";
+const YOUTUBE_CHANNELS_URL = "https://www.googleapis.com/youtube/v3/channels?part=id%2Csnippet&mine=true";
+const YOUTUBE_UPLOAD_SCOPES = new Set([
+  "https://www.googleapis.com/auth/youtube",
+  "https://www.googleapis.com/auth/youtube.force-ssl",
+  "https://www.googleapis.com/auth/youtube.upload",
+  "https://www.googleapis.com/auth/youtubepartner",
+]);
 
 function metaGraphBase(env: Environment): string {
   const version = env.META_GRAPH_VERSION || "v24.0";
@@ -122,6 +130,117 @@ async function checkLinkedInIdentity(env: Environment, fetcher: Fetcher): Promis
   }
 }
 
+function youtubeConfiguration(env: Environment) {
+  return {
+    clientId: env.YOUTUBE_CLIENT_ID,
+    clientSecret: env.YOUTUBE_CLIENT_SECRET,
+    refreshToken: env.YOUTUBE_REFRESH_TOKEN,
+    expectedChannelId: env.YOUTUBE_CHANNEL_ID,
+  };
+}
+
+export async function checkYouTubeIdentity(
+  env: Environment = process.env,
+  fetcher: Fetcher = fetch,
+): Promise<PublisherIdentityHealth> {
+  const { clientId, clientSecret, refreshToken, expectedChannelId } = youtubeConfiguration(env);
+  if (!clientId || !clientSecret || !refreshToken || !expectedChannelId) {
+    return {
+      platform: "youtube", configured: false, state: "misconfigured", identity: null,
+      missingPermissions: [],
+      detail: "YouTube OAuth client, refresh token, and expected channel ID are not configured",
+    };
+  }
+
+  try {
+    const tokenResponse = await fetcher(YOUTUBE_TOKEN_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: refreshToken,
+        grant_type: "refresh_token",
+      }),
+      cache: "no-store",
+    });
+    const tokenBody = (await tokenResponse.json().catch(() => ({}))) as {
+      access_token?: string;
+      error?: string;
+      scope?: string;
+    };
+    if (!tokenResponse.ok || !tokenBody.access_token) {
+      const revoked = tokenBody.error === "invalid_grant";
+      const invalidClient = tokenBody.error === "invalid_client" || tokenBody.error === "unauthorized_client";
+      return {
+        platform: "youtube", configured: true,
+        state: revoked ? "unhealthy" : invalidClient ? "misconfigured" : "unknown", identity: null,
+        missingPermissions: [],
+        detail: revoked
+          ? "YouTube refresh token was rejected; reconnect the channel"
+          : invalidClient
+          ? "YouTube OAuth client credentials were rejected"
+          : `YouTube token exchange was unavailable (${tokenResponse.status})`,
+      };
+    }
+    const grantedScopes = new Set((tokenBody.scope ?? "").split(/\s+/).filter(Boolean));
+    if (![...YOUTUBE_UPLOAD_SCOPES].some((scope) => grantedScopes.has(scope))) {
+      return {
+        platform: "youtube", configured: true, state: "unhealthy", identity: null,
+        missingPermissions: ["youtube.upload"],
+        detail: "YouTube credential does not grant video upload access",
+      };
+    }
+
+    const channelResponse = await fetcher(YOUTUBE_CHANNELS_URL, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${tokenBody.access_token}` },
+      cache: "no-store",
+    });
+    if (!channelResponse.ok) {
+      const errorBody = (await channelResponse.json().catch(() => ({}))) as {
+        error?: { errors?: Array<{ reason?: string }> };
+      };
+      const reasons = new Set((errorBody.error?.errors ?? []).map((item) => item.reason).filter(Boolean));
+      const rejected = channelResponse.status === 401 || [...reasons].some((reason) =>
+        ["authError", "insufficientPermissions", "channelForbidden"].includes(reason as string)
+      );
+      return {
+        platform: "youtube", configured: true, state: rejected ? "unhealthy" : "unknown", identity: null,
+        missingPermissions: [],
+        detail: rejected
+          ? `YouTube channel identity read was rejected (${channelResponse.status})`
+          : `YouTube channel identity read was unavailable (${channelResponse.status})`,
+      };
+    }
+    const channelBody = (await channelResponse.json()) as {
+      items?: Array<{ id?: string; snippet?: { title?: string } }>;
+    };
+    const channel = channelBody.items?.[0];
+    if (!channel?.id) {
+      return {
+        platform: "youtube", configured: true, state: "unhealthy", identity: null,
+        missingPermissions: [], detail: "Authenticated Google account has no accessible YouTube channel",
+      };
+    }
+    if (channel.id !== expectedChannelId) {
+      return {
+        platform: "youtube", configured: true, state: "unhealthy", identity: channel.id,
+        missingPermissions: [], detail: "Authenticated YouTube channel does not match YOUTUBE_CHANNEL_ID",
+      };
+    }
+    return {
+      platform: "youtube", configured: true, state: "ok", identity: channel.snippet?.title || channel.id,
+      missingPermissions: [], detail: "Expected YouTube channel identity verified",
+    };
+  } catch {
+    return {
+      platform: "youtube", configured: true, state: "unknown", identity: null,
+      missingPermissions: [], detail: "Read-only YouTube provider check failed",
+    };
+  }
+}
+
 export async function checkPublisherIdentities(
   env: Environment = process.env,
   fetcher: Fetcher = fetch,
@@ -137,5 +256,6 @@ export async function checkPublisherIdentities(
       permissionToken: userToken || env.META_PAGE_ACCESS_TOKEN, requiredPermissions: FB_PERMISSIONS, fields: "id,name", env, fetcher,
     }),
     checkLinkedInIdentity(env, fetcher),
+    checkYouTubeIdentity(env, fetcher),
   ]);
 }
