@@ -1,7 +1,7 @@
 import { supabase } from "@/lib/supabase";
 
 export const NATIVE_CONTENT_TYPES = ["post", "carousel", "reel", "video", "quote", "article"] as const;
-export const NATIVE_PLATFORMS = ["instagram", "facebook", "linkedin"] as const;
+export const NATIVE_PLATFORMS = ["instagram", "facebook", "linkedin", "youtube"] as const;
 export type NativeContentType = (typeof NATIVE_CONTENT_TYPES)[number];
 export type NativePlatform = (typeof NATIVE_PLATFORMS)[number];
 export type NativeMediaState = "ready" | "blocked";

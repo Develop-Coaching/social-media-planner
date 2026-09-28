@@ -1,4 +1,4 @@
-export type Platform = "instagram" | "facebook" | "linkedin";
+export type Platform = "instagram" | "facebook" | "linkedin" | "youtube";
 
 export type ScheduledPostStatus =
   | "queued"
