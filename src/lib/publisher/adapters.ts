@@ -74,6 +74,38 @@ function phasedAdapter(input: {
   };
 }
 
+function youtubeAdapter(): PublisherAdapter {
+  const prepared = new Map<string, { payload: PublishPayload; mediaBody: import("node:stream").Readable }>();
+  return {
+    async prepare(request) {
+      if (!youtubeConfigured()) return { kind: "safe_retry", error: "youtube credentials are not configured" };
+      let payload: PublishPayload;
+      try {
+        payload = await resolvePublishPayload(asLegacyPost(request.delivery));
+      } catch (error) {
+        return { kind: "safe_retry", error: `Media preflight failed: ${error instanceof Error ? error.message : String(error)}` };
+      }
+      const result = await prepareYouTubeForPublisher(
+        payload,
+        request.delivery.provider_reconciliation_metadata,
+        youtubeSourceTag(request.delivery.idempotency_key),
+      );
+      if (result.kind === "ready") {
+        prepared.set(request.requestFingerprint, { payload, mediaBody: result.mediaBody });
+        return { kind: "ready", checkpoint: result.checkpoint };
+      }
+      prepared.delete(request.requestFingerprint);
+      return result;
+    },
+    async dispatch(request, checkpoint) {
+      const upload = prepared.get(request.requestFingerprint);
+      prepared.delete(request.requestFingerprint);
+      if (!upload) return { kind: "indeterminate", error: "Prepared YouTube media stream was lost before public dispatch" };
+      return toOutcome(await dispatchPreparedYouTube(upload.payload, checkpoint, { mediaBody: upload.mediaBody }));
+    },
+  };
+}
+
 export function createProductionAdapters(): AdapterRegistry {
   return {
     instagram: phasedAdapter({
@@ -91,15 +123,7 @@ export function createProductionAdapters(): AdapterRegistry {
       prepare: (payload, checkpoint) => prepareLinkedInForPublisher(payload, checkpoint),
       dispatch: dispatchPreparedLinkedIn,
     }),
-    youtube: phasedAdapter({
-      configured: youtubeConfigured,
-      prepare: (payload, checkpoint, request) => prepareYouTubeForPublisher(
-        payload,
-        checkpoint,
-        youtubeSourceTag(request.delivery.idempotency_key),
-      ),
-      dispatch: dispatchPreparedYouTube,
-    }),
+    youtube: youtubeAdapter(),
   };
 }
 

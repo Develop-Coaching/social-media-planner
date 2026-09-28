@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { Readable } from "node:stream";
 import { prepareInstagramForPublisher, publishToFacebook } from "@/lib/publish/meta";
 import { prepareLinkedInForPublisher, publishToLinkedIn } from "@/lib/publish/linkedin";
 import { buildYouTubeMetadata, dispatchPreparedYouTube, prepareYouTubeForPublisher, youtubeSourceTag } from "@/lib/publish/youtube";
@@ -120,12 +121,12 @@ describe("YouTube Shorts adapter", () => {
     expect(youtubeSourceTag("native:stable-delivery")).toBe(sourceTag);
   });
 
-  it("prepares without making any provider or media network call", async () => {
-    const fetcher = vi.spyOn(globalThis, "fetch");
+  it("prepares a bounded source stream without making a YouTube provider call", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(new Uint8Array([1, 2, 3]), { headers: { "content-length": "3" } }));
     const sourceTag = youtubeSourceTag("native:one:youtube");
-    const result = await prepareYouTubeForPublisher(payload, {}, sourceTag);
-    expect(result).toEqual({ kind: "ready", checkpoint: { youtube_media_kind: "short", youtube_source_tag: sourceTag } });
-    expect(fetcher).not.toHaveBeenCalled();
+    const result = await prepareYouTubeForPublisher(payload, {}, sourceTag, { fetcher });
+    expect(result).toMatchObject({ kind: "ready", checkpoint: { youtube_media_kind: "short", youtube_source_tag: sourceTag } });
+    expect(fetcher).toHaveBeenCalledWith(payload.videoUrl, { method: "GET", cache: "no-store" });
   });
 
   it("rejects non-video input before public dispatch", async () => {
@@ -133,17 +134,39 @@ describe("YouTube Shorts adapter", () => {
     expect(result.kind).toBe("permanent_failure");
   });
 
+  it("safe-retries a missing or failed source before videos.insert can begin", async () => {
+    const sourceTag = youtubeSourceTag("native:missing:youtube");
+    const missing = await prepareYouTubeForPublisher(payload, {}, sourceTag, {
+      fetcher: vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 404 })),
+    });
+    const failed = await prepareYouTubeForPublisher(payload, {}, sourceTag, {
+      fetcher: vi.fn<typeof fetch>().mockRejectedValue(new Error("storage unavailable")),
+    });
+    expect(missing).toMatchObject({ kind: "safe_retry", error: "YouTube video source returned 404" });
+    expect(failed).toMatchObject({ kind: "safe_retry" });
+    expect(failed.kind === "safe_retry" && failed.error).toContain("storage unavailable");
+  });
+
+  it("permanently rejects an oversized source before videos.insert can begin", async () => {
+    const result = await prepareYouTubeForPublisher(payload, {}, youtubeSourceTag("oversize"), {
+      maxVideoBytes: 10,
+      fetcher: vi.fn<typeof fetch>().mockResolvedValue(new Response(new Uint8Array([1]), { headers: { "content-length": "11" } })),
+    });
+    expect(result).toMatchObject({ kind: "permanent_failure" });
+  });
+
   it("uploads once and returns the durable ID and Shorts URL", async () => {
     process.env.YOUTUBE_CLIENT_ID = "client";
     process.env.YOUTUBE_CLIENT_SECRET = "secret";
     process.env.YOUTUBE_REFRESH_TOKEN = "refresh";
     const insert = vi.fn().mockResolvedValue({ data: { id: "video-123" } });
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(new Uint8Array([1, 2, 3])));
+    const mediaBody = Readable.from([new Uint8Array([1, 2, 3])]);
     const sourceTag = youtubeSourceTag("native:one:youtube");
-    const result = await dispatchPreparedYouTube(payload, { youtube_media_kind: "short", youtube_source_tag: sourceTag }, { fetcher, insert });
+    const result = await dispatchPreparedYouTube(payload, { youtube_media_kind: "short", youtube_source_tag: sourceTag }, { mediaBody, insert });
     expect(result).toMatchObject({ success: true, externalId: "video-123", externalUrl: "https://www.youtube.com/shorts/video-123" });
     expect(insert).toHaveBeenCalledTimes(1);
     expect(insert.mock.calls[0][0].requestBody.snippet.tags[0]).toBe(sourceTag);
+    expect(insert.mock.calls[0][1]).toEqual({ retry: false });
   });
 
   it("returns an indeterminate-compatible failure when videos.insert has no durable result", async () => {
@@ -151,10 +174,30 @@ describe("YouTube Shorts adapter", () => {
     process.env.YOUTUBE_CLIENT_SECRET = "secret";
     process.env.YOUTUBE_REFRESH_TOKEN = "refresh";
     const result = await dispatchPreparedYouTube(payload, { youtube_media_kind: "short", youtube_source_tag: youtubeSourceTag("one") }, {
-      fetcher: vi.fn<typeof fetch>().mockResolvedValue(new Response(new Uint8Array([1]))),
+      mediaBody: Readable.from([new Uint8Array([1])]),
       insert: vi.fn().mockRejectedValue(new Error("connection lost")),
     });
     expect(result).toMatchObject({ success: false, platform: "youtube" });
     expect(result.error).toContain("requires verification");
+  });
+
+  it("streams a lying source through a hard byte bound and treats failure after videos.insert as ambiguous", async () => {
+    process.env.YOUTUBE_CLIENT_ID = "client";
+    process.env.YOUTUBE_CLIENT_SECRET = "secret";
+    process.env.YOUTUBE_REFRESH_TOKEN = "refresh";
+    const prepared = await prepareYouTubeForPublisher(payload, {}, youtubeSourceTag("lying-source"), {
+      maxVideoBytes: 2,
+      fetcher: vi.fn<typeof fetch>().mockResolvedValue(new Response(new Uint8Array([1, 2, 3]), { headers: { "content-length": "2" } })),
+    });
+    expect(prepared.kind).toBe("ready");
+    if (prepared.kind !== "ready") throw new Error("expected prepared stream");
+    const insert = vi.fn(async (input: { media: { body: Readable } }) => {
+      for await (const _chunk of input.media.body) { /* consume like googleapis */ }
+      return { data: { id: "should-not-complete" } };
+    });
+    const result = await dispatchPreparedYouTube(payload, prepared.checkpoint, { mediaBody: prepared.mediaBody, insert });
+    expect(result).toMatchObject({ success: false, platform: "youtube" });
+    expect(result.error).toContain("requires verification");
+    expect(insert).toHaveBeenCalledTimes(1);
   });
 });
