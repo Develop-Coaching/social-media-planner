@@ -1,4 +1,6 @@
-// Proactive token health — surface Meta/LinkedIn access-token expiry BEFORE a
+import { checkYouTubeIdentity } from "@/lib/publisher/identity-health";
+
+// Proactive token health — surface publishing credential failures BEFORE a
 // scheduled post fails on a dead credential. Run daily from a cron; alert to
 // Slack when a token is invalid or inside the warning window.
 //
@@ -12,7 +14,7 @@ const GRAPH = "https://graph.facebook.com/v21.0";
 // Alert once a token is this close to expiry, so there is time to reconnect.
 export const WARN_DAYS = 7;
 
-export type TokenSeverity = "ok" | "warn" | "expired" | "unknown";
+export type TokenSeverity = "ok" | "warn" | "expired" | "misconfigured" | "unknown";
 
 export interface TokenStatus {
   label: string; // human name, e.g. "Meta (Instagram + user)"
@@ -137,6 +139,25 @@ async function checkLinkedInToken(): Promise<TokenStatus> {
   }
 }
 
+export async function checkYouTubeToken(
+  env: Record<string, string | undefined> = process.env,
+  fetcher: typeof fetch = fetch,
+): Promise<TokenStatus> {
+  const health = await checkYouTubeIdentity(env, fetcher);
+  return {
+    label: "YouTube",
+    configured: health.configured,
+    valid: health.state === "ok" ? true : health.state === "unhealthy" ? false : null,
+    expiresAt: null,
+    daysLeft: health.state === "unhealthy" ? 0 : null,
+    severity: health.state === "ok" ? "ok"
+      : health.state === "unhealthy" ? "expired"
+      : health.state === "misconfigured" ? "misconfigured"
+      : "unknown",
+    detail: health.detail,
+  };
+}
+
 // Runs every configured token check. Skips checks whose env vars are absent so
 // the report only covers credentials this deployment actually uses.
 export async function checkAllTokens(): Promise<TokenStatus[]> {
@@ -151,6 +172,7 @@ export async function checkAllTokens(): Promise<TokenStatus[]> {
     checks.push(checkMetaToken("Meta (Facebook page)", pageToken));
   }
   checks.push(checkLinkedInToken());
+  checks.push(checkYouTubeToken());
 
   return Promise.all(checks);
 }
@@ -159,23 +181,27 @@ const SEVERITY_EMOJI: Record<TokenSeverity, string> = {
   ok: ":large_green_circle:",
   warn: ":large_yellow_circle:",
   expired: ":red_circle:",
+  misconfigured: ":red_circle:",
   unknown: ":white_circle:",
 };
 
 // Build a Slack message from statuses. Returns null when nothing needs
 // attention (all ok/unknown-but-configured) so the daily run stays quiet.
 export function buildTokenAlert(statuses: TokenStatus[]): string | null {
-  const configured = statuses.filter((s) => s.configured);
-  const actionable = configured.filter((s) => s.severity === "warn" || s.severity === "expired");
+  const reportable = statuses.filter((s) => s.configured || s.severity === "misconfigured");
+  const actionable = reportable.filter((s) => s.severity === "warn" || s.severity === "expired" || s.severity === "misconfigured");
   if (actionable.length === 0) return null;
 
-  const lines = configured.map(
+  const lines = reportable.map(
     (s) => `${SEVERITY_EMOJI[s.severity]} *${s.label}*: ${s.detail}`
   );
   const expired = actionable.filter((s) => s.severity === "expired").length;
+  const misconfigured = actionable.filter((s) => s.severity === "misconfigured").length;
   const header =
     expired > 0
       ? `:rotating_light: *Publishing token needs reconnecting* — scheduled posts will fail until fixed`
+      : misconfigured > 0
+      ? `:rotating_light: *Publishing credentials need configuration* — scheduled posts will fail until fixed`
       : `:warning: *Publishing token expiring soon* — reconnect within ${WARN_DAYS} days to avoid failed posts`;
 
   return `${header}\n${lines.join("\n")}\n_Refresh the token in Vercel env, then redeploy._`;

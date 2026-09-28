@@ -68,13 +68,19 @@ describe("publisher request boundaries", () => {
     mocks.checkPublisherIdentities.mockResolvedValue([{
       platform: "linkedin", configured: true, state: "ok", identity: "secret identity",
       missingPermissions: [], detail: "sensitive provider detail",
+    }, {
+      platform: "youtube", configured: true, state: "unhealthy", identity: "wrong-channel",
+      missingPermissions: [], detail: "sensitive YouTube provider detail",
     }]);
     const first = await healthGet();
     const second = await healthGet();
     expect(first.status).toBe(200);
     expect(second.status).toBe(200);
     expect(mocks.checkPublisherIdentities).toHaveBeenCalledTimes(1);
-    expect(await first.json()).toMatchObject({ platforms: [{ platform: "linkedin", configured: true, state: "ok" }] });
+    expect(await first.json()).toMatchObject({ platforms: [
+      { platform: "linkedin", configured: true, state: "ok" },
+      { platform: "youtube", configured: true, state: "unhealthy" },
+    ] });
     expect(JSON.stringify(await second.json())).not.toMatch(/identity|detail|missingPermissions/);
   });
 

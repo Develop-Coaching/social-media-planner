@@ -2,6 +2,7 @@ import { resolvePublishPayload } from "@/lib/scheduled-posts";
 import { dispatchPreparedInstagram, metaFbConfigured, metaIgConfigured, prepareInstagramForPublisher, publishToFacebook } from "@/lib/publish/meta";
 import { dispatchPreparedLinkedIn, linkedInConfigured, prepareLinkedInForPublisher } from "@/lib/publish/linkedin";
 import { dispatchPreparedYouTube, prepareYouTubeForPublisher, youtubeConfigured, youtubeSourceTag } from "@/lib/publish/youtube";
+import { checkYouTubeIdentity, type PublisherIdentityHealth } from "./identity-health";
 import type { PublishPayload, PublishResult, ScheduledPost } from "@/lib/publish/types";
 import type { ClaimedPublisherDelivery } from "./queue-types";
 import type { AdapterOutcome, AdapterRegistry, PrepareOutcome, ProviderCheckpoint, PublishRequest, PublisherAdapter } from "./runtime-types";
@@ -74,10 +75,21 @@ function phasedAdapter(input: {
   };
 }
 
-function youtubeAdapter(): PublisherAdapter {
+interface ProductionAdapterOptions {
+  youtubeIdentityCheck?: () => Promise<PublisherIdentityHealth>;
+  youtubePrepare?: typeof prepareYouTubeForPublisher;
+  youtubeDispatch?: typeof dispatchPreparedYouTube;
+}
+
+function youtubeAdapter(options: ProductionAdapterOptions): PublisherAdapter {
   const prepared = new Map<string, { payload: PublishPayload; mediaBody: import("node:stream").Readable }>();
   return {
     async prepare(request) {
+      const health = await (options.youtubeIdentityCheck ?? checkYouTubeIdentity)();
+      if (health.state !== "ok") {
+        prepared.delete(request.requestFingerprint);
+        return { kind: "safe_retry", error: `YouTube identity gate failed (${health.state}): ${health.detail}` };
+      }
       if (!youtubeConfigured()) return { kind: "safe_retry", error: "youtube credentials are not configured" };
       let payload: PublishPayload;
       try {
@@ -85,7 +97,7 @@ function youtubeAdapter(): PublisherAdapter {
       } catch (error) {
         return { kind: "safe_retry", error: `Media preflight failed: ${error instanceof Error ? error.message : String(error)}` };
       }
-      const result = await prepareYouTubeForPublisher(
+      const result = await (options.youtubePrepare ?? prepareYouTubeForPublisher)(
         payload,
         request.delivery.provider_reconciliation_metadata,
         youtubeSourceTag(request.delivery.idempotency_key),
@@ -101,12 +113,16 @@ function youtubeAdapter(): PublisherAdapter {
       const upload = prepared.get(request.requestFingerprint);
       prepared.delete(request.requestFingerprint);
       if (!upload) return { kind: "indeterminate", error: "Prepared YouTube media stream was lost before public dispatch" };
-      return toOutcome(await dispatchPreparedYouTube(upload.payload, checkpoint, { mediaBody: upload.mediaBody }));
+      return toOutcome(await (options.youtubeDispatch ?? dispatchPreparedYouTube)(
+        upload.payload,
+        checkpoint,
+        { mediaBody: upload.mediaBody },
+      ));
     },
   };
 }
 
-export function createProductionAdapters(): AdapterRegistry {
+export function createProductionAdapters(options: ProductionAdapterOptions = {}): AdapterRegistry {
   return {
     instagram: phasedAdapter({
       configured: metaIgConfigured,
@@ -123,7 +139,7 @@ export function createProductionAdapters(): AdapterRegistry {
       prepare: (payload, checkpoint) => prepareLinkedInForPublisher(payload, checkpoint),
       dispatch: dispatchPreparedLinkedIn,
     }),
-    youtube: youtubeAdapter(),
+    youtube: youtubeAdapter(options),
   };
 }
 

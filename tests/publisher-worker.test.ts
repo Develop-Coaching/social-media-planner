@@ -1,6 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { requestFingerprint } from "@/lib/publisher/fingerprint";
 import { createProductionAdapters, SyntheticAdapter } from "@/lib/publisher/adapters";
+import { checkYouTubeIdentity } from "@/lib/publisher/identity-health";
+import { dispatchPreparedYouTube, prepareYouTubeForPublisher } from "@/lib/publish/youtube";
 import { runPublisherTick } from "@/lib/publisher/worker";
 import type { ClaimedPublisherDelivery } from "@/lib/publisher/queue-types";
 import type { PublisherRepository } from "@/lib/publisher/runtime-types";
@@ -128,6 +130,107 @@ describe("publisher worker safety", () => {
       const result = await runPublisherTick({ expectedEpoch: 2, dispatchEnabled: true, repository, adapters: createProductionAdapters() });
       expect(result.retryable).toEqual([item.delivery_id]);
       expect(calls.map((call) => call.operation)).toEqual(["reap", "claim", "retry"]);
+    } finally {
+      for (const [key, value] of Object.entries(original)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  });
+
+  it.each([
+    {
+      name: "wrong channel",
+      env: { YOUTUBE_CLIENT_ID: "client", YOUTUBE_CLIENT_SECRET: "secret", YOUTUBE_REFRESH_TOKEN: "refresh", YOUTUBE_CHANNEL_ID: "brand-channel" },
+      responses: [
+        Response.json({ access_token: "access", scope: "https://www.googleapis.com/auth/youtube.upload" }),
+        Response.json({ items: [{ id: "personal-channel" }] }),
+      ],
+    },
+    {
+      name: "missing channel ID",
+      env: { YOUTUBE_CLIENT_ID: "client", YOUTUBE_CLIENT_SECRET: "secret", YOUTUBE_REFRESH_TOKEN: "refresh" },
+      responses: [],
+    },
+    {
+      name: "invalid upload scope",
+      env: { YOUTUBE_CLIENT_ID: "client", YOUTUBE_CLIENT_SECRET: "secret", YOUTUBE_REFRESH_TOKEN: "refresh", YOUTUBE_CHANNEL_ID: "brand-channel" },
+      responses: [Response.json({ access_token: "access", scope: "https://www.googleapis.com/auth/youtube.readonly" })],
+    },
+    {
+      name: "transient provider failure",
+      env: { YOUTUBE_CLIENT_ID: "client", YOUTUBE_CLIENT_SECRET: "secret", YOUTUBE_REFRESH_TOKEN: "refresh", YOUTUBE_CHANNEL_ID: "brand-channel" },
+      responses: [Response.json({ error: "temporarily_unavailable" }, { status: 503 })],
+    },
+  ])("fails $name before media fetch or dispatch marking and remains retryable", async ({ env, responses }) => {
+    const identityFetch = vi.fn<typeof fetch>();
+    for (const response of responses) identityFetch.mockResolvedValueOnce(response);
+    const youtubePrepare = vi.fn<typeof prepareYouTubeForPublisher>();
+    const youtubeDispatch = vi.fn<typeof dispatchPreparedYouTube>();
+    const item = delivery({ platform: "youtube", idempotency_key: "native:gated:youtube" });
+    const { repository, calls } = fakeRepository([item]);
+    const registry = createProductionAdapters({
+      youtubeIdentityCheck: () => checkYouTubeIdentity(env, identityFetch),
+      youtubePrepare,
+      youtubeDispatch,
+    });
+
+    const result = await runPublisherTick({ expectedEpoch: 2, dispatchEnabled: true, repository, adapters: registry });
+
+    expect(result.retryable).toEqual([item.delivery_id]);
+    expect(calls.map((call) => call.operation)).toEqual(["reap", "claim", "retry"]);
+    expect(youtubePrepare).not.toHaveBeenCalled();
+    expect(youtubeDispatch).not.toHaveBeenCalled();
+  });
+
+  it("preserves the prepared media stream through a healthy gate, checkpoint, mark, and YouTube dispatch", async () => {
+    const original = {
+      YOUTUBE_CLIENT_ID: process.env.YOUTUBE_CLIENT_ID,
+      YOUTUBE_CLIENT_SECRET: process.env.YOUTUBE_CLIENT_SECRET,
+      YOUTUBE_REFRESH_TOKEN: process.env.YOUTUBE_REFRESH_TOKEN,
+    };
+    process.env.YOUTUBE_CLIENT_ID = "client";
+    process.env.YOUTUBE_CLIENT_SECRET = "secret";
+    process.env.YOUTUBE_REFRESH_TOKEN = "refresh";
+    try {
+      const env = {
+        YOUTUBE_CLIENT_ID: "client", YOUTUBE_CLIENT_SECRET: "secret",
+        YOUTUBE_REFRESH_TOKEN: "refresh", YOUTUBE_CHANNEL_ID: "brand-channel",
+      };
+      const identityFetch = vi.fn<typeof fetch>()
+        .mockResolvedValueOnce(Response.json({ access_token: "access", scope: "https://www.googleapis.com/auth/youtube.upload" }))
+        .mockResolvedValueOnce(Response.json({ items: [{ id: "brand-channel" }] }));
+      const mediaFetch = vi.fn<typeof fetch>().mockResolvedValue(new Response(new Uint8Array([1, 2, 3]), {
+        headers: { "content-length": "3" },
+      }));
+      const insert = vi.fn().mockResolvedValue({ data: { id: "video-123" } });
+      let preparedBody: import("node:stream").Readable | undefined;
+      const youtubePrepare: typeof prepareYouTubeForPublisher = async (payload, checkpoint, sourceTag) => {
+        const result = await prepareYouTubeForPublisher(payload, checkpoint, sourceTag, { fetcher: mediaFetch });
+        if (result.kind === "ready") preparedBody = result.mediaBody;
+        return result;
+      };
+      const youtubeDispatch: typeof dispatchPreparedYouTube = (payload, checkpoint, options) =>
+        dispatchPreparedYouTube(payload, checkpoint, { mediaBody: options?.mediaBody, insert });
+      const item = delivery({ platform: "youtube", idempotency_key: "native:healthy:youtube" });
+      const { repository, calls } = fakeRepository([item]);
+
+      const result = await runPublisherTick({
+        expectedEpoch: 2,
+        dispatchEnabled: true,
+        repository,
+        adapters: createProductionAdapters({
+          youtubeIdentityCheck: () => checkYouTubeIdentity(env, identityFetch),
+          youtubePrepare,
+          youtubeDispatch,
+        }),
+      });
+
+      expect(result.succeeded).toEqual([item.delivery_id]);
+      expect(calls.map((call) => call.operation)).toEqual(["reap", "claim", "checkpoint", "mark", "complete"]);
+      expect(mediaFetch).toHaveBeenCalledTimes(1);
+      expect(insert).toHaveBeenCalledTimes(1);
+      expect(insert.mock.calls[0][0].media.body).toBe(preparedBody);
     } finally {
       for (const [key, value] of Object.entries(original)) {
         if (value === undefined) delete process.env[key];

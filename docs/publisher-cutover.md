@@ -13,9 +13,11 @@ every production action. Never use the old cron as rollback after ownership chan
 - Lint, typecheck, tests, production build and dependency audit have no unexplained
   release blockers.
 - A signed-in demo tenant has completed create/schedule/cancel and a second-tenant
-  denial test in a 390 px browser viewport. Read-only Meta and LinkedIn identity,
-  permission and media-readiness checks match the intended accounts. No test post is
-  made without explicit approval.
+  denial test in a 390 px browser viewport. Read-only Meta, LinkedIn and YouTube
+  identity, permission and media-readiness checks match the intended accounts. The
+  YouTube refresh token must exchange successfully and `channels.list?mine=true`
+  must return the exact `YOUTUBE_CHANNEL_ID`; a valid token for another personal or
+  brand channel is a failed gate. No test post is made without explicit approval.
 - Vercel configuration has been reviewed by a human. The replacement dispatch flag
   remains false and the legacy owner/epoch are recorded.
 - Open PRs #12 and #14 are rebased onto the replacement or retired; #13 is reconciled
